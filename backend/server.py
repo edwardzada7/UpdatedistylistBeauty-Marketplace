@@ -81,11 +81,10 @@ class WalletUpdate(BaseModel):
     currency: Optional[str] = None
 
 class WalletResponse(BaseModel):
-    id: str
+    id: int
     auth_id: str
     balance: float
     currency: str
-    created_at: str
 
 
 # ==================== DATABASE CONNECTION TEST ====================
