@@ -64,13 +64,12 @@ class StylistUpdate(BaseModel):
     hourly_rate: Optional[float] = None
 
 class StylistResponse(BaseModel):
-    id: str
+    id: int
     auth_id: str
     name: str
     specialty: str
     bio: Optional[str]
     hourly_rate: Optional[float]
-    created_at: str
 
 class WalletCreate(BaseModel):
     auth_id: str
