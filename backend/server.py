@@ -41,13 +41,14 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
 
 class UserResponse(BaseModel):
-    id: str
+    id: int  # Supabase uses integer ID
     auth_id: str
     email: str
     name: str
     phone: Optional[str]
     role: Optional[str]
-    created_at: str
+    profile_completed: Optional[bool] = False
+    is_suspended: Optional[bool] = False
 
 class StylistCreate(BaseModel):
     auth_id: str
