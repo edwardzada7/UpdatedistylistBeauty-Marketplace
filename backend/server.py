@@ -46,6 +46,7 @@ class UserResponse(BaseModel):
     email: str
     name: str
     phone: Optional[str]
+    role: Optional[str]
     created_at: str
 
 class StylistCreate(BaseModel):
