@@ -366,8 +366,7 @@ async def create_wallet(wallet_data: WalletCreate):
             "id": str(uuid.uuid4()),
             "auth_id": wallet_data.auth_id,
             "balance": wallet_data.balance,
-            "currency": wallet_data.currency,
-            "created_at": datetime.utcnow().isoformat()
+            "currency": wallet_data.currency
         }
         
         response = supabase.table("wallets").insert(wallet_dict).execute()
