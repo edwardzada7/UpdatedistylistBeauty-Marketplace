@@ -249,8 +249,7 @@ async def create_stylist(stylist_data: StylistCreate):
             "name": stylist_data.name,
             "specialty": stylist_data.specialty,
             "bio": stylist_data.bio,
-            "hourly_rate": stylist_data.hourly_rate,
-            "created_at": datetime.utcnow().isoformat()
+            "hourly_rate": stylist_data.hourly_rate
         }
         
         response = supabase.table("stylists").insert(stylist_dict).execute()
