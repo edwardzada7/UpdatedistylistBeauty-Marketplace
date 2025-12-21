@@ -361,7 +361,6 @@ async def create_wallet(wallet_data: WalletCreate):
             )
         
         wallet_dict = {
-            "id": str(uuid.uuid4()),
             "auth_id": wallet_data.auth_id,
             "balance": wallet_data.balance,
             "currency": wallet_data.currency
