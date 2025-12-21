@@ -243,7 +243,6 @@ async def create_stylist(stylist_data: StylistCreate):
             )
         
         stylist_dict = {
-            "id": str(uuid.uuid4()),
             "auth_id": stylist_data.auth_id,
             "name": stylist_data.name,
             "specialty": stylist_data.specialty,
