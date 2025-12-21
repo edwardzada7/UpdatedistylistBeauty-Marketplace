@@ -33,6 +33,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     name: str
     phone: Optional[str] = None
+    role: str = "user"  # Default role
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
