@@ -128,7 +128,8 @@ async def create_user(user_data: UserCreate):
             "auth_id": user_data.auth_id,
             "email": user_data.email,
             "name": user_data.name,
-            "phone": user_data.phone
+            "phone": user_data.phone,
+            "role": user_data.role
         }
         
         response = supabase.table("users").insert(user_dict).execute()
