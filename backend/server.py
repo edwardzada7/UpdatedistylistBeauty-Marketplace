@@ -282,8 +282,8 @@ async def get_all_stylists(
 ):
     """Get all stylists with optional filtering and sorting"""
     try:
-        # Build query
-        query = supabase.table("stylists").select("*, users!inner(name, email)")
+        # Build query - use specific relationship name to avoid ambiguity
+        query = supabase.table("stylists").select("*, users!stylists_user_id_fkey(name, email)")
         
         if verified_only:
             query = query.eq("is_verified", True)
