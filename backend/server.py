@@ -330,11 +330,11 @@ async def get_all_stylists(
             detail=f"Failed to fetch stylists: {str(e)}"
         )
 
-@api_router.get("/stylists/{stylist_id}", response_model=StylistResponse)
-async def get_stylist(stylist_id: int):
-    """Get a specific stylist by ID"""
+@api_router.get("/stylists/{user_id}", response_model=StylistResponse)
+async def get_stylist(user_id: int):
+    """Get a specific stylist by user_id"""
     try:
-        response = supabase.table("stylists").select("*, users!stylists_user_id_fkey(name, email)").eq("id", stylist_id).execute()
+        response = supabase.table("stylists").select("*, users!stylists_user_id_fkey(name, email)").eq("user_id", user_id).execute()
         if not response.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -343,11 +343,13 @@ async def get_stylist(stylist_id: int):
         
         item = response.data[0]
         return {
-            "id": item["id"],
             "user_id": item["user_id"],
             "hourly_rate": item["hourly_rate"],
             "is_verified": item["is_verified"],
             "is_premium": item["is_premium"],
+            "bio": item.get("bio"),
+            "location": item.get("location"),
+            "rating": item.get("rating", 0.0),
             "user_name": item["users"]["name"] if item.get("users") else None,
             "user_email": item["users"]["email"] if item.get("users") else None
         }
