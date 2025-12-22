@@ -366,11 +366,11 @@ async def get_stylist_by_user_id(user_id: int):
     """Get stylist profile by user_id (alias for consistency)"""
     return await get_stylist(user_id)
 
-@api_router.put("/stylists/{stylist_id}", response_model=StylistResponse)
-async def update_stylist(stylist_id: int, stylist_update: StylistUpdate):
+@api_router.put("/stylists/{user_id}", response_model=StylistResponse)
+async def update_stylist(user_id: int, stylist_update: StylistUpdate):
     """Update a stylist profile"""
     try:
-        existing = supabase.table("stylists").select("*").eq("id", stylist_id).execute()
+        existing = supabase.table("stylists").select("*").eq("user_id", user_id).execute()
         if not existing.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -381,7 +381,7 @@ async def update_stylist(stylist_id: int, stylist_update: StylistUpdate):
         if not update_data:
             return existing.data[0]
         
-        response = supabase.table("stylists").update(update_data).eq("id", stylist_id).execute()
+        response = supabase.table("stylists").update(update_data).eq("user_id", user_id).execute()
         return response.data[0]
     except HTTPException:
         raise
@@ -391,18 +391,18 @@ async def update_stylist(stylist_id: int, stylist_update: StylistUpdate):
             detail=f"Failed to update stylist: {str(e)}"
         )
 
-@api_router.delete("/stylists/{stylist_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_stylist(stylist_id: int):
+@api_router.delete("/stylists/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_stylist(user_id: int):
     """Delete a stylist profile"""
     try:
-        existing = supabase.table("stylists").select("*").eq("id", stylist_id).execute()
+        existing = supabase.table("stylists").select("*").eq("user_id", user_id).execute()
         if not existing.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Stylist not found"
             )
         
-        supabase.table("stylists").delete().eq("id", stylist_id).execute()
+        supabase.table("stylists").delete().eq("user_id", user_id).execute()
         return None
     except HTTPException:
         raise
