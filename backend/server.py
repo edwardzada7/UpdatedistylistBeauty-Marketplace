@@ -303,11 +303,13 @@ async def get_all_stylists(
         stylists = []
         for item in response.data:
             stylist = {
-                "id": item["id"],
                 "user_id": item["user_id"],
                 "hourly_rate": item["hourly_rate"],
                 "is_verified": item["is_verified"],
                 "is_premium": item["is_premium"],
+                "bio": item.get("bio"),
+                "location": item.get("location"),
+                "rating": item.get("rating", 0.0),
                 "user_name": item["users"]["name"] if item.get("users") else None,
                 "user_email": item["users"]["email"] if item.get("users") else None
             }
