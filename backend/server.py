@@ -363,32 +363,8 @@ async def get_stylist(user_id: int):
 
 @api_router.get("/stylists/by-user/{user_id}", response_model=StylistResponse)
 async def get_stylist_by_user_id(user_id: int):
-    """Get stylist profile by user_id"""
-    try:
-        response = supabase.table("stylists").select("*, users!stylists_user_id_fkey(name, email)").eq("user_id", user_id).execute()
-        if not response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Stylist profile not found for this user"
-            )
-        
-        item = response.data[0]
-        return {
-            "id": item["id"],
-            "user_id": item["user_id"],
-            "hourly_rate": item["hourly_rate"],
-            "is_verified": item["is_verified"],
-            "is_premium": item["is_premium"],
-            "user_name": item["users"]["name"] if item.get("users") else None,
-            "user_email": item["users"]["email"] if item.get("users") else None
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch stylist: {str(e)}"
-        )
+    """Get stylist profile by user_id (alias for consistency)"""
+    return await get_stylist(user_id)
 
 @api_router.put("/stylists/{stylist_id}", response_model=StylistResponse)
 async def update_stylist(stylist_id: int, stylist_update: StylistUpdate):
