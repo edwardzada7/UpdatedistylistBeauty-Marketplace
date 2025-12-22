@@ -51,22 +51,28 @@ class UserResponse(BaseModel):
 
 # Stylist Models
 class StylistCreate(BaseModel):
-    user_id: int  # Foreign key to users.id
+    user_id: int  # Foreign key to users.id (also serves as primary key)
     hourly_rate: float
     is_verified: bool = False
     is_premium: bool = False
+    bio: Optional[str] = None
+    location: Optional[str] = None
 
 class StylistUpdate(BaseModel):
     hourly_rate: Optional[float] = None
     is_verified: Optional[bool] = None
     is_premium: Optional[bool] = None
+    bio: Optional[str] = None
+    location: Optional[str] = None
 
 class StylistResponse(BaseModel):
-    id: int
-    user_id: int
+    user_id: int  # Primary key
     hourly_rate: float
     is_verified: bool
     is_premium: bool
+    bio: Optional[str] = None
+    location: Optional[str] = None
+    rating: Optional[float] = 0.0
     # Populated from join with users table
     user_name: Optional[str] = None
     user_email: Optional[str] = None
