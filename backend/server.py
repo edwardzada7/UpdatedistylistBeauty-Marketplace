@@ -326,7 +326,7 @@ async def get_all_stylists(
 async def get_stylist(stylist_id: int):
     """Get a specific stylist by ID"""
     try:
-        response = supabase.table("stylists").select("*, users!inner(name, email)").eq("id", stylist_id).execute()
+        response = supabase.table("stylists").select("*, users!stylists_user_id_fkey(name, email)").eq("id", stylist_id).execute()
         if not response.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
