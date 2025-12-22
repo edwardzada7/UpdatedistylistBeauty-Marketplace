@@ -1,22 +1,36 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route, Link, useNavigate } from "react-router-dom";
-import HomePage from "@/pages/HomePage";
-import SettingsPage from "@/pages/SettingsPage";
-import IntegrationsPage from "@/pages/IntegrationsPage";
-import DatabasePage from "@/pages/DatabasePage";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import HomeScreen from "@/screens/HomeScreen";
+import ProfileScreen from "@/screens/ProfileScreen";
+import StylistsListScreen from "@/screens/StylistsListScreen";
+import StylistProfileScreen from "@/screens/StylistProfileScreen";
+import WalletScreen from "@/screens/WalletScreen";
 import { Toaster } from "@/components/ui/sonner";
 
+// Mock current user - In production, this would come from auth
+const MOCK_USER = {
+  id: 11,
+  auth_id: "demo-user-auth-id",
+  name: "Sarah Johnson",
+  email: "sarah@example.com",
+  phone: "+2348012345678",
+  role: "customer"
+};
+
 function App() {
+  const [currentUser, setCurrentUser] = useState(MOCK_USER);
+
   return (
     <div className="App min-h-screen bg-gray-50">
       <BrowserRouter>
-        <Toaster position="top-right" />
+        <Toaster position="top-center" />
         <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/settings/integrations" element={<IntegrationsPage />} />
-          <Route path="/settings/integrations/database" element={<DatabasePage />} />
+          <Route path="/" element={<HomeScreen currentUser={currentUser} />} />
+          <Route path="/profile" element={<ProfileScreen currentUser={currentUser} setCurrentUser={setCurrentUser} />} />
+          <Route path="/stylists" element={<StylistsListScreen currentUser={currentUser} />} />
+          <Route path="/stylists/:userId" element={<StylistProfileScreen currentUser={currentUser} />} />
+          <Route path="/wallet" element={<WalletScreen currentUser={currentUser} />} />
         </Routes>
       </BrowserRouter>
     </div>
