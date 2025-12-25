@@ -65,35 +65,29 @@ const WalletScreen = ({ currentUser }) => {
       return;
     }
 
-    if (amount < 500) {
-      toast.error("Minimum top-up amount is ₦500");
+    if (amount < MIN_TOPUP_AMOUNT) {
+      toast.error(`Minimum top-up amount is ${CURRENCY}${MIN_TOPUP_AMOUNT}`);
       return;
     }
 
     setProcessing(true);
 
     try {
-      const response = await axios.post(`${API}/wallets/${wallet.id}/topup?amount=${amount}`);
+      const response = await walletsAPI.topUp(wallet.id, amount);
       setWallet((prev) => ({ ...prev, balance: response.data.new_balance }));
-      toast.success(`₦${amount.toLocaleString()} added to your wallet!`);
+      toast.success(`${CURRENCY}${amount.toLocaleString()} added to your wallet!`);
       setIsTopUpOpen(false);
       setTopUpAmount("");
     } catch (error) {
       console.error("Failed to top up wallet:", error);
-      toast.error("Failed to top up wallet");
+      toast.error(TOAST_MESSAGES.WALLET_TOPUP_FAILED);
     } finally {
       setProcessing(false);
     }
   };
 
-  const quickTopUpAmounts = [1000, 5000, 10000, 20000];
-
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
-      </div>
-    );
+    return <LoadingSpinner fullScreen message="Loading wallet..." />;
   }
 
   return (
