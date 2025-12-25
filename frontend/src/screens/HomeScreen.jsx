@@ -77,7 +77,7 @@ const HomeScreen = ({ currentUser }) => {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid sm:grid-cols-2 gap-4 max-w-2xl mx-auto mb-12">
+        <div className="grid sm:grid-cols-2 gap-4 max-w-2xl mx-auto mb-8">
           <Card
             className="cursor-pointer hover:shadow-lg transition-all hover:scale-105"
             onClick={() => navigate("/stylists")}
@@ -106,6 +106,32 @@ const HomeScreen = ({ currentUser }) => {
               <div>
                 <h3 className="font-semibold text-lg">My Wallet</h3>
                 <p className="text-sm text-gray-600">Manage your balance</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Marketplace Stats */}
+        <div className="max-w-4xl mx-auto mb-8">
+          <Card className="bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingUp className="h-5 w-5 text-purple-600" />
+                <h3 className="font-semibold text-purple-900">Marketplace Stats</h3>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-center">
+                  <p className="text-3xl font-bold text-purple-600">{stats.totalStylists}</p>
+                  <p className="text-xs text-gray-600 mt-1">Active Stylists</p>
+                </div>
+                <div className="text-center border-x border-purple-200">
+                  <p className="text-3xl font-bold text-green-600">{stats.verified}</p>
+                  <p className="text-xs text-gray-600 mt-1">Verified</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-3xl font-bold text-amber-600">{stats.premium}</p>
+                  <p className="text-xs text-gray-600 mt-1">Premium</p>
+                </div>
               </div>
             </CardContent>
           </Card>
