@@ -22,6 +22,10 @@ const StylistsListScreen = ({ currentUser }) => {
   const [filterVerified, setFilterVerified] = useState(FILTER_OPTIONS.ALL);
   const [sortBy, setSortBy] = useState(SORT_OPTIONS.RECOMMENDED);
 
+  if (!currentUser) {
+    return null;
+  }
+
   useEffect(() => {
     fetchStylists();
   }, []);
