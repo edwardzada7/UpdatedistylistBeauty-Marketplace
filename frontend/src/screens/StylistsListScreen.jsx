@@ -141,23 +141,17 @@ const StylistsListScreen = ({ currentUser }) => {
       {/* Stylists List */}
       <div className="container mx-auto px-4 py-6 pb-24 sm:pb-6">
         {loading ? (
-          <div className="flex justify-center items-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
-          </div>
+          <LoadingSpinner message="Loading stylists..." />
         ) : filteredStylists.length === 0 ? (
-          <div className="text-center py-20">
-            <p className="text-gray-600">No stylists found</p>
-            <Button
-              variant="link"
-              onClick={() => {
-                setSearchQuery("");
-                setFilterVerified("all");
-              }}
-              className="mt-2"
-            >
-              Clear filters
-            </Button>
-          </div>
+          <EmptyState
+            title="No stylists found"
+            description="Try adjusting your search or filters"
+            actionLabel="Clear filters"
+            onAction={() => {
+              setSearchQuery("");
+              setFilterVerified(FILTER_OPTIONS.ALL);
+            }}
+          />
         ) : (
           <div className="space-y-4">
             <p className="text-sm text-gray-600">
