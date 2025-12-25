@@ -223,6 +223,9 @@ const StylistsListScreen = ({ currentUser }) => {
           </div>
         )}
       </div>
+
+      {/* Bottom Navigation */}
+      <BottomNavigation />
     </div>
   );
 };
