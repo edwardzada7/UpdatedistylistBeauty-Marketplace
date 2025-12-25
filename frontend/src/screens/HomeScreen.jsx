@@ -112,16 +112,13 @@ const HomeScreen = ({ currentUser }) => {
           </div>
 
           {loading ? (
-            <div className="grid sm:grid-cols-3 gap-4">
-              {[1, 2, 3].map((i) => (
-                <Card key={i} className="animate-pulse">
-                  <CardContent className="p-6">
-                    <div className="h-16 bg-gray-200 rounded mb-2"></div>
-                    <div className="h-4 bg-gray-200 rounded"></div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <LoadingSpinner message="Loading top stylists..." />
+          ) : topStylists.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-gray-500">
+                <p>No verified stylists available yet</p>
+              </CardContent>
+            </Card>
           ) : (
             <div className="grid sm:grid-cols-3 gap-4">
               {topStylists.map((stylist) => (
