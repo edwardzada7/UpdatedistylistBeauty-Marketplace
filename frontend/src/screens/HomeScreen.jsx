@@ -162,22 +162,7 @@ const HomeScreen = ({ currentUser }) => {
       </div>
 
       {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg sm:hidden">
-        <div className="flex justify-around py-3">
-          <button onClick={() => navigate("/")} className="flex flex-col items-center text-purple-600">
-            <Scissors className="h-5 w-5" />
-            <span className="text-xs mt-1">Home</span>
-          </button>
-          <button onClick={() => navigate("/stylists")} className="flex flex-col items-center text-gray-600">
-            <User className="h-5 w-5" />
-            <span className="text-xs mt-1">Stylists</span>
-          </button>
-          <button onClick={() => navigate("/wallet")} className="flex flex-col items-center text-gray-600">
-            <Wallet className="h-5 w-5" />
-            <span className="text-xs mt-1">Wallet</span>
-          </button>
-        </div>
-      </div>
+      <BottomNavigation />
     </div>
   );
 };
