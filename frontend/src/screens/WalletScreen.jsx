@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,9 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArrowLeft, Wallet, Plus, TrendingUp, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import { walletsAPI } from "@/services/api";
+import { CURRENCY, MIN_TOPUP_AMOUNT, QUICK_TOPUP_AMOUNTS, TOAST_MESSAGES } from "@/utils/constants";
+import LoadingSpinner from "@/components/LoadingSpinner";
+import BottomNavigation from "@/components/BottomNavigation";
 
 const WalletScreen = ({ currentUser }) => {
   const navigate = useNavigate();
