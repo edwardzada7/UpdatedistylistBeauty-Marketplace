@@ -37,10 +37,11 @@ const ProfileScreen = () => {
     setLoading(true);
 
     try {
-      const response = await usersAPI.update(currentUser.id, formData);
-      setCurrentUser(response.data);
+      await usersAPI.update(userData.id, formData);
       toast.success(TOAST_MESSAGES.PROFILE_UPDATED);
       setEditing(false);
+      // Refresh page to get updated data
+      window.location.reload();
     } catch (error) {
       console.error("Failed to update profile:", error);
       toast.error(TOAST_MESSAGES.PROFILE_UPDATE_FAILED);
@@ -51,12 +52,27 @@ const ProfileScreen = () => {
 
   const handleCancel = () => {
     setFormData({
-      name: currentUser.name,
-      email: currentUser.email,
-      phone: currentUser.phone || "",
+      name: userData.name,
+      email: userData.email,
+      phone: userData.phone || "",
     });
     setEditing(false);
   };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      toast.success("Logged out successfully");
+      navigate("/login");
+    } catch (error) {
+      console.error("Sign out error:", error);
+      toast.error("Failed to log out");
+    }
+  };
+
+  if (!userData) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
