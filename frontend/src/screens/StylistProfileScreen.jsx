@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Star, CheckCircle2, MapPin, Mail, Loader2, Calendar } from "lucide-react";
+import { ArrowLeft, Star, CheckCircle2, MapPin, Mail, Calendar } from "lucide-react";
 import { toast } from "sonner";
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import { stylistsAPI } from "@/services/api";
+import { CURRENCY, STYLIST_SERVICES, TOAST_MESSAGES } from "@/utils/constants";
+import LoadingSpinner from "@/components/LoadingSpinner";
+import BottomNavigation from "@/components/BottomNavigation";
 
 const StylistProfileScreen = ({ currentUser }) => {
   const navigate = useNavigate();
