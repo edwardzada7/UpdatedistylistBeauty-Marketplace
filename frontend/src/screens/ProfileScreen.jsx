@@ -218,7 +218,7 @@ const ProfileScreen = () => {
                     <Mail className="h-5 w-5 text-gray-600 mt-0.5" />
                     <div>
                       <p className="text-sm text-gray-600">Email</p>
-                      <p className="font-medium">{currentUser.email}</p>
+                      <p className="font-medium">{userData.email}</p>
                     </div>
                   </div>
 
@@ -226,7 +226,7 @@ const ProfileScreen = () => {
                     <Phone className="h-5 w-5 text-gray-600 mt-0.5" />
                     <div>
                       <p className="text-sm text-gray-600">Phone</p>
-                      <p className="font-medium">{currentUser.phone || "Not provided"}</p>
+                      <p className="font-medium">{userData.phone || "Not provided"}</p>
                     </div>
                   </div>
 
@@ -234,7 +234,7 @@ const ProfileScreen = () => {
                     <User className="h-5 w-5 text-gray-600 mt-0.5" />
                     <div>
                       <p className="text-sm text-gray-600">Account Type</p>
-                      <p className="font-medium capitalize">{currentUser.role}</p>
+                      <p className="font-medium capitalize">{userData.role}</p>
                     </div>
                   </div>
                 </div>
