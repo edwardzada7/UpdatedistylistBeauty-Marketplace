@@ -224,17 +224,17 @@ const WalletScreen = ({ currentUser }) => {
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-gray-600">Amount to add</span>
                   <span className="font-medium">
-                    ₦{topUpAmount ? parseFloat(topUpAmount).toLocaleString() : "0"}
+                    {CURRENCY}{topUpAmount ? parseFloat(topUpAmount).toLocaleString() : "0"}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Processing fee</span>
-                  <span className="font-medium text-green-600">₦0.00</span>
+                  <span className="font-medium text-green-600">{CURRENCY}0.00</span>
                 </div>
                 <div className="border-t mt-2 pt-2 flex justify-between">
                   <span className="font-semibold">Total</span>
                   <span className="font-bold text-lg">
-                    ₦{topUpAmount ? parseFloat(topUpAmount).toLocaleString() : "0"}
+                    {CURRENCY}{topUpAmount ? parseFloat(topUpAmount).toLocaleString() : "0"}
                   </span>
                 </div>
               </div>
