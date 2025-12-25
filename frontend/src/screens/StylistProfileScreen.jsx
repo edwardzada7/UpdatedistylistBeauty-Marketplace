@@ -174,14 +174,9 @@ const StylistProfileScreen = ({ currentUser }) => {
             <CardContent className="p-6">
               <h3 className="font-semibold text-lg mb-4">Services Offered</h3>
               <div className="grid grid-cols-2 gap-3">
-                {[
-                  { name: "Hair Styling", icon: "✂️" },
-                  { name: "Makeup", icon: "💄" },
-                  { name: "Manicure", icon: "💅" },
-                  { name: "Pedicure", icon: "👣" },
-                ].map((service) => (
+                {STYLIST_SERVICES.map((service) => (
                   <div
-                    key={service.name}
+                    key={service.id}
                     className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg"
                   >
                     <span className="text-2xl">{service.icon}</span>
