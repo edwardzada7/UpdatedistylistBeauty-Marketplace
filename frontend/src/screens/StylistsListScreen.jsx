@@ -19,8 +19,8 @@ const StylistsListScreen = ({ currentUser }) => {
   const [filteredStylists, setFilteredStylists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterVerified, setFilterVerified] = useState("all");
-  const [sortBy, setSortBy] = useState("premium");
+  const [filterVerified, setFilterVerified] = useState(FILTER_OPTIONS.ALL);
+  const [sortBy, setSortBy] = useState(SORT_OPTIONS.RECOMMENDED);
 
   useEffect(() => {
     fetchStylists();
