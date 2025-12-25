@@ -35,6 +35,74 @@ export const authService = {
     }
   },
 
+  // Sign up with phone number
+  signUpWithPhone: async (phone, name, role = 'customer') => {
+    try {
+      // Send OTP to phone
+      const { data, error } = await supabase.auth.signInWithOtp({
+        phone: phone,
+      });
+
+      if (error) throw error;
+
+      return {
+        success: true,
+        message: 'OTP sent to your phone',
+        phone,
+        name,
+        role,
+      };
+    } catch (error) {
+      console.error('Phone sign up error:', error);
+      throw error;
+    }
+  },
+
+  // Verify phone OTP and create user
+  verifyPhoneOTP: async (phone, otp, name, role = 'customer') => {
+    try {
+      // Verify OTP
+      const { data: authData, error: authError } = await supabase.auth.verifyOtp({
+        phone,
+        token: otp,
+        type: 'sms',
+      });
+
+      if (authError) throw authError;
+      if (!authData.user) throw new Error('Failed to verify OTP');
+
+      // Check if user already exists
+      try {
+        const existingUser = await usersAPI.getByAuthId(authData.user.id);
+        return {
+          user: authData.user,
+          userData: existingUser.data,
+          session: authData.session,
+        };
+      } catch (error) {
+        // User doesn't exist, create new user
+        const userData = {
+          auth_id: authData.user.id,
+          email: authData.user.email || `${phone}@phone.user`,
+          name: name,
+          phone: phone,
+          role: role,
+        };
+
+        const userResponse = await usersAPI.create(userData);
+
+        return {
+          user: authData.user,
+          userData: userResponse.data,
+          session: authData.session,
+        };
+      }
+    } catch (error) {
+      console.error('OTP verification error:', error);
+      throw error;
+    }
+  },
+
   // Sign in with email and password
   signIn: async (email, password) => {
     try {
@@ -56,6 +124,52 @@ export const authService = {
       };
     } catch (error) {
       console.error('Sign in error:', error);
+      throw error;
+    }
+  },
+
+  // Sign in with phone number
+  signInWithPhone: async (phone) => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOtp({
+        phone: phone,
+      });
+
+      if (error) throw error;
+
+      return {
+        success: true,
+        message: 'OTP sent to your phone',
+        phone,
+      };
+    } catch (error) {
+      console.error('Phone sign in error:', error);
+      throw error;
+    }
+  },
+
+  // Verify phone OTP for login
+  verifyPhoneOTPLogin: async (phone, otp) => {
+    try {
+      const { data: authData, error: authError } = await supabase.auth.verifyOtp({
+        phone,
+        token: otp,
+        type: 'sms',
+      });
+
+      if (authError) throw authError;
+      if (!authData.user) throw new Error('Failed to verify OTP');
+
+      // Fetch user data from database
+      const userResponse = await usersAPI.getByAuthId(authData.user.id);
+
+      return {
+        user: authData.user,
+        userData: userResponse.data,
+        session: authData.session,
+      };
+    } catch (error) {
+      console.error('OTP login verification error:', error);
       throw error;
     }
   },
