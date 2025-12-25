@@ -1,37 +1,142 @@
-import { useState, useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+
+// Auth Screens
+import SignUpScreen from "@/screens/SignUpScreen";
+import LoginScreen from "@/screens/LoginScreen";
+import ForgotPasswordScreen from "@/screens/ForgotPasswordScreen";
+
+// App Screens
 import HomeScreen from "@/screens/HomeScreen";
 import ProfileScreen from "@/screens/ProfileScreen";
 import StylistsListScreen from "@/screens/StylistsListScreen";
 import StylistProfileScreen from "@/screens/StylistProfileScreen";
 import WalletScreen from "@/screens/WalletScreen";
-import { Toaster } from "@/components/ui/sonner";
 
-// Mock current user - In production, this would come from auth
-const MOCK_USER = {
-  id: 11,
-  auth_id: "demo-user-auth-id",
-  name: "Sarah Johnson",
-  email: "sarah@example.com",
-  phone: "+2348012345678",
-  role: "customer"
+// Protected Route Component
+const ProtectedRoute = ({ children }) => {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return null; // AuthContext handles loading state
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
 };
 
-function App() {
-  const [currentUser, setCurrentUser] = useState(MOCK_USER);
+// Public Route Component (redirect to home if authenticated)
+const PublicRoute = ({ children }) => {
+  const { isAuthenticated, loading } = useAuth();
 
+  if (loading) {
+    return null;
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+};
+
+function AppRoutes() {
+  const { userData, isAuthenticated } = useAuth();
+
+  return (
+    <Routes>
+      {/* Public Routes */}
+      <Route
+        path="/signup"
+        element={
+          <PublicRoute>
+            <SignUpScreen />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/login"
+        element={
+          <PublicRoute>
+            <LoginScreen />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <PublicRoute>
+            <ForgotPasswordScreen />
+          </PublicRoute>
+        }
+      />
+
+      {/* Protected Routes */}
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <HomeScreen currentUser={userData} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <ProfileScreen currentUser={userData} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/stylists"
+        element={
+          <ProtectedRoute>
+            <StylistsListScreen currentUser={userData} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/stylists/:userId"
+        element={
+          <ProtectedRoute>
+            <StylistProfileScreen currentUser={userData} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/wallet"
+        element={
+          <ProtectedRoute>
+            <WalletScreen currentUser={userData} />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Catch all - redirect to home if authenticated, login if not */}
+      <Route
+        path="*"
+        element={
+          isAuthenticated ? <Navigate to="/" replace /> : <Navigate to="/login" replace />
+        }
+      />
+    </Routes>
+  );
+}
+
+function App() {
   return (
     <div className="App min-h-screen bg-gray-50">
       <BrowserRouter>
-        <Toaster position="top-center" />
-        <Routes>
-          <Route path="/" element={<HomeScreen currentUser={currentUser} />} />
-          <Route path="/profile" element={<ProfileScreen currentUser={currentUser} setCurrentUser={setCurrentUser} />} />
-          <Route path="/stylists" element={<StylistsListScreen currentUser={currentUser} />} />
-          <Route path="/stylists/:userId" element={<StylistProfileScreen currentUser={currentUser} />} />
-          <Route path="/wallet" element={<WalletScreen currentUser={currentUser} />} />
-        </Routes>
+        <AuthProvider>
+          <Toaster position="top-center" />
+          <AppRoutes />
+        </AuthProvider>
       </BrowserRouter>
     </div>
   );
