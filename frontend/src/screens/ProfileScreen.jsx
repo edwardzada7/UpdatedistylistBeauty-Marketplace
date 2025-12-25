@@ -25,13 +25,13 @@ const ProfileScreen = ({ currentUser, setCurrentUser }) => {
     setLoading(true);
 
     try {
-      const response = await axios.put(`${API}/users/${currentUser.id}`, formData);
+      const response = await usersAPI.update(currentUser.id, formData);
       setCurrentUser(response.data);
-      toast.success("Profile updated successfully!");
+      toast.success(TOAST_MESSAGES.PROFILE_UPDATED);
       setEditing(false);
     } catch (error) {
       console.error("Failed to update profile:", error);
-      toast.error("Failed to update profile");
+      toast.error(TOAST_MESSAGES.PROFILE_UPDATE_FAILED);
     } finally {
       setLoading(false);
     }
