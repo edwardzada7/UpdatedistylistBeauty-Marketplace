@@ -39,9 +39,9 @@ const HomeScreen = ({ currentUser }) => {
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-600 to-purple-600 bg-clip-text text-transparent">
-              BeautyQ
+              {APP_NAME}
             </h1>
-            <p className="text-xs text-gray-600">Find Your Perfect Stylist</p>
+            <p className="text-xs text-gray-600">{APP_TAGLINE}</p>
           </div>
           <Button
             variant="ghost"
