@@ -1,15 +1,14 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, User, Mail, Phone, Save, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import { usersAPI } from "@/services/api";
+import { TOAST_MESSAGES } from "@/utils/constants";
+import BottomNavigation from "@/components/BottomNavigation";
 
 const ProfileScreen = ({ currentUser, setCurrentUser }) => {
   const navigate = useNavigate();
