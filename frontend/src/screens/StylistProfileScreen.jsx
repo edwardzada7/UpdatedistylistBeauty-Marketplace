@@ -23,7 +23,7 @@ const StylistProfileScreen = ({ currentUser }) => {
   const fetchStylistProfile = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`${API}/stylists/${userId}`);
+      const response = await stylistsAPI.getById(userId);
       setStylist(response.data);
     } catch (error) {
       console.error("Failed to fetch stylist:", error);
@@ -35,17 +35,13 @@ const StylistProfileScreen = ({ currentUser }) => {
   };
 
   const handleBooking = () => {
-    toast.info("Booking feature coming in Phase 2!", {
+    toast.info(TOAST_MESSAGES.BOOKING_PHASE_2, {
       description: "We're working on adding booking functionality."
     });
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
-      </div>
-    );
+    return <LoadingSpinner fullScreen message="Loading stylist profile..." />;
   }
 
   if (!stylist) {
