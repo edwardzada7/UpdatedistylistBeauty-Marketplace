@@ -33,7 +33,7 @@ const StylistsListScreen = ({ currentUser }) => {
   const fetchStylists = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`${API}/stylists?sort_by=${sortBy}`);
+      const response = await stylistsAPI.getAll({ sortBy });
       setStylists(response.data);
     } catch (error) {
       console.error("Failed to fetch stylists:", error);
