@@ -6,10 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Mail, Lock, AlertCircle, LogIn, Smartphone } from "lucide-react";
+import { Loader2, Mail, Lock, AlertCircle, LogIn, Smartphone, Shield } from "lucide-react";
 import PhoneInput from "react-phone-number-input";
 import { toast } from "sonner";
-import { useAuth } from "@/contexts/AuthContext";
 import { authService } from "@/services/authService";
 import { APP_NAME } from "@/utils/constants";
 import OTPVerification from "@/components/OTPVerification";
@@ -18,51 +17,22 @@ import "@/styles/phoneInput.css";
 
 const LoginScreen = () => {
   const navigate = useNavigate();
-  const { signIn } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [authMethod, setAuthMethod] = useState("email");
+  const [authMethod, setAuthMethod] = useState("phone");
   const [showOTP, setShowOTP] = useState(false);
   const [pendingPhone, setPendingPhone] = useState("");
   
+  const [phoneFormData, setPhoneFormData] = useState({
+    phone: "",
+  });
+
   const [emailFormData, setEmailFormData] = useState({
     email: "",
     password: "",
   });
 
-  const [phoneFormData, setPhoneFormData] = useState({
-    phone: "",
-  });
-
-  // Email Login
-  const handleEmailSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-
-    if (!emailFormData.email || !emailFormData.password) {
-      setError("All fields are required");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      await signIn(emailFormData.email, emailFormData.password);
-      toast.success("Welcome back!");
-      navigate("/");
-    } catch (error) {
-      console.error("Login error:", error);
-      if (error.message?.includes("Invalid login credentials")) {
-        setError("Invalid email or password. Please try again.");
-      } else {
-        setError(error.message || "Failed to log in. Please try again.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Phone Login - Send OTP
+  // Phone Login - Send OTP (Primary Method)
   const handlePhoneSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -87,6 +57,42 @@ const LoginScreen = () => {
     }
   };
 
+  // Email Login (Secondary Method - Requires Phone Verification)
+  const handleEmailSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+
+    if (!emailFormData.email || !emailFormData.password) {
+      setError("Email and password are required");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const result = await authService.signInWithEmail(emailFormData.email, emailFormData.password);
+      
+      if (result.requiresPhoneVerification) {
+        toast.error("Phone verification required!");
+        setError("Your account requires phone verification. Please verify your phone number to continue.");
+        // User will be redirected to verification gate by AuthContext
+        window.location.reload();
+      } else {
+        toast.success("Welcome back!");
+        navigate("/");
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      if (error.message?.includes("Invalid login credentials")) {
+        setError("Invalid email or password. Please try again.");
+      } else {
+        setError(error.message || "Failed to log in. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Verify OTP
   const handleVerifyOTP = async (otp) => {
     setError("");
@@ -94,10 +100,9 @@ const LoginScreen = () => {
 
     try {
       await authService.verifyPhoneOTPLogin(pendingPhone, otp);
-      
-      // Manually trigger auth state update
-      window.location.reload();
       toast.success("Welcome back!");
+      // Reload to trigger auth state update
+      window.location.href = "/";
     } catch (error) {
       console.error("OTP verification error:", error);
       setError(error.message || "Invalid OTP. Please try again.");
@@ -142,23 +147,77 @@ const LoginScreen = () => {
           </div>
           <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
           <CardDescription>
-            Log in to {APP_NAME} to continue
+            Log in to {APP_NAME}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs value={authMethod} onValueChange={setAuthMethod} className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="email" data-testid="email-tab">
-                <Mail className="h-4 w-4 mr-2" />
-                Email
-              </TabsTrigger>
               <TabsTrigger value="phone" data-testid="phone-tab">
                 <Smartphone className="h-4 w-4 mr-2" />
                 Phone
               </TabsTrigger>
+              <TabsTrigger value="email" data-testid="email-tab">
+                <Mail className="h-4 w-4 mr-2" />
+                Email
+              </TabsTrigger>
             </TabsList>
 
-            {/* Email Login */}
+            {/* Phone Login - Primary */}
+            <TabsContent value="phone">
+              <form onSubmit={handlePhoneSubmit} className="space-y-4">
+                {error && authMethod === "phone" && (
+                  <Alert variant="destructive" data-testid="error-alert">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+
+                <Alert className="bg-purple-50 border-purple-200">
+                  <Shield className="h-4 w-4 text-purple-600" />
+                  <AlertDescription className="text-purple-800 text-sm">
+                    <strong>Recommended:</strong> Login with phone for instant access
+                  </AlertDescription>
+                </Alert>
+
+                <div>
+                  <Label htmlFor="phone-number">Phone Number *</Label>
+                  <div className="mt-2">
+                    <PhoneInput
+                      international
+                      defaultCountry="NG"
+                      value={phoneFormData.phone}
+                      onChange={(value) => setPhoneFormData({ ...phoneFormData, phone: value })}
+                      placeholder="Enter phone number"
+                      className="PhoneInput"
+                      data-testid="phone-input"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">We'll send you a verification code</p>
+                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                  disabled={loading}
+                  data-testid="phone-login-btn"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending OTP...
+                    </>
+                  ) : (
+                    <>
+                      <Smartphone className="mr-2 h-4 w-4" />
+                      Log In with Phone
+                    </>
+                  )}
+                </Button>
+              </form>
+            </TabsContent>
+
+            {/* Email Login - Secondary */}
             <TabsContent value="email">
               <form onSubmit={handleEmailSubmit} className="space-y-4">
                 {error && authMethod === "email" && (
@@ -167,6 +226,13 @@ const LoginScreen = () => {
                     <AlertDescription>{error}</AlertDescription>
                   </Alert>
                 )}
+
+                <Alert className="bg-amber-50 border-amber-200">
+                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800 text-sm">
+                    <strong>Note:</strong> Phone verification is required for full access
+                  </AlertDescription>
+                </Alert>
 
                 <div>
                   <Label htmlFor="email">Email Address *</Label>
@@ -223,53 +289,6 @@ const LoginScreen = () => {
                     </>
                   ) : (
                     "Log In with Email"
-                  )}
-                </Button>
-              </form>
-            </TabsContent>
-
-            {/* Phone Login */}
-            <TabsContent value="phone">
-              <form onSubmit={handlePhoneSubmit} className="space-y-4">
-                {error && authMethod === "phone" && (
-                  <Alert variant="destructive" data-testid="error-alert">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
-
-                <div>
-                  <Label htmlFor="phone-number">Phone Number *</Label>
-                  <div className="mt-2">
-                    <PhoneInput
-                      international
-                      defaultCountry="NG"
-                      value={phoneFormData.phone}
-                      onChange={(value) => setPhoneFormData({ ...phoneFormData, phone: value })}
-                      placeholder="Enter phone number"
-                      className="PhoneInput"
-                      data-testid="phone-input"
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">We'll send you a verification code</p>
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                  disabled={loading}
-                  data-testid="phone-login-btn"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Sending OTP...
-                    </>
-                  ) : (
-                    <>
-                      <Smartphone className="mr-2 h-4 w-4" />
-                      Log In with Phone
-                    </>
                   )}
                 </Button>
               </form>
