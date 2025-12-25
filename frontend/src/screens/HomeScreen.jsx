@@ -15,6 +15,10 @@ const HomeScreen = ({ currentUser }) => {
   const [stats, setStats] = useState({ totalStylists: 0, verified: 0, premium: 0 });
   const [loading, setLoading] = useState(true);
 
+  if (!currentUser) {
+    return null;
+  }
+
   useEffect(() => {
     fetchTopStylists();
   }, []);
