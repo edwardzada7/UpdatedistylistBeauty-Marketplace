@@ -2,40 +2,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { usersAPI } from '@/services/api';
 
 export const authService = {
-  // Sign up with email and password
-  signUp: async (email, password, name, role = 'customer') => {
-    try {
-      // Step 1: Create auth user in Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('Failed to create user');
-
-      // Step 2: Create user record in users table
-      const userData = {
-        auth_id: authData.user.id,
-        email: email,
-        name: name,
-        role: role,
-      };
-
-      const userResponse = await usersAPI.create(userData);
-
-      return {
-        user: authData.user,
-        userData: userResponse.data,
-        session: authData.session,
-      };
-    } catch (error) {
-      console.error('Sign up error:', error);
-      throw error;
-    }
-  },
-
-  // Sign up with phone number
+  // Sign up with phone (mandatory first step)
   signUpWithPhone: async (phone, name, role = 'customer') => {
     try {
       // Send OTP to phone
@@ -58,10 +25,10 @@ export const authService = {
     }
   },
 
-  // Verify phone OTP and create user
-  verifyPhoneOTP: async (phone, otp, name, role = 'customer') => {
+  // Verify phone OTP and create user (with optional email/password)
+  verifyPhoneAndCreateUser: async (phone, otp, name, role = 'customer', email = null, password = null) => {
     try {
-      // Verify OTP
+      // Step 1: Verify OTP
       const { data: authData, error: authError } = await supabase.auth.verifyOtp({
         phone,
         token: otp,
@@ -71,26 +38,44 @@ export const authService = {
       if (authError) throw authError;
       if (!authData.user) throw new Error('Failed to verify OTP');
 
-      // Check if user already exists
+      // Step 2: If email/password provided, update auth user
+      if (email && password) {
+        const { error: updateError } = await supabase.auth.updateUser({
+          email: email,
+          password: password,
+        });
+
+        if (updateError && !updateError.message.includes('already registered')) {
+          console.warn('Email update warning:', updateError);
+        }
+      }
+
+      // Step 3: Create or update user record in database
+      const userData = {
+        auth_id: authData.user.id,
+        email: email || `${phone.replace(/[^0-9]/g, '')}@phone.user`,
+        name: name,
+        phone: phone,
+        role: role,
+        phone_verified: true, // Mark as verified
+      };
+
       try {
+        // Check if user already exists
         const existingUser = await usersAPI.getByAuthId(authData.user.id);
+        // Update existing user
+        const userResponse = await usersAPI.update(existingUser.data.id, {
+          phone_verified: true,
+          phone: phone,
+        });
         return {
           user: authData.user,
-          userData: existingUser.data,
+          userData: userResponse.data,
           session: authData.session,
         };
       } catch (error) {
-        // User doesn't exist, create new user
-        const userData = {
-          auth_id: authData.user.id,
-          email: authData.user.email || `${phone}@phone.user`,
-          name: name,
-          phone: phone,
-          role: role,
-        };
-
+        // User doesn't exist, create new
         const userResponse = await usersAPI.create(userData);
-
         return {
           user: authData.user,
           userData: userResponse.data,
@@ -103,32 +88,7 @@ export const authService = {
     }
   },
 
-  // Sign in with email and password
-  signIn: async (email, password) => {
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-      if (!data.user) throw new Error('Invalid credentials');
-
-      // Fetch user data from database
-      const userResponse = await usersAPI.getByAuthId(data.user.id);
-
-      return {
-        user: data.user,
-        userData: userResponse.data,
-        session: data.session,
-      };
-    } catch (error) {
-      console.error('Sign in error:', error);
-      throw error;
-    }
-  },
-
-  // Sign in with phone number
+  // Sign in with phone (primary login method)
   signInWithPhone: async (phone) => {
     try {
       const { data, error } = await supabase.auth.signInWithOtp({
@@ -162,14 +122,105 @@ export const authService = {
 
       // Fetch user data from database
       const userResponse = await usersAPI.getByAuthId(authData.user.id);
+      const userData = userResponse.data;
+
+      // Check if phone is verified
+      if (!userData.phone_verified) {
+        // Update phone verification status
+        await usersAPI.update(userData.id, { phone_verified: true });
+        userData.phone_verified = true;
+      }
 
       return {
         user: authData.user,
-        userData: userResponse.data,
+        userData: userData,
         session: authData.session,
       };
     } catch (error) {
       console.error('OTP login verification error:', error);
+      throw error;
+    }
+  },
+
+  // Sign in with email and password (secondary method, requires phone verification)
+  signInWithEmail: async (email, password) => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+      if (!data.user) throw new Error('Invalid credentials');
+
+      // Fetch user data from database
+      const userResponse = await usersAPI.getByAuthId(data.user.id);
+      const userData = userResponse.data;
+
+      // Check if phone is verified
+      if (!userData.phone_verified) {
+        return {
+          user: data.user,
+          userData: userData,
+          session: data.session,
+          requiresPhoneVerification: true,
+        };
+      }
+
+      return {
+        user: data.user,
+        userData: userData,
+        session: data.session,
+        requiresPhoneVerification: false,
+      };
+    } catch (error) {
+      console.error('Email sign in error:', error);
+      throw error;
+    }
+  },
+
+  // Request phone verification for existing user
+  requestPhoneVerification: async (phone) => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOtp({
+        phone: phone,
+      });
+
+      if (error) throw error;
+
+      return {
+        success: true,
+        message: 'OTP sent to your phone',
+      };
+    } catch (error) {
+      console.error('Request phone verification error:', error);
+      throw error;
+    }
+  },
+
+  // Verify phone for existing user
+  verifyExistingUserPhone: async (phone, otp, userId) => {
+    try {
+      const { data: authData, error: authError } = await supabase.auth.verifyOtp({
+        phone,
+        token: otp,
+        type: 'sms',
+      });
+
+      if (authError) throw authError;
+
+      // Update user phone verification status
+      await usersAPI.update(userId, {
+        phone: phone,
+        phone_verified: true,
+      });
+
+      return {
+        success: true,
+        message: 'Phone verified successfully',
+      };
+    } catch (error) {
+      console.error('Phone verification error:', error);
       throw error;
     }
   },
