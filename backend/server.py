@@ -34,11 +34,13 @@ class UserCreate(BaseModel):
     email: EmailStr
     phone: Optional[str] = None
     role: str = "customer"  # customer or stylist
+    phone_verified: bool = False
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
+    phone_verified: Optional[bool] = None
 
 class UserResponse(BaseModel):
     id: int
@@ -47,6 +49,7 @@ class UserResponse(BaseModel):
     email: str
     phone: Optional[str]
     role: str
+    phone_verified: Optional[bool] = False
     profile_completed: Optional[bool] = False
 
 # Stylist Models
