@@ -210,11 +210,11 @@ const WalletScreen = ({ currentUser }) => {
                 <Input
                   id="amount"
                   type="number"
-                  min="500"
+                  min={MIN_TOPUP_AMOUNT}
                   step="100"
                   value={topUpAmount}
                   onChange={(e) => setTopUpAmount(e.target.value)}
-                  placeholder="Enter amount (min. ₦500)"
+                  placeholder={`Enter amount (min. ${CURRENCY}${MIN_TOPUP_AMOUNT})`}
                   required
                   data-testid="topup-amount-input"
                   className="mt-2"
