@@ -220,6 +220,9 @@ const StylistProfileScreen = ({ currentUser }) => {
           )}
         </div>
       </div>
+
+      {/* Bottom Navigation */}
+      <BottomNavigation />
     </div>
   );
 };
