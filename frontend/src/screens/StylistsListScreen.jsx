@@ -196,7 +196,7 @@ const StylistsListScreen = ({ currentUser }) => {
                         </div>
                         <div className="text-right flex-shrink-0">
                           <p className="text-2xl font-bold text-purple-600">
-                            ₦{stylist.hourly_rate.toLocaleString()}
+                            {CURRENCY}{stylist.hourly_rate.toLocaleString()}
                           </p>
                           <p className="text-xs text-gray-600">per hour</p>
                         </div>
