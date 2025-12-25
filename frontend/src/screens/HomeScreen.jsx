@@ -20,7 +20,10 @@ const HomeScreen = ({ currentUser }) => {
 
   const fetchTopStylists = async () => {
     try {
-      const response = await axios.get(`${API}/stylists?verified_only=true&sort_by=premium`);
+      const response = await stylistsAPI.getAll({ 
+        verifiedOnly: true, 
+        sortBy: "premium" 
+      });
       setTopStylists(response.data.slice(0, 3)); // Top 3
     } catch (error) {
       console.error("Failed to fetch stylists:", error);
