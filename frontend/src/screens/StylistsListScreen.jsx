@@ -1,16 +1,17 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Search, Star, CheckCircle2, MapPin, Loader2 } from "lucide-react";
+import { ArrowLeft, Search, Star, CheckCircle2, MapPin } from "lucide-react";
 import { toast } from "sonner";
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import { stylistsAPI } from "@/services/api";
+import { CURRENCY, FILTER_OPTIONS, SORT_OPTIONS } from "@/utils/constants";
+import LoadingSpinner from "@/components/LoadingSpinner";
+import EmptyState from "@/components/EmptyState";
+import BottomNavigation from "@/components/BottomNavigation";
 
 const StylistsListScreen = ({ currentUser }) => {
   const navigate = useNavigate();
