@@ -101,21 +101,33 @@ const ProfileScreen = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white text-2xl font-bold">
-                    {currentUser.name.charAt(0)}
+                    {userData.name.charAt(0)}
                   </div>
                   <div>
-                    <CardTitle>{currentUser.name}</CardTitle>
-                    <p className="text-sm text-gray-600 capitalize">{currentUser.role}</p>
+                    <CardTitle>{userData.name}</CardTitle>
+                    <p className="text-sm text-gray-600 capitalize">{userData.role}</p>
                   </div>
                 </div>
                 {!editing && (
-                  <Button
-                    onClick={() => setEditing(true)}
-                    size="sm"
-                    data-testid="edit-profile-btn"
-                  >
-                    Edit Profile
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => setEditing(true)}
+                      size="sm"
+                      data-testid="edit-profile-btn"
+                    >
+                      Edit Profile
+                    </Button>
+                    <Button
+                      onClick={handleSignOut}
+                      size="sm"
+                      variant="outline"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      data-testid="signout-btn"
+                    >
+                      <LogOut className="h-4 w-4 mr-1" />
+                      Sign Out
+                    </Button>
+                  </div>
                 )}
               </div>
             </CardHeader>
