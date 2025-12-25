@@ -12,6 +12,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 const HomeScreen = ({ currentUser }) => {
   const navigate = useNavigate();
   const [topStylists, setTopStylists] = useState([]);
+  const [stats, setStats] = useState({ totalStylists: 0, verified: 0, premium: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -24,7 +25,15 @@ const HomeScreen = ({ currentUser }) => {
         verifiedOnly: true, 
         sortBy: "premium" 
       });
-      setTopStylists(response.data.slice(0, 3)); // Top 3
+      const allStylists = response.data;
+      setTopStylists(allStylists.slice(0, 3)); // Top 3
+      
+      // Calculate stats
+      setStats({
+        totalStylists: allStylists.length,
+        verified: allStylists.filter(s => s.is_verified).length,
+        premium: allStylists.filter(s => s.is_premium).length,
+      });
     } catch (error) {
       console.error("Failed to fetch stylists:", error);
     } finally {
