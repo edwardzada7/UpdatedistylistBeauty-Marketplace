@@ -145,7 +145,7 @@ const HomeScreen = ({ currentUser }) => {
                       </div>
                     </div>
                     <p className="text-2xl font-bold text-purple-600">
-                      ₦{stylist.hourly_rate.toLocaleString()}
+                      {CURRENCY}{stylist.hourly_rate.toLocaleString()}
                       <span className="text-sm text-gray-600">/hr</span>
                     </p>
                     {stylist.location && (
