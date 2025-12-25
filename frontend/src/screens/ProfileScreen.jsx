@@ -4,21 +4,33 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, User, Mail, Phone, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, Save, Loader2, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { usersAPI } from "@/services/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { TOAST_MESSAGES } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
 
-const ProfileScreen = ({ currentUser, setCurrentUser }) => {
+const ProfileScreen = () => {
   const navigate = useNavigate();
+  const { userData, signOut } = useAuth();
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
-    name: currentUser.name,
-    email: currentUser.email,
-    phone: currentUser.phone || "",
+    name: userData?.name || "",
+    email: userData?.email || "",
+    phone: userData?.phone || "",
   });
+
+  useEffect(() => {
+    if (userData) {
+      setFormData({
+        name: userData.name,
+        email: userData.email,
+        phone: userData.phone || "",
+      });
+    }
+  }, [userData]);
 
   const handleUpdate = async (e) => {
     e.preventDefault();
