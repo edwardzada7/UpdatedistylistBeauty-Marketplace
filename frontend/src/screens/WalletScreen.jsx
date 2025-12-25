@@ -27,7 +27,7 @@ const WalletScreen = ({ currentUser }) => {
   const fetchWallet = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`${API}/wallets/by-auth/${currentUser.auth_id}`);
+      const response = await walletsAPI.getByAuthId(currentUser.auth_id);
       setWallet(response.data);
     } catch (error) {
       // If wallet doesn't exist, create one
@@ -44,7 +44,7 @@ const WalletScreen = ({ currentUser }) => {
 
   const createWallet = async () => {
     try {
-      const response = await axios.post(`${API}/wallets`, {
+      const response = await walletsAPI.create({
         user_auth_id: currentUser.auth_id,
         balance: 0.0,
       });
