@@ -56,18 +56,18 @@ const StylistsListScreen = ({ currentUser }) => {
     }
 
     // Verified filter
-    if (filterVerified === "verified") {
+    if (filterVerified === FILTER_OPTIONS.VERIFIED) {
       filtered = filtered.filter((s) => s.is_verified);
-    } else if (filterVerified === "premium") {
+    } else if (filterVerified === FILTER_OPTIONS.PREMIUM) {
       filtered = filtered.filter((s) => s.is_premium);
     }
 
     // Sort
-    if (sortBy === "price-low") {
+    if (sortBy === SORT_OPTIONS.PRICE_LOW) {
       filtered.sort((a, b) => a.hourly_rate - b.hourly_rate);
-    } else if (sortBy === "price-high") {
+    } else if (sortBy === SORT_OPTIONS.PRICE_HIGH) {
       filtered.sort((a, b) => b.hourly_rate - a.hourly_rate);
-    } else if (sortBy === "premium") {
+    } else if (sortBy === SORT_OPTIONS.RECOMMENDED) {
       filtered.sort((a, b) => {
         if (b.is_premium !== a.is_premium) return b.is_premium - a.is_premium;
         if (b.is_verified !== a.is_verified) return b.is_verified - a.is_verified;
