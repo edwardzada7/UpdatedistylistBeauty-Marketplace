@@ -203,6 +203,9 @@ const ProfileScreen = ({ currentUser, setCurrentUser }) => {
           </Card>
         </div>
       </div>
+
+      {/* Bottom Navigation */}
+      <BottomNavigation />
     </div>
   );
 };
