@@ -143,7 +143,7 @@ const WalletScreen = ({ currentUser }) => {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-3">
-                {quickTopUpAmounts.map((amount) => (
+                {QUICK_TOPUP_AMOUNTS.map((amount) => (
                   <Button
                     key={amount}
                     variant="outline"
@@ -154,7 +154,7 @@ const WalletScreen = ({ currentUser }) => {
                     }}
                     data-testid={`quick-topup-${amount}`}
                   >
-                    ₦{amount.toLocaleString()}
+                    {CURRENCY}{amount.toLocaleString()}
                   </Button>
                 ))}
               </div>
