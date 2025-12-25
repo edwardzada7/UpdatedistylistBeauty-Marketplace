@@ -269,6 +269,9 @@ const WalletScreen = ({ currentUser }) => {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Bottom Navigation */}
+      <BottomNavigation />
     </div>
   );
 };
