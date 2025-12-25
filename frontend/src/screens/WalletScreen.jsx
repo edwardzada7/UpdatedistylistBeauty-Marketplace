@@ -117,7 +117,7 @@ const WalletScreen = ({ currentUser }) => {
                 <div>
                   <p className="text-purple-100 text-sm mb-2">Available Balance</p>
                   <p className="text-4xl font-bold">
-                    ₦{wallet?.balance?.toLocaleString() || "0"}
+                    {CURRENCY}{wallet?.balance?.toLocaleString() || "0"}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
