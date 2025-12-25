@@ -20,6 +20,10 @@ const WalletScreen = ({ currentUser }) => {
   const [topUpAmount, setTopUpAmount] = useState("");
   const [processing, setProcessing] = useState(false);
 
+  if (!currentUser) {
+    return null;
+  }
+
   useEffect(() => {
     fetchWallet();
   }, []);
