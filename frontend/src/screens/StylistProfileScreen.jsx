@@ -122,7 +122,7 @@ const StylistProfileScreen = ({ currentUser }) => {
                   <div>
                     <p className="text-sm text-gray-600 mb-1">Hourly Rate</p>
                     <p className="text-3xl font-bold text-purple-600">
-                      ₦{stylist.hourly_rate.toLocaleString()}
+                      {CURRENCY}{stylist.hourly_rate.toLocaleString()}
                     </p>
                   </div>
                   <Button
