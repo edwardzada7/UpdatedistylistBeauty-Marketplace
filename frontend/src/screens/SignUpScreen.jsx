@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, User, Mail, Lock, AlertCircle, Smartphone, Shield } from "lucide-react";
 import PhoneInput from "react-phone-number-input";
 import { toast } from "sonner";
@@ -20,49 +19,53 @@ const SignUpScreen = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [step, setStep] = useState("details"); // "details" or "otp"
+  const [step, setStep] = useState("form"); // "form" or "otp"
   
+  // Single form for all data
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
     email: "",
     password: "",
     role: USER_ROLES.CUSTOMER,
-    useEmail: false,
   });
 
-  // Step 1: Collect details and send OTP
-  const handleSubmitDetails = async (e) => {
+  // Step 1: Collect all details and send OTP
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
     // Validation
-    if (!formData.name || !formData.phone) {
-      setError("Name and phone number are required");
+    if (!formData.name.trim()) {
+      setError("Full name is required");
       return;
     }
 
-    if (formData.useEmail && !formData.email) {
-      setError("Email is required when email option is selected");
+    if (!formData.phone) {
+      setError("Phone number is required");
       return;
     }
 
-    if (formData.useEmail && formData.password && formData.password.length < 6) {
+    if (!formData.email.trim()) {
+      setError("Email is required");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setError("Please enter a valid email address");
+      return;
+    }
+
+    if (!formData.password || formData.password.length < 6) {
       setError("Password must be at least 6 characters");
       return;
-    }
-
-    if (formData.useEmail && formData.email) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(formData.email)) {
-        setError("Please enter a valid email address");
-        return;
-      }
     }
 
     setLoading(true);
 
     try {
+      // Send OTP to phone number
       await authService.signUpWithPhone(formData.phone, formData.name, formData.role);
       setStep("otp");
       toast.success("OTP sent to your phone!");
@@ -74,26 +77,27 @@ const SignUpScreen = () => {
     }
   };
 
-  // Step 2: Verify OTP and create account
+  // Step 2: Verify OTP and create complete account
   const handleVerifyOTP = async (otp) => {
     setError("");
     setLoading(true);
 
     try {
+      // Single call to create user after OTP verification
       await authService.verifyPhoneAndCreateUser(
         formData.phone,
         otp,
         formData.name,
         formData.role,
-        formData.useEmail ? formData.email : null,
-        formData.useEmail && formData.password ? formData.password : null
+        formData.email,
+        formData.password
       );
       
       toast.success("Account created successfully!");
       // Reload to trigger auth state update
       window.location.href = "/";
     } catch (error) {
-      console.error("OTP verification error:", error);
+      console.error("Verification error:", error);
       setError(error.message || "Invalid OTP. Please try again.");
     } finally {
       setLoading(false);
@@ -110,6 +114,7 @@ const SignUpScreen = () => {
     }
   };
 
+  // OTP Verification Step
   if (step === "otp") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-indigo-50 flex items-center justify-center p-4">
@@ -127,6 +132,7 @@ const SignUpScreen = () => {
     );
   }
 
+  // Sign Up Form
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-indigo-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-md" data-testid="signup-card">
@@ -140,7 +146,7 @@ const SignUpScreen = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmitDetails} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <Alert variant="destructive" data-testid="error-alert">
                 <AlertCircle className="h-4 w-4" />
@@ -148,30 +154,14 @@ const SignUpScreen = () => {
               </Alert>
             )}
 
-            {/* Phone Number - Required */}
-            <div>
-              <Label htmlFor="phone">
-                Phone Number * <span className="text-purple-600 text-xs">(Required for verification)</span>
-              </Label>
-              <div className="mt-2">
-                <PhoneInput
-                  international
-                  defaultCountry="NG"
-                  value={formData.phone}
-                  onChange={(value) => setFormData({ ...formData, phone: value })}
-                  placeholder="Enter phone number"
-                  className="PhoneInput"
-                  required
-                  data-testid="phone-input"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                <Shield className="h-3 w-3" />
-                We'll send a verification code to this number
-              </p>
-            </div>
+            <Alert className="bg-purple-50 border-purple-200">
+              <Shield className="h-4 w-4 text-purple-600" />
+              <AlertDescription className="text-purple-800 text-sm">
+                <strong>Phone verification required:</strong> You'll receive an OTP to verify your number
+              </AlertDescription>
+            </Alert>
 
-            {/* Name - Required */}
+            {/* Full Name */}
             <div>
               <Label htmlFor="name">Full Name *</Label>
               <div className="relative mt-2">
@@ -189,7 +179,64 @@ const SignUpScreen = () => {
               </div>
             </div>
 
-            {/* Role - Required */}
+            {/* Phone Number - Required */}
+            <div>
+              <Label htmlFor="phone">
+                Phone Number * <span className="text-xs text-purple-600">(Will be verified)</span>
+              </Label>
+              <div className="mt-2">
+                <PhoneInput
+                  international
+                  defaultCountry="NG"
+                  value={formData.phone}
+                  onChange={(value) => setFormData({ ...formData, phone: value })}
+                  placeholder="Enter phone number"
+                  className="PhoneInput"
+                  required
+                  data-testid="phone-input"
+                />
+              </div>
+            </div>
+
+            {/* Email */}
+            <div>
+              <Label htmlFor="email">Email Address *</Label>
+              <div className="relative mt-2">
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="your@email.com"
+                  className="pl-10"
+                  required
+                  data-testid="email-input"
+                />
+              </div>
+            </div>
+
+            {/* Password */}
+            <div>
+              <Label htmlFor="password">Password *</Label>
+              <div className="relative mt-2">
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  id="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  placeholder="At least 6 characters"
+                  className="pl-10"
+                  required
+                  minLength={6}
+                  data-testid="password-input"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
+            </div>
+
+            {/* Role */}
             <div>
               <Label htmlFor="role">I am signing up as *</Label>
               <Select
@@ -206,68 +253,6 @@ const SignUpScreen = () => {
               </Select>
             </div>
 
-            {/* Optional Email Section */}
-            <div className="border-t pt-4">
-              <div className="flex items-center space-x-2 mb-3">
-                <Checkbox
-                  id="use-email"
-                  checked={formData.useEmail}
-                  onCheckedChange={(checked) => 
-                    setFormData({ ...formData, useEmail: checked })
-                  }
-                  data-testid="use-email-checkbox"
-                />
-                <Label htmlFor="use-email" className="text-sm cursor-pointer">
-                  Add email & password (optional but recommended)
-                </Label>
-              </div>
-
-              {formData.useEmail && (
-                <div className="space-y-4 pl-6 border-l-2 border-purple-200">
-                  <div>
-                    <Label htmlFor="email">Email Address</Label>
-                    <div className="relative mt-2">
-                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <Input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        placeholder="your@email.com"
-                        className="pl-10"
-                        data-testid="email-input"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="password">Password</Label>
-                    <div className="relative mt-2">
-                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <Input
-                        id="password"
-                        type="password"
-                        value={formData.password}
-                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        placeholder="At least 6 characters"
-                        className="pl-10"
-                        minLength={6}
-                        data-testid="password-input"
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
-                  </div>
-
-                  <Alert className="bg-blue-50 border-blue-200">
-                    <Mail className="h-4 w-4 text-blue-600" />
-                    <AlertDescription className="text-blue-800 text-xs">
-                      Email allows password recovery and alternative login method
-                    </AlertDescription>
-                  </Alert>
-                </div>
-              )}
-            </div>
-
             <Button
               type="submit"
               className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
@@ -282,7 +267,7 @@ const SignUpScreen = () => {
               ) : (
                 <>
                   <Smartphone className="mr-2 h-4 w-4" />
-                  Continue with Phone Verification
+                  Continue to Verification
                 </>
               )}
             </Button>
