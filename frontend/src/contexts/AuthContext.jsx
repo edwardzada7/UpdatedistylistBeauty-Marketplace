@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '@/services/authService';
 import LoadingSpinner from '@/components/LoadingSpinner';
+import PhoneVerificationGate from '@/components/PhoneVerificationGate';
 
 const AuthContext = createContext({});
 
@@ -19,12 +20,13 @@ export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
 
   useEffect(() => {
-    // Check active session
+    // Check active session on mount
     checkUser();
 
     // Listen for auth changes
     const { data: authListener } = authService.onAuthStateChange(
       async (event, session) => {
+        console.log('Auth state changed:', event);
         setSession(session);
         
         if (session?.user) {
@@ -36,6 +38,8 @@ export const AuthProvider = ({ children }) => {
             }
           } catch (error) {
             console.error('Error fetching user data:', error);
+            setUser(session.user);
+            setUserData(null);
           }
         } else {
           setUser(null);
@@ -65,27 +69,9 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const signUp = async (email, password, name, role) => {
-    const result = await authService.signUp(email, password, name, role);
-    setUser(result.user);
-    setUserData(result.userData);
-    setSession(result.session);
-    return result;
-  };
-
-  const signIn = async (email, password) => {
-    const result = await authService.signIn(email, password);
-    setUser(result.user);
-    setUserData(result.userData);
-    setSession(result.session);
-    return result;
-  };
-
-  const signOut = async () => {
-    await authService.signOut();
-    setUser(null);
-    setUserData(null);
-    setSession(null);
+  const handlePhoneVerified = async () => {
+    // Reload user data after phone verification
+    await checkUser();
   };
 
   const value = {
@@ -93,14 +79,24 @@ export const AuthProvider = ({ children }) => {
     userData,
     session,
     loading,
-    signUp,
-    signIn,
-    signOut,
+    signOut: authService.signOut,
     isAuthenticated: !!user,
+    isPhoneVerified: userData?.phone_verified || false,
   };
 
   if (loading) {
     return <LoadingSpinner fullScreen message="Loading..." />;
+  }
+
+  // Show phone verification gate if user is authenticated but phone not verified
+  if (user && userData && !userData.phone_verified) {
+    return (
+      <PhoneVerificationGate
+        user={user}
+        userData={userData}
+        onVerified={handlePhoneVerified}
+      />
+    );
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
