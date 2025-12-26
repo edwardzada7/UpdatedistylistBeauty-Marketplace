@@ -1,123 +1,96 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Mail, Lock, AlertCircle, LogIn, Smartphone, Shield } from "lucide-react";
-import PhoneInput from "react-phone-number-input";
-import { toast } from "sonner";
-import { authService } from "@/services/authService";
-import { APP_NAME } from "@/utils/constants";
-import OTPVerification from "@/components/OTPVerification";
-import "react-phone-number-input/style.css";
-import "@/styles/phoneInput.css";
+import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2, Mail, Lock, AlertCircle, LogIn, Smartphone } from 'lucide-react';
+import PhoneInput from 'react-phone-number-input';
+import { toast } from 'sonner';
+import { authService } from '@/services/authService';
+import { APP_NAME } from '@/utils/constants';
+import OTPVerification from '@/components/OTPVerification';
+import 'react-phone-number-input/style.css';
+import '@/styles/phoneInput.css';
 
 const LoginScreen = () => {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [authMethod, setAuthMethod] = useState("phone");
+  const [authMethod, setAuthMethod] = useState('phone');
   const [showOTP, setShowOTP] = useState(false);
-  const [pendingPhone, setPendingPhone] = useState("");
-  
-  const [phoneFormData, setPhoneFormData] = useState({
-    phone: "",
-  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [emailData, setEmailData] = useState({ email: '', password: '' });
 
-  const [emailFormData, setEmailFormData] = useState({
-    email: "",
-    password: "",
-  });
-
-  // Phone Login - Send OTP (Primary Method)
+  // Phone Login
   const handlePhoneSubmit = async (e) => {
     e.preventDefault();
-    setError("");
-
-    if (!phoneFormData.phone) {
-      setError("Phone number is required");
+    setError('');
+    if (!phoneNumber) {
+      setError('Phone number is required');
       return;
     }
 
     setLoading(true);
-
     try {
-      await authService.signInWithPhone(phoneFormData.phone);
-      setPendingPhone(phoneFormData.phone);
+      await authService.sendLoginOTP(phoneNumber);
       setShowOTP(true);
-      toast.success("OTP sent to your phone!");
-    } catch (error) {
-      console.error("Phone login error:", error);
-      setError(error.message || "Failed to send OTP. Please try again.");
+      toast.success('OTP sent to your phone!');
+    } catch (err) {
+      setError(err.message || 'Failed to send OTP');
     } finally {
       setLoading(false);
     }
   };
 
-  // Email Login (Secondary Method - Requires Phone Verification)
-  const handleEmailSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-
-    if (!emailFormData.email || !emailFormData.password) {
-      setError("Email and password are required");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const result = await authService.signInWithEmail(emailFormData.email, emailFormData.password);
-      
-      if (result.requiresPhoneVerification) {
-        toast.error("Phone verification required!");
-        setError("Your account requires phone verification. Please verify your phone number to continue.");
-        // User will be redirected to verification gate by AuthContext
-        window.location.reload();
-      } else {
-        toast.success("Welcome back!");
-        navigate("/");
-      }
-    } catch (error) {
-      console.error("Login error:", error);
-      if (error.message?.includes("Invalid login credentials")) {
-        setError("Invalid email or password. Please try again.");
-      } else {
-        setError(error.message || "Failed to log in. Please try again.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Verify OTP
   const handleVerifyOTP = async (otp) => {
-    setError("");
+    setError('');
     setLoading(true);
-
     try {
-      await authService.verifyPhoneOTPLogin(pendingPhone, otp);
-      toast.success("Welcome back!");
-      // Reload to trigger auth state update
-      window.location.href = "/";
-    } catch (error) {
-      console.error("OTP verification error:", error);
-      setError(error.message || "Invalid OTP. Please try again.");
+      await authService.verifyLoginOTP(phoneNumber, otp);
+      toast.success('Welcome back!');
+      window.location.href = '/';
+    } catch (err) {
+      setError(err.message || 'Invalid OTP');
     } finally {
       setLoading(false);
     }
   };
 
-  // Resend OTP
   const handleResendOTP = async () => {
     try {
-      await authService.signInWithPhone(pendingPhone);
-      toast.success("OTP resent!");
-    } catch (error) {
-      toast.error("Failed to resend OTP");
+      await authService.sendLoginOTP(phoneNumber);
+      toast.success('OTP resent!');
+    } catch (err) {
+      toast.error('Failed to resend OTP');
+    }
+  };
+
+  // Email Login
+  const handleEmailSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!emailData.email || !emailData.password) {
+      setError('Email and password are required');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await authService.loginWithEmail(emailData.email, emailData.password);
+      if (result.requiresPhoneVerification) {
+        toast.error('Phone verification required!');
+        window.location.reload();
+      } else {
+        toast.success('Welcome back!');
+        navigate('/');
+      }
+    } catch (err) {
+      setError(err.message?.includes('Invalid') ? 'Invalid email or password' : err.message || 'Login failed');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -126,7 +99,7 @@ const LoginScreen = () => {
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-indigo-50 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
           <OTPVerification
-            phone={pendingPhone}
+            phone={phoneNumber}
             onVerify={handleVerifyOTP}
             onResend={handleResendOTP}
             loading={loading}
@@ -146,12 +119,10 @@ const LoginScreen = () => {
             <LogIn className="h-8 w-8 text-white" />
           </div>
           <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
-          <CardDescription>
-            Log in to {APP_NAME}
-          </CardDescription>
+          <CardDescription>Log in to {APP_NAME}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs value={authMethod} onValueChange={setAuthMethod} className="w-full">
+          <Tabs value={authMethod} onValueChange={setAuthMethod}>
             <TabsList className="grid w-full grid-cols-2 mb-6">
               <TabsTrigger value="phone" data-testid="phone-tab">
                 <Smartphone className="h-4 w-4 mr-2" />
@@ -163,37 +134,28 @@ const LoginScreen = () => {
               </TabsTrigger>
             </TabsList>
 
-            {/* Phone Login - Primary */}
             <TabsContent value="phone">
               <form onSubmit={handlePhoneSubmit} className="space-y-4">
-                {error && authMethod === "phone" && (
+                {error && authMethod === 'phone' && (
                   <Alert variant="destructive" data-testid="error-alert">
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>{error}</AlertDescription>
                   </Alert>
                 )}
 
-                <Alert className="bg-purple-50 border-purple-200">
-                  <Shield className="h-4 w-4 text-purple-600" />
-                  <AlertDescription className="text-purple-800 text-sm">
-                    <strong>Recommended:</strong> Login with phone for instant access
-                  </AlertDescription>
-                </Alert>
-
                 <div>
-                  <Label htmlFor="phone-number">Phone Number *</Label>
+                  <Label>Phone Number *</Label>
                   <div className="mt-2">
                     <PhoneInput
                       international
                       defaultCountry="NG"
-                      value={phoneFormData.phone}
-                      onChange={(value) => setPhoneFormData({ ...phoneFormData, phone: value })}
+                      value={phoneNumber}
+                      onChange={setPhoneNumber}
                       placeholder="Enter phone number"
                       className="PhoneInput"
                       data-testid="phone-input"
                     />
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">We'll send you a verification code</p>
                 </div>
 
                 <Button
@@ -208,31 +170,20 @@ const LoginScreen = () => {
                       Sending OTP...
                     </>
                   ) : (
-                    <>
-                      <Smartphone className="mr-2 h-4 w-4" />
-                      Log In with Phone
-                    </>
+                    'Log In with Phone'
                   )}
                 </Button>
               </form>
             </TabsContent>
 
-            {/* Email Login - Secondary */}
             <TabsContent value="email">
               <form onSubmit={handleEmailSubmit} className="space-y-4">
-                {error && authMethod === "email" && (
+                {error && authMethod === 'email' && (
                   <Alert variant="destructive" data-testid="error-alert">
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>{error}</AlertDescription>
                   </Alert>
                 )}
-
-                <Alert className="bg-amber-50 border-amber-200">
-                  <AlertCircle className="h-4 w-4 text-amber-600" />
-                  <AlertDescription className="text-amber-800 text-sm">
-                    <strong>Note:</strong> Phone verification is required for full access
-                  </AlertDescription>
-                </Alert>
 
                 <div>
                   <Label htmlFor="email">Email Address *</Label>
@@ -241,8 +192,8 @@ const LoginScreen = () => {
                     <Input
                       id="email"
                       type="email"
-                      value={emailFormData.email}
-                      onChange={(e) => setEmailFormData({ ...emailFormData, email: e.target.value })}
+                      value={emailData.email}
+                      onChange={(e) => setEmailData({ ...emailData, email: e.target.value })}
                       placeholder="your@email.com"
                       className="pl-10"
                       required
@@ -254,11 +205,8 @@ const LoginScreen = () => {
                 <div>
                   <div className="flex items-center justify-between">
                     <Label htmlFor="password">Password *</Label>
-                    <Link
-                      to="/forgot-password"
-                      className="text-xs text-purple-600 hover:text-purple-700"
-                    >
-                      Forgot password?
+                    <Link to="/forgot-password" className="text-xs text-purple-600 hover:text-purple-700">
+                      Forgot?
                     </Link>
                   </div>
                   <div className="relative mt-2">
@@ -266,8 +214,8 @@ const LoginScreen = () => {
                     <Input
                       id="password"
                       type="password"
-                      value={emailFormData.password}
-                      onChange={(e) => setEmailFormData({ ...emailFormData, password: e.target.value })}
+                      value={emailData.password}
+                      onChange={(e) => setEmailData({ ...emailData, password: e.target.value })}
                       placeholder="Enter your password"
                       className="pl-10"
                       required
@@ -288,7 +236,7 @@ const LoginScreen = () => {
                       Logging In...
                     </>
                   ) : (
-                    "Log In with Email"
+                    'Log In'
                   )}
                 </Button>
               </form>
