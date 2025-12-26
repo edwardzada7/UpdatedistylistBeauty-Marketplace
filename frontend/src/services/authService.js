@@ -3,135 +3,135 @@ import axios from 'axios';
 
 const API_BASE = process.env.REACT_APP_BACKEND_URL + '/api';
 
-export const authService = {
-  // SIGN UP: Send OTP to phone
-  sendSignUpOTP: async (phone) => {
-    const { data, error } = await supabase.auth.signInWithOtp({ phone });
-    if (error) throw error;
-    return data;
-  },
+// ==================== SIGN UP ====================
 
-  // SIGN UP: Verify OTP and create account
-  completeSignUp: async (phone, otp, name, email, password, role) => {
-    // Verify OTP
-    const { data: authData, error: otpError } = await supabase.auth.verifyOtp({
-      phone,
-      token: otp,
-      type: 'sms',
-    });
+export const sendSignUpOTP = async (phone) => {
+  const { data, error } = await supabase.auth.signInWithOtp({ phone });
+  if (error) throw error;
+  return data;
+};
 
-    if (otpError) throw otpError;
-    if (!authData.user) throw new Error('OTP verification failed');
+export const completeSignUp = async (phone, otp, name, email, password, role) => {
+  // Step 1: Verify OTP
+  const { data: authData, error: otpError } = await supabase.auth.verifyOtp({
+    phone,
+    token: otp,
+    type: 'sms',
+  });
+  if (otpError) throw otpError;
+  if (!authData.user) throw new Error('OTP verification failed');
 
-    // Update auth user with email/password
-    if (email && password) {
-      await supabase.auth.updateUser({ email, password });
-    }
+  // Step 2: Update with email/password
+  if (email && password) {
+    await supabase.auth.updateUser({ email, password });
+  }
 
-    // Create user in database
-    const userPayload = {
-      auth_id: authData.user.id,
-      name,
-      email: email || `${phone.replace(/\D/g, '')}@phone.user`,
-      phone,
-      role,
-      phone_verified: true,
-    };
+  // Step 3: Create user in database
+  const userPayload = {
+    auth_id: authData.user.id,
+    name,
+    email: email || `${phone.replace(/\D/g, '')}@phone.user`,
+    phone,
+    role,
+    phone_verified: true,
+  };
 
-    const response = await axios.post(`${API_BASE}/users`, userPayload);
-    return {
-      user: authData.user,
-      userData: response.data,
-      session: authData.session,
-    };
-  },
+  const response = await axios.post(`${API_BASE}/users`, userPayload);
+  return {
+    user: authData.user,
+    userData: response.data,
+    session: authData.session,
+  };
+};
 
-  // LOGIN: Email + Password
-  loginWithEmail: async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    if (!data.user) throw new Error('Login failed');
+// ==================== LOGIN ====================
 
-    const response = await axios.get(`${API_BASE}/users/by-auth/${data.user.id}`);
-    return {
-      user: data.user,
-      userData: response.data,
-      session: data.session,
-      requiresPhoneVerification: !response.data.phone_verified,
-    };
-  },
+export const loginWithEmail = async (email, password) => {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  if (!data.user) throw new Error('Login failed');
 
-  // LOGIN: Phone - Send OTP
-  sendLoginOTP: async (phone) => {
-    const { data, error } = await supabase.auth.signInWithOtp({ phone });
-    if (error) throw error;
-    return data;
-  },
+  const response = await axios.get(`${API_BASE}/users/by-auth/${data.user.id}`);
+  return {
+    user: data.user,
+    userData: response.data,
+    session: data.session,
+    requiresPhoneVerification: !response.data.phone_verified,
+  };
+};
 
-  // LOGIN: Phone - Verify OTP
-  verifyLoginOTP: async (phone, otp) => {
-    const { data: authData, error } = await supabase.auth.verifyOtp({
-      phone,
-      token: otp,
-      type: 'sms',
-    });
+export const sendLoginOTP = async (phone) => {
+  const { data, error } = await supabase.auth.signInWithOtp({ phone });
+  if (error) throw error;
+  return data;
+};
 
-    if (error) throw error;
-    if (!authData.user) throw new Error('OTP verification failed');
+export const verifyLoginOTP = async (phone, otp) => {
+  const { data: authData, error } = await supabase.auth.verifyOtp({
+    phone,
+    token: otp,
+    type: 'sms',
+  });
+  if (error) throw error;
+  if (!authData.user) throw new Error('OTP verification failed');
 
-    const response = await axios.get(`${API_BASE}/users/by-auth/${authData.user.id}`);
-    
-    // Update verification status if needed
-    if (!response.data.phone_verified) {
-      await axios.put(`${API_BASE}/users/${response.data.id}`, { phone_verified: true, phone });
-      response.data.phone_verified = true;
-    }
+  const response = await axios.get(`${API_BASE}/users/by-auth/${authData.user.id}`);
+  
+  if (!response.data.phone_verified) {
+    await axios.put(`${API_BASE}/users/${response.data.id}`, { phone_verified: true, phone });
+    response.data.phone_verified = true;
+  }
 
-    return {
-      user: authData.user,
-      userData: response.data,
-      session: authData.session,
-    };
-  },
+  return {
+    user: authData.user,
+    userData: response.data,
+    session: authData.session,
+  };
+};
 
-  // Verify phone for existing user
-  verifyExistingUserPhone: async (phone, otp, userId) => {
-    const { data, error } = await supabase.auth.verifyOtp({
-      phone,
-      token: otp,
-      type: 'sms',
-    });
+// ==================== PHONE VERIFICATION ====================
 
-    if (error) throw error;
+export const sendVerificationOTP = async (phone) => {
+  const { data, error } = await supabase.auth.signInWithOtp({ phone });
+  if (error) throw error;
+  return data;
+};
 
-    await axios.put(`${API_BASE}/users/${userId}`, { phone, phone_verified: true });
-    return data;
-  },
+export const verifyPhone = async (phone, otp, userId) => {
+  const { data, error } = await supabase.auth.verifyOtp({
+    phone,
+    token: otp,
+    type: 'sms',
+  });
+  if (error) throw error;
 
-  // Get current user
-  getCurrentUser: async () => {
-    const { data: { user }, error } = await supabase.auth.getUser();
-    if (error) throw error;
-    if (!user) return null;
+  await axios.put(`${API_BASE}/users/${userId}`, { phone, phone_verified: true });
+  return data;
+};
 
-    const response = await axios.get(`${API_BASE}/users/by-auth/${user.id}`);
-    return { user, userData: response.data };
-  },
+// ==================== UTILITY ====================
 
-  // Sign out
-  signOut: async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-  },
+export const getCurrentUser = async () => {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error) throw error;
+  if (!user) return null;
 
-  // Auth state listener
-  onAuthStateChange: (callback) => supabase.auth.onAuthStateChange(callback),
+  const response = await axios.get(`${API_BASE}/users/by-auth/${user.id}`);
+  return { user, userData: response.data };
+};
 
-  // Reset password
-  resetPassword: async (email) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    if (error) throw error;
-  },
+export const signOut = async () => {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+};
+
+export const resetPassword = async (email) => {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/reset-password`,
+  });
+  if (error) throw error;
+};
+
+export const onAuthStateChange = (callback) => {
+  return supabase.auth.onAuthStateChange(callback);
 };

@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, User, Mail, Lock, AlertCircle, Smartphone, Shield } from 'lucide-react';
 import PhoneInput from 'react-phone-number-input';
 import { toast } from 'sonner';
-import { authService } from '@/services/authService';
+import { sendSignUpOTP, completeSignUp } from '@/services/authService';
 import { APP_NAME, USER_ROLES } from '@/utils/constants';
 import OTPVerification from '@/components/OTPVerification';
 import 'react-phone-number-input/style.css';
@@ -51,7 +51,7 @@ const SignUpScreen = () => {
 
     setLoading(true);
     try {
-      await authService.sendSignUpOTP(formData.phone);
+      await sendSignUpOTP(formData.phone);
       setStep('otp');
       toast.success('OTP sent to your phone!');
     } catch (err) {
@@ -65,7 +65,7 @@ const SignUpScreen = () => {
     setError('');
     setLoading(true);
     try {
-      await authService.completeSignUp(
+      await completeSignUp(
         formData.phone,
         otp,
         formData.name,
@@ -73,7 +73,7 @@ const SignUpScreen = () => {
         formData.password,
         formData.role
       );
-      toast.success('Account created successfully!');
+      toast.success('Account created!');
       window.location.href = '/';
     } catch (err) {
       setError(err.message || 'Invalid OTP');
@@ -84,10 +84,10 @@ const SignUpScreen = () => {
 
   const handleResendOTP = async () => {
     try {
-      await authService.sendSignUpOTP(formData.phone);
+      await sendSignUpOTP(formData.phone);
       toast.success('OTP resent!');
     } catch (err) {
-      toast.error('Failed to resend OTP');
+      toast.error('Failed to resend');
     }
   };
 
@@ -111,7 +111,7 @@ const SignUpScreen = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-indigo-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-md" data-testid="signup-card">
-        <CardHeader className="space-y-1 text-center">
+        <CardHeader className="text-center">
           <div className="mx-auto mb-4 w-16 h-16 bg-gradient-to-br from-purple-600 to-pink-600 rounded-full flex items-center justify-center">
             <User className="h-8 w-8 text-white" />
           </div>
@@ -121,7 +121,7 @@ const SignUpScreen = () => {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <Alert variant="destructive" data-testid="error-alert">
+              <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
@@ -129,20 +129,19 @@ const SignUpScreen = () => {
 
             <Alert className="bg-purple-50 border-purple-200">
               <Shield className="h-4 w-4 text-purple-600" />
-              <AlertDescription className="text-purple-800 text-sm">
-                Phone verification required for account security
+              <AlertDescription className="text-sm text-purple-800">
+                Phone verification required for security
               </AlertDescription>
             </Alert>
 
             <div>
-              <Label htmlFor="name">Full Name *</Label>
+              <Label>Full Name *</Label>
               <div className="relative mt-2">
-                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
                 <Input
-                  id="name"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Enter your full name"
+                  placeholder="Your full name"
                   className="pl-10"
                   required
                   data-testid="name-input"
@@ -151,14 +150,14 @@ const SignUpScreen = () => {
             </div>
 
             <div>
-              <Label htmlFor="phone">Phone Number *</Label>
+              <Label>Phone Number *</Label>
               <div className="mt-2">
                 <PhoneInput
                   international
                   defaultCountry="NG"
                   value={formData.phone}
                   onChange={(value) => setFormData({ ...formData, phone: value })}
-                  placeholder="Enter phone number"
+                  placeholder="Phone number"
                   className="PhoneInput"
                   data-testid="phone-input"
                 />
@@ -166,11 +165,10 @@ const SignUpScreen = () => {
             </div>
 
             <div>
-              <Label htmlFor="email">Email Address *</Label>
+              <Label>Email *</Label>
               <div className="relative mt-2">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
-                  id="email"
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -183,15 +181,14 @@ const SignUpScreen = () => {
             </div>
 
             <div>
-              <Label htmlFor="password">Password *</Label>
+              <Label>Password *</Label>
               <div className="relative mt-2">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
-                  id="password"
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="At least 6 characters"
+                  placeholder="Min. 6 characters"
                   className="pl-10"
                   required
                   minLength={6}
@@ -201,42 +198,30 @@ const SignUpScreen = () => {
             </div>
 
             <div>
-              <Label htmlFor="role">I am a *</Label>
+              <Label>I am a *</Label>
               <Select value={formData.role} onValueChange={(value) => setFormData({ ...formData, role: value })}>
                 <SelectTrigger className="mt-2" data-testid="role-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={USER_ROLES.CUSTOMER}>Customer</SelectItem>
-                  <SelectItem value={USER_ROLES.STYLIST}>Stylist</SelectItem>
+                  <SelectItem value="customer">Customer</SelectItem>
+                  <SelectItem value="stylist">Stylist</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <Button
               type="submit"
-              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+              className="w-full bg-gradient-to-r from-purple-600 to-pink-600"
               disabled={loading}
               data-testid="signup-btn"
             >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending OTP...
-                </>
-              ) : (
-                <>
-                  <Smartphone className="mr-2 h-4 w-4" />
-                  Sign Up
-                </>
-              )}
+              {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Sending OTP...</> : 'Sign Up'}
             </Button>
 
             <div className="text-center text-sm mt-4">
               <span className="text-gray-600">Already have an account? </span>
-              <Link to="/login" className="text-purple-600 hover:text-purple-700 font-medium">
-                Log In
-              </Link>
+              <Link to="/login" className="text-purple-600 font-medium">Log In</Link>
             </div>
           </form>
         </CardContent>
