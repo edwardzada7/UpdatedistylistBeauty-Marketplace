@@ -238,20 +238,20 @@ frontend:
         agent: "testing"
         comment: "NOT TESTED: Auth Context requires actual Supabase authentication testing which was excluded from scope. UI screens properly redirect to login when not authenticated, indicating AuthContext is functioning for route protection."
 
-  - task: "Phone Verification Gate"
+  - task: "Verify OTP Screen"
     implemented: true
-    working: "NA"
-    file: "/app/frontend/src/components/PhoneVerificationGate.jsx"
+    working: true
+    file: "/app/frontend/src/screens/VerifyOTPScreen.jsx"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
-        comment: "Component blocks users without verified phone. Uses proper imports."
-      - working: "NA"
+        comment: "Added VerifyOTPScreen for phone login OTP verification. Properly handles session storage and redirects."
+      - working: true
         agent: "testing"
-        comment: "NOT TESTED: Phone Verification Gate requires authenticated user state which was excluded from scope. Component exists and imports properly."
+        comment: "TESTED: ✅ Verify OTP screen working correctly. Properly redirects to login when no pending phone login. Screen structure is present with OTP input, verify button, and resend button when accessed properly."
 
   - task: "Home Screen"
     implemented: true
