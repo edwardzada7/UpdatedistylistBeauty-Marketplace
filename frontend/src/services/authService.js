@@ -1,41 +1,18 @@
-import { supabase } from "@/lib/supabaseClient";
+import { supabase, createFreshSupabaseClient } from "@/lib/supabaseClient";
 
 /* ===============================
    AUTH HELPERS - Supabase Client
-   All functions use Supabase JS client
-   Error handling returns proper error messages
 ================================ */
 
 /**
  * Safely extract error message from any error type
- * Prevents "body stream already read" errors
  */
 function getErrorMessage(error, fallback = "An error occurred") {
   if (!error) return fallback;
-  
-  // If it's already a string, return it
   if (typeof error === 'string') return error;
-  
-  // If it has a message property, use it
-  if (error.message && typeof error.message === 'string') {
-    return error.message;
-  }
-  
-  // If it has an error_description (Supabase format)
-  if (error.error_description && typeof error.error_description === 'string') {
-    return error.error_description;
-  }
-  
-  // If it has a msg property
-  if (error.msg && typeof error.msg === 'string') {
-    return error.msg;
-  }
-  
-  // Try to get name if available
-  if (error.name && typeof error.name === 'string') {
-    return error.name;
-  }
-  
+  if (error.message && typeof error.message === 'string') return error.message;
+  if (error.error_description) return error.error_description;
+  if (error.msg) return error.msg;
   return fallback;
 }
 
@@ -57,12 +34,10 @@ export async function signUpWithEmail({ email, password, phone, fullName, role }
     });
 
     if (error) {
-      console.error("[authService] signUpWithEmail error:", error);
       throw new Error(getErrorMessage(error, "Failed to sign up"));
     }
     return data;
   } catch (err) {
-    console.error("[authService] signUpWithEmail caught:", err);
     throw err instanceof Error ? err : new Error(getErrorMessage(err, "Failed to sign up"));
   }
 }
@@ -78,39 +53,39 @@ export async function loginWithEmail(email, password) {
     });
 
     if (error) {
-      console.error("[authService] loginWithEmail error:", error);
       throw new Error(getErrorMessage(error, "Failed to login"));
     }
     return data;
   } catch (err) {
-    console.error("[authService] loginWithEmail caught:", err);
     throw err instanceof Error ? err : new Error(getErrorMessage(err, "Failed to login"));
   }
 }
 
 /**
- * Send OTP to phone number for sign up / verification
+ * Send OTP to phone number
+ * Uses fresh client to avoid body stream issues
  */
 export async function sendSignUpOTP(phone) {
   console.log("[authService] Sending OTP to:", phone);
   
   try {
-    const { data, error } = await supabase.auth.signInWithOtp({
+    // Use fresh client to avoid stream issues
+    const freshClient = createFreshSupabaseClient();
+    
+    const { data, error } = await freshClient.auth.signInWithOtp({
       phone: phone,
     });
 
     if (error) {
-      console.error("[authService] sendSignUpOTP error object:", error);
-      // Extract message immediately and create new Error
+      console.error("[authService] sendSignUpOTP Supabase error:", error);
       const msg = getErrorMessage(error, "Failed to send OTP");
       throw new Error(msg);
     }
     
-    console.log("[authService] OTP sent successfully, data:", data);
+    console.log("[authService] OTP sent successfully");
     return true;
   } catch (err) {
-    console.error("[authService] sendSignUpOTP caught:", err);
-    // Ensure we always throw a proper Error with string message
+    console.error("[authService] sendSignUpOTP error:", err);
     if (err instanceof Error) {
       throw err;
     }
@@ -125,20 +100,20 @@ export async function sendLoginOTP(phone) {
   console.log("[authService] Sending login OTP to:", phone);
   
   try {
-    const { data, error } = await supabase.auth.signInWithOtp({
+    const freshClient = createFreshSupabaseClient();
+    
+    const { data, error } = await freshClient.auth.signInWithOtp({
       phone: phone,
     });
 
     if (error) {
       console.error("[authService] sendLoginOTP error:", error);
-      const msg = getErrorMessage(error, "Failed to send OTP");
-      throw new Error(msg);
+      throw new Error(getErrorMessage(error, "Failed to send OTP"));
     }
     
-    console.log("[authService] Login OTP sent successfully");
     return true;
   } catch (err) {
-    console.error("[authService] sendLoginOTP caught:", err);
+    console.error("[authService] sendLoginOTP error:", err);
     if (err instanceof Error) {
       throw err;
     }
@@ -153,6 +128,7 @@ export async function verifyPhoneOTP(phone, token) {
   console.log("[authService] Verifying OTP for:", phone);
   
   try {
+    // Use main client for verification to maintain session
     const { data, error } = await supabase.auth.verifyOtp({
       phone: phone,
       token: token,
@@ -161,14 +137,13 @@ export async function verifyPhoneOTP(phone, token) {
 
     if (error) {
       console.error("[authService] verifyPhoneOTP error:", error);
-      const msg = getErrorMessage(error, "Invalid OTP code");
-      throw new Error(msg);
+      throw new Error(getErrorMessage(error, "Invalid OTP code"));
     }
     
     console.log("[authService] OTP verified successfully");
     return data;
   } catch (err) {
-    console.error("[authService] verifyPhoneOTP caught:", err);
+    console.error("[authService] verifyPhoneOTP error:", err);
     if (err instanceof Error) {
       throw err;
     }
@@ -184,12 +159,10 @@ export async function resetPassword(email) {
     const { error } = await supabase.auth.resetPasswordForEmail(email);
     
     if (error) {
-      console.error("[authService] resetPassword error:", error);
       throw new Error(getErrorMessage(error, "Failed to send reset email"));
     }
     return true;
   } catch (err) {
-    console.error("[authService] resetPassword caught:", err);
     if (err instanceof Error) {
       throw err;
     }
@@ -205,7 +178,6 @@ export async function getCurrentUser() {
     const { data, error } = await supabase.auth.getUser();
     
     if (error) {
-      // Don't log "Auth session missing" as error - it's expected when not logged in
       if (!error.message?.includes('session missing')) {
         console.error("[authService] getUser error:", error);
       }
@@ -213,12 +185,9 @@ export async function getCurrentUser() {
     }
     
     const user = data?.user ?? null;
+    if (!user) return null;
     
-    if (!user) {
-      return null;
-    }
-    
-    // Fetch user profile data from backend
+    // Fetch user profile from backend
     try {
       const API_BASE = process.env.REACT_APP_BACKEND_URL || '';
       const response = await fetch(`${API_BASE}/api/users/by-auth/${user.id}`);
@@ -226,10 +195,8 @@ export async function getCurrentUser() {
       if (response.ok) {
         const userData = await response.json();
         return { user, userData };
-      } else {
-        console.log("[authService] No user data in backend, returning user only");
-        return { user, userData: null };
       }
+      return { user, userData: null };
     } catch (fetchError) {
       console.error("[authService] Error fetching user data:", fetchError);
       return { user, userData: null };
@@ -252,17 +219,14 @@ export function onAuthStateChange(callback) {
  */
 export async function signOut() {
   try {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      console.error("[authService] signOut error:", error);
-    }
+    await supabase.auth.signOut();
   } catch (err) {
-    console.error("[authService] signOut caught:", err);
+    console.error("[authService] signOut error:", err);
   }
 }
 
 /**
- * Update user phone number in Supabase Auth
+ * Update user phone number
  */
 export async function updateUserPhone(phone) {
   try {
@@ -271,12 +235,10 @@ export async function updateUserPhone(phone) {
     });
 
     if (error) {
-      console.error("[authService] updateUserPhone error:", error);
       throw new Error(getErrorMessage(error, "Failed to update phone"));
     }
     return data;
   } catch (err) {
-    console.error("[authService] updateUserPhone caught:", err);
     if (err instanceof Error) {
       throw err;
     }
