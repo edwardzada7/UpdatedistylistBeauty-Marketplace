@@ -65,7 +65,7 @@ const HomeScreen = ({ currentUser }) => {
             data-testid="profile-nav-btn"
           >
             <User className="h-4 w-4" />
-            <span className="hidden sm:inline">{currentUser.name}</span>
+            <span className="hidden sm:inline">{userName}</span>
           </Button>
         </div>
       </header>
