@@ -1,6 +1,5 @@
 // src/components/PhoneVerificationGate.jsx
 // Component to block access until phone is verified
-// Uses Supabase OTP verification flow
 import React, { useState, useEffect } from "react";
 import { verifyPhoneOTP, sendSignUpOTP } from "@/services/authService";
 import { Button } from "@/components/ui/button";
@@ -24,7 +23,6 @@ export default function PhoneVerificationGate({ user, userData, onVerified }) {
       "";
     
     if (phoneNumber) {
-      // Clean phone number - remove spaces
       setPhone(phoneNumber.replace(/\s+/g, ""));
     }
   }, [user, userData]);
@@ -44,22 +42,22 @@ export default function PhoneVerificationGate({ user, userData, onVerified }) {
       return;
     }
 
-    // Ensure phone has country code
     const formattedPhone = phone.startsWith("+") ? phone : `+${phone}`;
 
+    setLoading(true);
+    
     try {
-      setLoading(true);
       console.log("[PhoneVerificationGate] Sending OTP to:", formattedPhone);
-      
       await sendSignUpOTP(formattedPhone);
       
       setOtpSent(true);
-      setCountdown(60); // 60 seconds before can resend
+      setCountdown(60);
       toast.success(`OTP sent to ${formattedPhone}`);
     } catch (err) {
       console.error("[PhoneVerificationGate] Send OTP error:", err);
-      // err is now a proper Error object with message property
-      toast.error(err.message || "Failed to send OTP");
+      // Safely get error message as string
+      const errorMsg = err && err.message ? String(err.message) : "Failed to send OTP";
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -77,42 +75,27 @@ export default function PhoneVerificationGate({ user, userData, onVerified }) {
       return;
     }
 
-    // Ensure phone has country code
     const formattedPhone = phone.startsWith("+") ? phone : `+${phone}`;
 
+    setLoading(true);
+    
     try {
-      setLoading(true);
       console.log("[PhoneVerificationGate] Verifying OTP for:", formattedPhone);
-      
       await verifyPhoneOTP(formattedPhone, otp);
       
       toast.success("Phone verified successfully!");
       
-      // Call onVerified callback to refresh user data and proceed
       if (onVerified) {
         await onVerified();
       }
     } catch (err) {
       console.error("[PhoneVerificationGate] Verify OTP error:", err);
-      // err is now a proper Error object with message property
-      toast.error(err.message || "Invalid OTP. Please try again.");
+      // Safely get error message as string
+      const errorMsg = err && err.message ? String(err.message) : "Invalid OTP. Please try again.";
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
-  };
-
-  // Handle phone input change
-  const handlePhoneChange = (e) => {
-    // Remove spaces but keep + and digits
-    const value = e.target.value.replace(/[^\d+]/g, "");
-    setPhone(value);
-  };
-
-  // Handle OTP input change
-  const handleOtpChange = (e) => {
-    // Only allow digits, max 6
-    const value = e.target.value.replace(/\D/g, "").slice(0, 6);
-    setOtp(value);
   };
 
   return (
@@ -133,7 +116,7 @@ export default function PhoneVerificationGate({ user, userData, onVerified }) {
         </p>
 
         <div className="space-y-4">
-          {/* Phone Input - editable if OTP not sent yet */}
+          {/* Phone Input */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Phone Number (with country code)
@@ -142,13 +125,13 @@ export default function PhoneVerificationGate({ user, userData, onVerified }) {
               type="tel"
               placeholder="+234 801 234 5678"
               value={phone}
-              onChange={handlePhoneChange}
+              onChange={(e) => setPhone(e.target.value.replace(/[^\d+]/g, ""))}
               disabled={otpSent}
               className={otpSent ? "bg-gray-100" : ""}
             />
           </div>
 
-          {/* OTP Input - only show after OTP is sent */}
+          {/* OTP Input */}
           {otpSent && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -159,7 +142,7 @@ export default function PhoneVerificationGate({ user, userData, onVerified }) {
                 inputMode="numeric"
                 placeholder="Enter 6-digit OTP"
                 value={otp}
-                onChange={handleOtpChange}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 className="text-center text-lg tracking-widest"
                 maxLength={6}
                 autoFocus
@@ -169,7 +152,6 @@ export default function PhoneVerificationGate({ user, userData, onVerified }) {
           
           {/* Action Buttons */}
           {!otpSent ? (
-            // Send OTP button
             <Button 
               onClick={handleSendOTP} 
               className="w-full" 
@@ -178,7 +160,6 @@ export default function PhoneVerificationGate({ user, userData, onVerified }) {
               {loading ? "Sending..." : "Send OTP"}
             </Button>
           ) : (
-            // Verify and Resend buttons
             <>
               <Button 
                 onClick={handleVerify} 
