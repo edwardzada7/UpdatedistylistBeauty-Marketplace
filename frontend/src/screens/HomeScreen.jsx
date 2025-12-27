@@ -15,9 +15,10 @@ const HomeScreen = ({ currentUser }) => {
   const [stats, setStats] = useState({ totalStylists: 0, verified: 0, premium: 0 });
   const [loading, setLoading] = useState(true);
 
-  if (!currentUser) {
-    return null;
-  }
+  // Handle case when currentUser is not yet loaded
+  // This prevents blank screen - show loading state instead
+  const userName = currentUser?.name || "User";
+  const displayName = userName.split(" ")[0];
 
   useEffect(() => {
     fetchTopStylists();
