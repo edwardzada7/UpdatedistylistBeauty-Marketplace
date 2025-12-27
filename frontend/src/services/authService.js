@@ -68,7 +68,23 @@ export async function resetPassword(email) {
 
 export async function getCurrentUser() {
   const { data } = await supabase.auth.getUser();
-  return data?.user ?? null;
+  const user = data?.user ?? null;
+  
+  if (!user) return null;
+  
+  // Fetch user data from backend
+  try {
+    const API_BASE = process.env.REACT_APP_BACKEND_URL || '';
+    const response = await fetch(`${API_BASE}/api/users/by-auth/${user.id}`);
+    if (response.ok) {
+      const userData = await response.json();
+      return { user, userData };
+    }
+  } catch (error) {
+    console.error('Error fetching user data:', error);
+  }
+  
+  return { user, userData: null };
 }
 
 export function onAuthStateChange(callback) {
