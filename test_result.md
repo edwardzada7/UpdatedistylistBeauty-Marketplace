@@ -241,6 +241,17 @@ frontend:
   - task: "Verify OTP Screen"
     implemented: true
     working: true
+  - task: "Protected Routes Redirect"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/App.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "TESTED: ✅ All protected routes (/, /home, /profile, /stylists, /wallet) correctly redirect to /login when not authenticated. Route protection working perfectly."
     file: "/app/frontend/src/screens/VerifyOTPScreen.jsx"
     stuck_count: 0
     priority: "high"
