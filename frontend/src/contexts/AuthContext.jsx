@@ -19,16 +19,21 @@ export const AuthProvider = ({ children }) => {
   // Function to check and update user data
   const checkUser = useCallback(async () => {
     try {
+      console.log('[AuthContext] Checking user...');
       const current = await getCurrentUser();
+      
       if (current) {
+        console.log('[AuthContext] User found:', current.user?.email);
+        console.log('[AuthContext] User data:', current.userData);
         setUser(current.user);
         setUserData(current.userData);
       } else {
+        console.log('[AuthContext] No user found');
         setUser(null);
         setUserData(null);
       }
     } catch (error) {
-      console.error('Check user error:', error);
+      console.error('[AuthContext] Check user error:', error);
       setUser(null);
       setUserData(null);
     } finally {
@@ -38,6 +43,8 @@ export const AuthProvider = ({ children }) => {
 
   // Expose refreshUser for manual refresh after login
   const refreshUser = useCallback(async () => {
+    console.log('[AuthContext] Refreshing user data...');
+    setLoading(true);
     await checkUser();
   }, [checkUser]);
 
@@ -47,7 +54,7 @@ export const AuthProvider = ({ children }) => {
 
     // Listen for auth state changes
     const { data: authListener } = onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event);
+      console.log('[AuthContext] Auth state changed:', event);
       setSession(session);
       
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
@@ -64,6 +71,7 @@ export const AuthProvider = ({ children }) => {
   }, [checkUser]);
 
   const signOut = async () => {
+    console.log('[AuthContext] Signing out...');
     await authSignOut();
     setUser(null);
     setUserData(null);
@@ -75,10 +83,15 @@ export const AuthProvider = ({ children }) => {
     return <LoadingSpinner fullScreen message="Loading..." />;
   }
 
-  // Compute phone verification status
-  // If userData exists and has phone_verified field, use it
-  // Otherwise, for testing purposes, consider verified if no userData (new user)
-  const isPhoneVerified = userData?.phone_verified ?? true; // Default to true for testing
+  // IMPORTANT: Phone verification check
+  // - If userData exists, check phone_verified field (defaults to false for enforcement)
+  // - If userData is null but user exists, user needs to be created in backend first
+  const isPhoneVerified = userData?.phone_verified === true;
+  
+  // User needs phone verification if:
+  // - User is authenticated AND
+  // - Either userData is null (new user) OR phone_verified is explicitly false
+  const needsPhoneVerification = !!user && (!userData || userData.phone_verified === false);
 
   const value = {
     user,
@@ -89,9 +102,15 @@ export const AuthProvider = ({ children }) => {
     refreshUser,
     isAuthenticated: !!user,
     isPhoneVerified,
-    // Helper to check if user needs phone verification
-    needsPhoneVerification: !!user && userData && !userData.phone_verified,
+    needsPhoneVerification,
   };
+
+  console.log('[AuthContext] Current state:', {
+    isAuthenticated: !!user,
+    hasUserData: !!userData,
+    isPhoneVerified,
+    needsPhoneVerification,
+  });
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
