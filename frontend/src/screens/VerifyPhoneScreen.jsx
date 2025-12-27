@@ -1,6 +1,5 @@
 // src/screens/VerifyPhoneScreen.jsx
 // Screen for mandatory phone verification after signup/login
-// Uses Supabase OTP verification flow
 import React, { useState, useEffect } from "react";
 import { sendSignUpOTP, verifyPhoneOTP } from "@/services/authService";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,7 +27,6 @@ export default function VerifyPhoneScreen() {
       "";
     
     if (userPhone) {
-      // Clean phone number
       setPhone(userPhone.replace(/\s+/g, ""));
     }
   }, [user, userData]);
@@ -51,19 +49,20 @@ export default function VerifyPhoneScreen() {
     // Ensure phone has country code
     const formattedPhone = phone.startsWith("+") ? phone : `+${phone}`;
     
+    setLoading(true);
+    
     try {
-      setLoading(true);
       console.log("[VerifyPhoneScreen] Sending OTP to:", formattedPhone);
-      
       await sendSignUpOTP(formattedPhone);
       
       setOtpSent(true);
-      setCountdown(60); // 60 second countdown for resend
+      setCountdown(60);
       toast.success(`OTP sent to ${formattedPhone}`);
     } catch (err) {
       console.error("[VerifyPhoneScreen] Send OTP error:", err);
-      // err is now a proper Error object
-      toast.error(err.message || "Failed to send OTP");
+      // err.message is guaranteed to be a string from authService
+      const errorMsg = err && err.message ? String(err.message) : "Failed to send OTP";
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -76,28 +75,25 @@ export default function VerifyPhoneScreen() {
       return;
     }
 
-    // Ensure phone has country code
     const formattedPhone = phone.startsWith("+") ? phone : `+${phone}`;
 
+    setLoading(true);
+    
     try {
-      setLoading(true);
       console.log("[VerifyPhoneScreen] Verifying OTP for:", formattedPhone);
-      
       await verifyPhoneOTP(formattedPhone, otp);
       
       toast.success("Phone verified successfully!");
       
-      // Refresh user data to get updated phone_verified status
       if (refreshUser) {
         await refreshUser();
       }
       
-      // Navigate to home
       navigate("/home", { replace: true });
     } catch (err) {
       console.error("[VerifyPhoneScreen] Verify OTP error:", err);
-      // err is now a proper Error object
-      toast.error(err.message || "Invalid OTP. Please try again.");
+      const errorMsg = err && err.message ? String(err.message) : "Invalid OTP. Please try again.";
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -112,20 +108,6 @@ export default function VerifyPhoneScreen() {
       console.error("[VerifyPhoneScreen] Sign out error:", err);
       toast.error("Failed to sign out");
     }
-  };
-
-  // Handle phone input change
-  const handlePhoneChange = (e) => {
-    // Remove spaces but keep + and digits
-    const value = e.target.value.replace(/[^\d+]/g, "");
-    setPhone(value);
-  };
-
-  // Handle OTP input change
-  const handleOtpChange = (e) => {
-    // Only allow digits, max 6
-    const value = e.target.value.replace(/\D/g, "").slice(0, 6);
-    setOtp(value);
   };
 
   return (
@@ -155,13 +137,13 @@ export default function VerifyPhoneScreen() {
               type="tel"
               placeholder="+234 801 234 5678"
               value={phone}
-              onChange={handlePhoneChange}
+              onChange={(e) => setPhone(e.target.value.replace(/[^\d+]/g, ""))}
               disabled={otpSent}
               className={otpSent ? "bg-gray-100" : ""}
             />
           </div>
 
-          {/* OTP Section - Only show after OTP is sent */}
+          {/* OTP Section */}
           {otpSent && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -172,7 +154,7 @@ export default function VerifyPhoneScreen() {
                 inputMode="numeric"
                 placeholder="Enter 6-digit OTP"
                 value={otp}
-                onChange={handleOtpChange}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 className="text-center text-lg tracking-widest"
                 maxLength={6}
                 autoFocus
