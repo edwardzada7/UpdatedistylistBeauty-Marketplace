@@ -183,6 +183,9 @@ frontend:
       - working: true
         agent: "testing"
         comment: "TESTED: ✅ Phone/OTP login UI working perfectly. Phone toggle shows phone input field, Send OTP button present. Toggle functionality between Email/Phone works seamlessly. Mobile responsive."
+      - working: true
+        agent: "testing"
+        comment: "RE-TESTED: ✅ Phone/OTP login working perfectly. Phone toggle shows phone input field, Send OTP button present, phone input accepts text. Toggle functionality between Email/Phone works seamlessly. Mobile responsive confirmed."
 
   - task: "Sign Up Screen"
     implemented: true
