@@ -7,152 +7,208 @@ import { supabase } from "@/lib/supabaseClient";
 ================================ */
 
 /**
+ * Safely extract error message from any error type
+ * Prevents "body stream already read" errors
+ */
+function getErrorMessage(error, fallback = "An error occurred") {
+  if (!error) return fallback;
+  
+  // If it's already a string, return it
+  if (typeof error === 'string') return error;
+  
+  // If it has a message property, use it
+  if (error.message && typeof error.message === 'string') {
+    return error.message;
+  }
+  
+  // If it has an error_description (Supabase format)
+  if (error.error_description && typeof error.error_description === 'string') {
+    return error.error_description;
+  }
+  
+  // If it has a msg property
+  if (error.msg && typeof error.msg === 'string') {
+    return error.msg;
+  }
+  
+  // Try to get name if available
+  if (error.name && typeof error.name === 'string') {
+    return error.name;
+  }
+  
+  return fallback;
+}
+
+/**
  * Sign up with email and password
- * @param {Object} params - { email, password, phone, fullName, role }
- * @returns {Object} Supabase auth data
  */
 export async function signUpWithEmail({ email, password, phone, fullName, role }) {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        full_name: fullName,
-        role,
-        phone,
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+          role,
+          phone,
+        },
       },
-    },
-  });
+    });
 
-  if (error) {
-    console.error("[authService] signUpWithEmail error:", error);
-    throw new Error(error.message || "Failed to sign up");
+    if (error) {
+      console.error("[authService] signUpWithEmail error:", error);
+      throw new Error(getErrorMessage(error, "Failed to sign up"));
+    }
+    return data;
+  } catch (err) {
+    console.error("[authService] signUpWithEmail caught:", err);
+    throw err instanceof Error ? err : new Error(getErrorMessage(err, "Failed to sign up"));
   }
-  return data;
 }
 
 /**
  * Login with email and password
- * @param {string} email 
- * @param {string} password 
- * @returns {Object} Supabase auth data with session
  */
 export async function loginWithEmail(email, password) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-  if (error) {
-    console.error("[authService] loginWithEmail error:", error);
-    throw new Error(error.message || "Failed to login");
+    if (error) {
+      console.error("[authService] loginWithEmail error:", error);
+      throw new Error(getErrorMessage(error, "Failed to login"));
+    }
+    return data;
+  } catch (err) {
+    console.error("[authService] loginWithEmail caught:", err);
+    throw err instanceof Error ? err : new Error(getErrorMessage(err, "Failed to login"));
   }
-  return data;
 }
 
 /**
  * Send OTP to phone number for sign up / verification
- * Uses Supabase signInWithOtp for phone authentication
- * @param {string} phone - Phone number with country code (e.g., +234801234567)
- * @returns {boolean} true if OTP sent successfully
  */
 export async function sendSignUpOTP(phone) {
   console.log("[authService] Sending OTP to:", phone);
   
-  const { data, error } = await supabase.auth.signInWithOtp({
-    phone: phone,
-  });
+  try {
+    const { data, error } = await supabase.auth.signInWithOtp({
+      phone: phone,
+    });
 
-  if (error) {
-    console.error("[authService] sendSignUpOTP error:", error);
-    // Create a new Error with the message to avoid response body issues
-    const errorMessage = typeof error === 'object' && error.message 
-      ? error.message 
-      : "Failed to send OTP";
-    throw new Error(errorMessage);
+    if (error) {
+      console.error("[authService] sendSignUpOTP error object:", error);
+      // Extract message immediately and create new Error
+      const msg = getErrorMessage(error, "Failed to send OTP");
+      throw new Error(msg);
+    }
+    
+    console.log("[authService] OTP sent successfully, data:", data);
+    return true;
+  } catch (err) {
+    console.error("[authService] sendSignUpOTP caught:", err);
+    // Ensure we always throw a proper Error with string message
+    if (err instanceof Error) {
+      throw err;
+    }
+    throw new Error(getErrorMessage(err, "Failed to send OTP"));
   }
-  
-  console.log("[authService] OTP sent successfully");
-  return true;
 }
 
 /**
- * Send OTP for login (same as signup OTP for Supabase)
- * @param {string} phone - Phone number with country code
- * @returns {boolean} true if OTP sent successfully
+ * Send OTP for login
  */
 export async function sendLoginOTP(phone) {
   console.log("[authService] Sending login OTP to:", phone);
   
-  const { data, error } = await supabase.auth.signInWithOtp({
-    phone: phone,
-  });
+  try {
+    const { data, error } = await supabase.auth.signInWithOtp({
+      phone: phone,
+    });
 
-  if (error) {
-    console.error("[authService] sendLoginOTP error:", error);
-    const errorMessage = typeof error === 'object' && error.message 
-      ? error.message 
-      : "Failed to send OTP";
-    throw new Error(errorMessage);
+    if (error) {
+      console.error("[authService] sendLoginOTP error:", error);
+      const msg = getErrorMessage(error, "Failed to send OTP");
+      throw new Error(msg);
+    }
+    
+    console.log("[authService] Login OTP sent successfully");
+    return true;
+  } catch (err) {
+    console.error("[authService] sendLoginOTP caught:", err);
+    if (err instanceof Error) {
+      throw err;
+    }
+    throw new Error(getErrorMessage(err, "Failed to send OTP"));
   }
-  
-  console.log("[authService] Login OTP sent successfully");
-  return true;
 }
 
 /**
  * Verify phone OTP code
- * @param {string} phone - Phone number with country code
- * @param {string} token - 6-digit OTP code
- * @returns {Object} Supabase auth data with session
  */
 export async function verifyPhoneOTP(phone, token) {
   console.log("[authService] Verifying OTP for:", phone);
   
-  const { data, error } = await supabase.auth.verifyOtp({
-    phone: phone,
-    token: token,
-    type: "sms",
-  });
+  try {
+    const { data, error } = await supabase.auth.verifyOtp({
+      phone: phone,
+      token: token,
+      type: "sms",
+    });
 
-  if (error) {
-    console.error("[authService] verifyPhoneOTP error:", error);
-    // Extract error message safely without reading response body
-    const errorMessage = typeof error === 'object' && error.message 
-      ? error.message 
-      : "Invalid OTP code";
-    throw new Error(errorMessage);
+    if (error) {
+      console.error("[authService] verifyPhoneOTP error:", error);
+      const msg = getErrorMessage(error, "Invalid OTP code");
+      throw new Error(msg);
+    }
+    
+    console.log("[authService] OTP verified successfully");
+    return data;
+  } catch (err) {
+    console.error("[authService] verifyPhoneOTP caught:", err);
+    if (err instanceof Error) {
+      throw err;
+    }
+    throw new Error(getErrorMessage(err, "Failed to verify OTP"));
   }
-  
-  console.log("[authService] OTP verified successfully");
-  return data;
 }
 
 /**
  * Send password reset email
- * @param {string} email 
- * @returns {boolean} true if email sent
  */
 export async function resetPassword(email) {
-  const { error } = await supabase.auth.resetPasswordForEmail(email);
-  
-  if (error) {
-    console.error("[authService] resetPassword error:", error);
-    throw new Error(error.message || "Failed to send reset email");
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    
+    if (error) {
+      console.error("[authService] resetPassword error:", error);
+      throw new Error(getErrorMessage(error, "Failed to send reset email"));
+    }
+    return true;
+  } catch (err) {
+    console.error("[authService] resetPassword caught:", err);
+    if (err instanceof Error) {
+      throw err;
+    }
+    throw new Error(getErrorMessage(err, "Failed to send reset email"));
   }
-  return true;
 }
 
 /**
  * Get current authenticated user and their profile data
- * @returns {Object|null} { user, userData } or null if not authenticated
  */
 export async function getCurrentUser() {
   try {
     const { data, error } = await supabase.auth.getUser();
     
     if (error) {
-      console.error("[authService] getUser error:", error);
+      // Don't log "Auth session missing" as error - it's expected when not logged in
+      if (!error.message?.includes('session missing')) {
+        console.error("[authService] getUser error:", error);
+      }
       return null;
     }
     
@@ -186,8 +242,6 @@ export async function getCurrentUser() {
 
 /**
  * Subscribe to auth state changes
- * @param {Function} callback - Called with (event, session)
- * @returns {Object} Supabase subscription object
  */
 export function onAuthStateChange(callback) {
   return supabase.auth.onAuthStateChange(callback);
@@ -197,25 +251,35 @@ export function onAuthStateChange(callback) {
  * Sign out current user
  */
 export async function signOut() {
-  const { error } = await supabase.auth.signOut();
-  if (error) {
-    console.error("[authService] signOut error:", error);
+  try {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("[authService] signOut error:", error);
+    }
+  } catch (err) {
+    console.error("[authService] signOut caught:", err);
   }
 }
 
 /**
  * Update user phone number in Supabase Auth
- * @param {string} phone - New phone number
- * @returns {Object} Updated user data
  */
 export async function updateUserPhone(phone) {
-  const { data, error } = await supabase.auth.updateUser({
-    phone: phone,
-  });
+  try {
+    const { data, error } = await supabase.auth.updateUser({
+      phone: phone,
+    });
 
-  if (error) {
-    console.error("[authService] updateUserPhone error:", error);
-    throw new Error(error.message || "Failed to update phone");
+    if (error) {
+      console.error("[authService] updateUserPhone error:", error);
+      throw new Error(getErrorMessage(error, "Failed to update phone"));
+    }
+    return data;
+  } catch (err) {
+    console.error("[authService] updateUserPhone caught:", err);
+    if (err instanceof Error) {
+      throw err;
+    }
+    throw new Error(getErrorMessage(err, "Failed to update phone"));
   }
-  return data;
 }
