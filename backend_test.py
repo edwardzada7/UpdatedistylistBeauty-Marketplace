@@ -27,10 +27,11 @@ class BackendTester:
         
         # Test data - using realistic data as instructed
         self.test_auth_id = str(uuid.uuid4())
+        unique_suffix = str(uuid.uuid4())[:8]
         self.test_user_data = {
             "auth_id": self.test_auth_id,
-            "name": "Sarah Johnson",
-            "email": "sarah.johnson@email.com",
+            "name": f"Sarah Johnson {unique_suffix}",
+            "email": f"sarah.johnson.{unique_suffix}@email.com",
             "phone": "+1234567890",
             "role": "customer",
             "phone_verified": False
