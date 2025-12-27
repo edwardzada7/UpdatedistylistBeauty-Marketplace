@@ -15,6 +15,11 @@ export default function LoginScreen() {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
 
+  /**
+   * Handle email/password login
+   * After successful login, refreshes user data and navigates
+   * AuthContext will redirect to /verify-phone if needed
+   */
   const handleEmailLogin = async () => {
     if (!email || !password) {
       toast.error("Please enter email and password");
@@ -23,37 +28,58 @@ export default function LoginScreen() {
     
     try {
       setLoading(true);
-      await loginWithEmail(email, password);
+      console.log('[LoginScreen] Attempting email login...');
+      
+      // Call Supabase login
+      const data = await loginWithEmail(email, password);
+      console.log('[LoginScreen] Login successful:', data?.user?.email);
+      
       toast.success("Logged in successfully!");
       
-      // Refresh user data in context, then navigate
-      // AuthContext will handle phone verification gate
+      // Refresh user data in context
+      // This will fetch userData from backend and update auth state
       if (refreshUser) {
+        console.log('[LoginScreen] Refreshing user data...');
         await refreshUser();
       }
       
-      // Navigate to home - AuthContext will redirect to verify-phone if needed
-      navigate("/", { replace: true });
+      // Navigate to home - ProtectedRoute will handle redirect to /verify-phone if needed
+      console.log('[LoginScreen] Navigating to /home...');
+      navigate("/home", { replace: true });
+      
     } catch (error) {
-      console.error("Login error:", error);
-      toast.error("Failed to login. Check credentials.");
+      console.error("[LoginScreen] Login error:", error);
+      toast.error(error.message || "Failed to login. Check credentials.");
     } finally {
       setLoading(false);
     }
   };
 
+  /**
+   * Handle phone login - sends OTP
+   * User will be redirected to /verify-otp to enter the code
+   */
   const handlePhoneLogin = async () => {
+    if (!phone) {
+      toast.error("Please enter your phone number");
+      return;
+    }
+    
     try {
       setLoading(true);
       const formattedPhone = phone.replace(/\s+/g, "");
+      console.log('[LoginScreen] Sending OTP to:', formattedPhone);
+      
       await sendLoginOTP(formattedPhone);
       toast.success("OTP sent to your phone!");
-      // Store phone for OTP verification and navigate
+      
+      // Store phone for OTP verification screen
       sessionStorage.setItem('pendingPhoneLogin', formattedPhone);
       navigate("/verify-otp", { replace: true });
+      
     } catch (error) {
-      console.error("Phone login error:", error);
-      toast.error("Failed to send OTP.");
+      console.error("[LoginScreen] Phone login error:", error);
+      toast.error(error.message || "Failed to send OTP.");
     } finally {
       setLoading(false);
     }
@@ -74,13 +100,23 @@ export default function LoginScreen() {
         {/* Method Toggle */}
         <div className="flex justify-center mb-4 space-x-2">
           <button
-            className={`px-4 py-2 rounded ${method === "email" ? "bg-blue-500 text-white" : "bg-gray-200"}`}
+            type="button"
+            className={`px-4 py-2 rounded transition-colors ${
+              method === "email" 
+                ? "bg-blue-500 text-white" 
+                : "bg-gray-200 hover:bg-gray-300"
+            }`}
             onClick={() => setMethod("email")}
           >
             Email
           </button>
           <button
-            className={`px-4 py-2 rounded ${method === "phone" ? "bg-blue-500 text-white" : "bg-gray-200"}`}
+            type="button"
+            className={`px-4 py-2 rounded transition-colors ${
+              method === "phone" 
+                ? "bg-blue-500 text-white" 
+                : "bg-gray-200 hover:bg-gray-300"
+            }`}
             onClick={() => setMethod("phone")}
           >
             Phone
@@ -95,21 +131,27 @@ export default function LoginScreen() {
               placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleEmailLogin()}
             />
             <Input
               type="password"
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleEmailLogin()}
             />
             <button
               type="button"
               onClick={() => navigate("/forgot-password")}
-              className="text-sm text-blue-500 underline mt-2"
+              className="text-sm text-blue-500 underline hover:text-blue-600"
             >
               Forgot password?
             </button>
-            <Button onClick={handleEmailLogin} className="w-full" disabled={loading}>
+            <Button 
+              onClick={handleEmailLogin} 
+              className="w-full" 
+              disabled={loading}
+            >
               {loading ? "Logging in..." : "Login"}
             </Button>
           </div>
@@ -120,8 +162,13 @@ export default function LoginScreen() {
               placeholder="+234 801 234 5678"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handlePhoneLogin()}
             />
-            <Button onClick={handlePhoneLogin} className="w-full" disabled={loading}>
+            <Button 
+              onClick={handlePhoneLogin} 
+              className="w-full" 
+              disabled={loading}
+            >
               {loading ? "Sending..." : "Send OTP"}
             </Button>
           </div>
@@ -130,7 +177,7 @@ export default function LoginScreen() {
         <p className="text-center mt-4">
           Don't have an account?{" "}
           <span
-            className="text-blue-500 cursor-pointer"
+            className="text-blue-500 cursor-pointer hover:underline"
             onClick={() => navigate("/signup")}
           >
             Sign Up
@@ -140,5 +187,3 @@ export default function LoginScreen() {
     </div>
   );
 }
-
-
