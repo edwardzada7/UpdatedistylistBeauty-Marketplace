@@ -17,7 +17,7 @@ export default function SignUpScreen() {
 
   const handleSignUp = async () => {
     try {
-      await signUpWithEmail(email, password, fullName, phone, role);
+      await signUpWithEmail({ email, password, phone, fullName, role });
       toast.success("Verification email sent!");
       navigate("/login");
     } catch (error) {

@@ -6,9 +6,9 @@ export default function ForgotPasswordScreen({ navigate }) {
 
   const handleReset = async () => {
     try {
-      await resetPassword({ email });
+      await resetPassword(email);
       alert("Password reset link sent! Check your email.");
-      navigate("LoginScreen");
+      navigate("/login");
     } catch (error) {
       alert("Failed: " + error.message);
     }
