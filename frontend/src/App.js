@@ -8,6 +8,7 @@ import SignUpScreen from "@/screens/SignUpScreen";
 import LoginScreen from "@/screens/LoginScreen";
 import ForgotPasswordScreen from "@/screens/ForgotPasswordScreen";
 import VerifyOTPScreen from "@/screens/VerifyOTPScreen";
+import VerifyPhoneScreen from "@/screens/VerifyPhoneScreen";
 
 // App Screens
 import HomeScreen from "@/screens/HomeScreen";
@@ -16,56 +17,90 @@ import StylistsListScreen from "@/screens/StylistsListScreen";
 import StylistProfileScreen from "@/screens/StylistProfileScreen";
 import WalletScreen from "@/screens/WalletScreen";
 
-// Phone Verification Component
-import PhoneVerificationGate from "@/components/PhoneVerificationGate";
+// LoadingSpinner for route transitions
+import LoadingSpinner from "@/components/LoadingSpinner";
 
-// Protected Route Component - requires authentication
+/**
+ * ProtectedRoute - Requires authentication and phone verification
+ * Redirects to /login if not authenticated
+ * Redirects to /verify-phone if phone not verified
+ */
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading, needsPhoneVerification, user, userData, refreshUser } = useAuth();
+  const { isAuthenticated, loading, needsPhoneVerification } = useAuth();
 
+  // Show nothing while loading - AuthContext shows spinner
   if (loading) {
-    return null; // AuthContext handles loading state
+    return <LoadingSpinner fullScreen message="Loading..." />;
   }
 
+  // Not authenticated -> redirect to login
   if (!isAuthenticated) {
+    console.log('[ProtectedRoute] Not authenticated, redirecting to /login');
     return <Navigate to="/login" replace />;
   }
 
-  // If user needs phone verification, show the gate
+  // Authenticated but needs phone verification -> redirect to verify-phone
   if (needsPhoneVerification) {
-    return (
-      <PhoneVerificationGate 
-        user={user} 
-        userData={userData} 
-        onVerified={refreshUser} 
-      />
-    );
+    console.log('[ProtectedRoute] Needs phone verification, redirecting to /verify-phone');
+    return <Navigate to="/verify-phone" replace />;
+  }
+
+  // Authenticated and verified -> render children
+  return children;
+};
+
+/**
+ * PublicRoute - Only accessible when NOT authenticated
+ * Redirects to home if already authenticated
+ */
+const PublicRoute = ({ children }) => {
+  const { isAuthenticated, loading, needsPhoneVerification } = useAuth();
+
+  if (loading) {
+    return <LoadingSpinner fullScreen message="Loading..." />;
+  }
+
+  // If authenticated, redirect appropriately
+  if (isAuthenticated) {
+    if (needsPhoneVerification) {
+      return <Navigate to="/verify-phone" replace />;
+    }
+    return <Navigate to="/home" replace />;
   }
 
   return children;
 };
 
-// Public Route Component (redirect to home if authenticated)
-const PublicRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+/**
+ * PhoneVerificationRoute - For the /verify-phone screen
+ * Only accessible when authenticated but NOT phone verified
+ */
+const PhoneVerificationRoute = ({ children }) => {
+  const { isAuthenticated, loading, needsPhoneVerification, isPhoneVerified } = useAuth();
 
   if (loading) {
-    return null;
+    return <LoadingSpinner fullScreen message="Loading..." />;
   }
 
-  if (isAuthenticated) {
-    return <Navigate to="/" replace />;
+  // Not authenticated -> redirect to login
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Already verified -> redirect to home
+  if (isPhoneVerified && !needsPhoneVerification) {
+    return <Navigate to="/home" replace />;
   }
 
   return children;
 };
 
 function AppRoutes() {
-  const { userData, isAuthenticated } = useAuth();
+  const { userData, isAuthenticated, needsPhoneVerification } = useAuth();
 
   return (
     <Routes>
-      {/* Public Routes */}
+      {/* Public Routes - Only accessible when NOT logged in */}
       <Route
         path="/signup"
         element={
@@ -90,13 +125,21 @@ function AppRoutes() {
           </PublicRoute>
         }
       />
-      {/* OTP Verification for phone login - public route */}
+      
+      {/* OTP Verification for phone login - semi-public route */}
+      <Route path="/verify-otp" element={<VerifyOTPScreen />} />
+
+      {/* Phone Verification Route - For users who need to verify phone */}
       <Route
-        path="/verify-otp"
-        element={<VerifyOTPScreen />}
+        path="/verify-phone"
+        element={
+          <PhoneVerificationRoute>
+            <VerifyPhoneScreen />
+          </PhoneVerificationRoute>
+        }
       />
 
-      {/* Protected Routes */}
+      {/* Protected Routes - Require authentication AND phone verification */}
       <Route
         path="/"
         element={
@@ -146,11 +189,13 @@ function AppRoutes() {
         }
       />
 
-      {/* Catch all - redirect to home if authenticated, login if not */}
+      {/* Catch all - redirect based on auth state */}
       <Route
         path="*"
         element={
-          isAuthenticated ? <Navigate to="/" replace /> : <Navigate to="/login" replace />
+          isAuthenticated 
+            ? (needsPhoneVerification ? <Navigate to="/verify-phone" replace /> : <Navigate to="/home" replace />)
+            : <Navigate to="/login" replace />
         }
       />
     </Routes>
