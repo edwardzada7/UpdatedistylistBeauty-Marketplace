@@ -1,5 +1,6 @@
 // src/screens/VerifyPhoneScreen.jsx
 // Screen for mandatory phone verification after signup/login
+// Uses Supabase OTP verification flow
 import React, { useState, useEffect } from "react";
 import { sendSignUpOTP, verifyPhoneOTP } from "@/services/authService";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,8 +26,10 @@ export default function VerifyPhoneScreen() {
       userData?.phone ||
       user?.user_metadata?.phone ||
       "";
+    
     if (userPhone) {
-      setPhone(userPhone);
+      // Clean phone number
+      setPhone(userPhone.replace(/\s+/g, ""));
     }
   }, [user, userData]);
 
@@ -38,57 +41,91 @@ export default function VerifyPhoneScreen() {
     }
   }, [countdown]);
 
+  // Handle sending OTP
   const handleSendOTP = async () => {
     if (!phone) {
       toast.error("Please enter your phone number");
       return;
     }
 
-    const formattedPhone = phone.replace(/\s+/g, "");
+    // Ensure phone has country code
+    const formattedPhone = phone.startsWith("+") ? phone : `+${phone}`;
     
     try {
       setLoading(true);
+      console.log("[VerifyPhoneScreen] Sending OTP to:", formattedPhone);
+      
       await sendSignUpOTP(formattedPhone);
+      
       setOtpSent(true);
       setCountdown(60); // 60 second countdown for resend
-      toast.success("OTP sent to " + formattedPhone);
-    } catch (error) {
-      console.error("Send OTP error:", error);
-      toast.error("Failed to send OTP: " + (error.message || "Unknown error"));
+      toast.success(`OTP sent to ${formattedPhone}`);
+    } catch (err) {
+      console.error("[VerifyPhoneScreen] Send OTP error:", err);
+      // err is now a proper Error object
+      toast.error(err.message || "Failed to send OTP");
     } finally {
       setLoading(false);
     }
   };
 
+  // Handle OTP verification
   const handleVerifyOTP = async () => {
     if (!otp || otp.length < 4) {
       toast.error("Please enter a valid OTP");
       return;
     }
 
-    const formattedPhone = phone.replace(/\s+/g, "");
+    // Ensure phone has country code
+    const formattedPhone = phone.startsWith("+") ? phone : `+${phone}`;
 
     try {
       setLoading(true);
+      console.log("[VerifyPhoneScreen] Verifying OTP for:", formattedPhone);
+      
       await verifyPhoneOTP(formattedPhone, otp);
+      
       toast.success("Phone verified successfully!");
       
       // Refresh user data to get updated phone_verified status
-      await refreshUser();
+      if (refreshUser) {
+        await refreshUser();
+      }
       
       // Navigate to home
       navigate("/home", { replace: true });
-    } catch (error) {
-      console.error("Verify OTP error:", error);
-      toast.error("Invalid OTP. Please try again.");
+    } catch (err) {
+      console.error("[VerifyPhoneScreen] Verify OTP error:", err);
+      // err is now a proper Error object
+      toast.error(err.message || "Invalid OTP. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
+  // Handle sign out
   const handleSignOut = async () => {
-    await signOut();
-    navigate("/login", { replace: true });
+    try {
+      await signOut();
+      navigate("/login", { replace: true });
+    } catch (err) {
+      console.error("[VerifyPhoneScreen] Sign out error:", err);
+      toast.error("Failed to sign out");
+    }
+  };
+
+  // Handle phone input change
+  const handlePhoneChange = (e) => {
+    // Remove spaces but keep + and digits
+    const value = e.target.value.replace(/[^\d+]/g, "");
+    setPhone(value);
+  };
+
+  // Handle OTP input change
+  const handleOtpChange = (e) => {
+    // Only allow digits, max 6
+    const value = e.target.value.replace(/\D/g, "").slice(0, 6);
+    setOtp(value);
   };
 
   return (
@@ -102,21 +139,25 @@ export default function VerifyPhoneScreen() {
         {/* Header */}
         <h2 className="text-2xl font-bold text-center mb-2">Verify Your Phone</h2>
         <p className="text-sm text-gray-600 text-center mb-6">
-          Phone verification is required to access the app
+          {otpSent 
+            ? `Enter the OTP sent to ${phone}`
+            : "Phone verification is required to access the app"
+          }
         </p>
 
         <div className="space-y-4">
           {/* Phone Input */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Phone Number
+              Phone Number (with country code)
             </label>
             <Input
               type="tel"
               placeholder="+234 801 234 5678"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={handlePhoneChange}
               disabled={otpSent}
+              className={otpSent ? "bg-gray-100" : ""}
             />
           </div>
 
@@ -128,11 +169,13 @@ export default function VerifyPhoneScreen() {
               </label>
               <Input
                 type="text"
+                inputMode="numeric"
                 placeholder="Enter 6-digit OTP"
                 value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onChange={handleOtpChange}
                 className="text-center text-lg tracking-widest"
                 maxLength={6}
+                autoFocus
               />
             </div>
           )}
@@ -151,7 +194,7 @@ export default function VerifyPhoneScreen() {
               <Button 
                 onClick={handleVerifyOTP} 
                 className="w-full" 
-                disabled={loading || !otp}
+                disabled={loading || !otp || otp.length < 4}
               >
                 {loading ? "Verifying..." : "Verify OTP"}
               </Button>
@@ -175,7 +218,7 @@ export default function VerifyPhoneScreen() {
             <Button 
               variant="ghost" 
               onClick={handleSignOut}
-              className="w-full text-red-500 hover:text-red-600"
+              className="w-full text-red-500 hover:text-red-600 hover:bg-red-50"
             >
               Sign Out
             </Button>
