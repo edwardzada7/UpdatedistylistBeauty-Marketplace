@@ -1,5 +1,6 @@
 // src/components/PhoneVerificationGate.jsx
 // Component to block access until phone is verified
+// Uses Supabase OTP verification flow
 import React, { useState, useEffect } from "react";
 import { verifyPhoneOTP, sendSignUpOTP } from "@/services/authService";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,8 @@ export default function PhoneVerificationGate({ user, userData, onVerified }) {
   const [otp, setOtp] = useState("");
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [countdown, setCountdown] = useState(0);
 
   // Get phone number from userData or user metadata
   useEffect(() => {
@@ -20,52 +22,97 @@ export default function PhoneVerificationGate({ user, userData, onVerified }) {
       user?.user_metadata?.phone ||
       user?.phone ||
       "";
-    setPhone(phoneNumber);
+    
+    if (phoneNumber) {
+      // Clean phone number - remove spaces
+      setPhone(phoneNumber.replace(/\s+/g, ""));
+    }
   }, [user, userData]);
 
+  // Countdown timer for resend button
   useEffect(() => {
-    // Auto-send OTP when component mounts and we have a phone number
-    if (phone && !sent) {
-      handleSendOTP();
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
     }
-  }, [phone, sent]);
+  }, [countdown]);
 
+  // Handle sending OTP
   const handleSendOTP = async () => {
     if (!phone) {
-      toast.error("No phone number found. Please update your profile.");
+      toast.error("Please enter your phone number");
       return;
     }
 
+    // Ensure phone has country code
+    const formattedPhone = phone.startsWith("+") ? phone : `+${phone}`;
+
     try {
       setLoading(true);
-      await sendSignUpOTP(phone);
-      setSent(true);
-      toast.success("OTP sent to your phone");
+      console.log("[PhoneVerificationGate] Sending OTP to:", formattedPhone);
+      
+      await sendSignUpOTP(formattedPhone);
+      
+      setOtpSent(true);
+      setCountdown(60); // 60 seconds before can resend
+      toast.success(`OTP sent to ${formattedPhone}`);
     } catch (err) {
-      console.error("Send OTP error:", err);
-      toast.error("Failed to send OTP: " + (err.message || "Unknown error"));
+      console.error("[PhoneVerificationGate] Send OTP error:", err);
+      // err is now a proper Error object with message property
+      toast.error(err.message || "Failed to send OTP");
     } finally {
       setLoading(false);
     }
   };
 
+  // Handle OTP verification
   const handleVerify = async () => {
     if (!otp || otp.length < 4) {
-      toast.error("Please enter a valid OTP");
+      toast.error("Please enter a valid OTP (at least 4 digits)");
       return;
     }
 
+    if (!phone) {
+      toast.error("Phone number is required");
+      return;
+    }
+
+    // Ensure phone has country code
+    const formattedPhone = phone.startsWith("+") ? phone : `+${phone}`;
+
     try {
       setLoading(true);
-      await verifyPhoneOTP(phone, otp);
+      console.log("[PhoneVerificationGate] Verifying OTP for:", formattedPhone);
+      
+      await verifyPhoneOTP(formattedPhone, otp);
+      
       toast.success("Phone verified successfully!");
-      onVerified(); // Refresh user data and proceed to app
+      
+      // Call onVerified callback to refresh user data and proceed
+      if (onVerified) {
+        await onVerified();
+      }
     } catch (err) {
-      console.error("Verify OTP error:", err);
-      toast.error("Invalid OTP. Please try again.");
+      console.error("[PhoneVerificationGate] Verify OTP error:", err);
+      // err is now a proper Error object with message property
+      toast.error(err.message || "Invalid OTP. Please try again.");
     } finally {
       setLoading(false);
     }
+  };
+
+  // Handle phone input change
+  const handlePhoneChange = (e) => {
+    // Remove spaces but keep + and digits
+    const value = e.target.value.replace(/[^\d+]/g, "");
+    setPhone(value);
+  };
+
+  // Handle OTP input change
+  const handleOtpChange = (e) => {
+    // Only allow digits, max 6
+    const value = e.target.value.replace(/\D/g, "").slice(0, 6);
+    setOtp(value);
   };
 
   return (
@@ -76,50 +123,81 @@ export default function PhoneVerificationGate({ user, userData, onVerified }) {
           <img src="/logo.png" alt="App Logo" className="h-16 w-16 object-contain" />
         </div>
 
-        <h2 className="text-2xl font-bold text-center mb-4">Verify Your Phone</h2>
+        <h2 className="text-2xl font-bold text-center mb-2">Verify Your Phone</h2>
         
         <p className="text-sm text-gray-600 text-center mb-6">
-          {phone 
+          {otpSent 
             ? `Enter the OTP sent to ${phone}`
             : "Phone verification is required to continue"
           }
         </p>
 
         <div className="space-y-4">
-          {!phone && (
+          {/* Phone Input - editable if OTP not sent yet */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Phone Number (with country code)
+            </label>
             <Input
               type="tel"
               placeholder="+234 801 234 5678"
               value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\s+/g, ""))}
+              onChange={handlePhoneChange}
+              disabled={otpSent}
+              className={otpSent ? "bg-gray-100" : ""}
             />
+          </div>
+
+          {/* OTP Input - only show after OTP is sent */}
+          {otpSent && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Enter OTP
+              </label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="Enter 6-digit OTP"
+                value={otp}
+                onChange={handleOtpChange}
+                className="text-center text-lg tracking-widest"
+                maxLength={6}
+                autoFocus
+              />
+            </div>
           )}
-
-          <Input
-            type="text"
-            placeholder="Enter 6-digit OTP"
-            value={otp}
-            onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            className="text-center text-lg tracking-widest"
-            maxLength={6}
-          />
           
-          <Button 
-            onClick={handleVerify} 
-            className="w-full" 
-            disabled={loading || !otp || !phone}
-          >
-            {loading ? "Verifying..." : "Verify OTP"}
-          </Button>
+          {/* Action Buttons */}
+          {!otpSent ? (
+            // Send OTP button
+            <Button 
+              onClick={handleSendOTP} 
+              className="w-full" 
+              disabled={loading || !phone}
+            >
+              {loading ? "Sending..." : "Send OTP"}
+            </Button>
+          ) : (
+            // Verify and Resend buttons
+            <>
+              <Button 
+                onClick={handleVerify} 
+                className="w-full" 
+                disabled={loading || !otp || otp.length < 4}
+              >
+                {loading ? "Verifying..." : "Verify OTP"}
+              </Button>
 
-          <Button 
-            variant="outline" 
-            onClick={handleSendOTP} 
-            className="w-full"
-            disabled={loading || !phone}
-          >
-            {sent ? "Resend OTP" : "Send OTP"}
-          </Button>
+              <Button 
+                variant="outline" 
+                onClick={handleSendOTP} 
+                className="w-full"
+                disabled={loading || countdown > 0}
+              >
+                {countdown > 0 ? `Resend OTP (${countdown}s)` : "Resend OTP"}
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </div>
