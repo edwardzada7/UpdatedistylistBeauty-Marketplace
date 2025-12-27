@@ -116,6 +116,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Backend API endpoints for users are working"
+      - working: true
+        agent: "testing"
+        comment: "TESTED: All Users API endpoints working correctly. GET /api/users (retrieves users), POST /api/users (creates users), GET /api/users/by-auth/{auth_id} (finds users by auth ID). Database connection to Supabase PostgreSQL confirmed."
 
   - task: "Stylists CRUD API"
     implemented: true
@@ -128,6 +131,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Backend API endpoints for stylists are working"
+      - working: true
+        agent: "testing"
+        comment: "TESTED: All Stylists API endpoints working correctly. GET /api/stylists (retrieves stylists with user data), POST /api/stylists (creates stylist profiles), GET /api/stylists/{user_id} (retrieves individual stylist). Proper foreign key relationships with users table confirmed."
 
   - task: "Wallets CRUD API"
     implemented: true
@@ -140,6 +146,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Backend API endpoints for wallets are working"
+      - working: true
+        agent: "testing"
+        comment: "TESTED: All Wallets API endpoints working correctly. GET /api/wallets (retrieves wallets), GET /api/wallets/by-auth/{auth_id} (finds wallet by user auth ID). Auto-wallet creation appears to be implemented (wallets created automatically when users are created). All CRUD operations functional."
 
 frontend:
   - task: "Login Screen (Email/Password)"
