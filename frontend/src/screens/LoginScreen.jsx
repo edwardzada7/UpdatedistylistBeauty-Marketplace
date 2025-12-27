@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { loginWithEmail, sendLoginOTP } from "@/services/authService";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -7,31 +8,54 @@ import { useNavigate } from "react-router-dom";
 
 export default function LoginScreen() {
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
   const [method, setMethod] = useState("email"); // email or phone
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleEmailLogin = async () => {
+    if (!email || !password) {
+      toast.error("Please enter email and password");
+      return;
+    }
+    
     try {
+      setLoading(true);
       await loginWithEmail(email, password);
       toast.success("Logged in successfully!");
-      navigate("/home");
+      
+      // Refresh user data in context, then navigate
+      // AuthContext will handle phone verification gate
+      if (refreshUser) {
+        await refreshUser();
+      }
+      
+      // Navigate to home - AuthContext will redirect to verify-phone if needed
+      navigate("/", { replace: true });
     } catch (error) {
       console.error("Login error:", error);
       toast.error("Failed to login. Check credentials.");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handlePhoneLogin = async () => {
     try {
+      setLoading(true);
       const formattedPhone = phone.replace(/\s+/g, "");
       await sendLoginOTP(formattedPhone);
       toast.success("OTP sent to your phone!");
-      // navigate to OTP verification screen if implemented
+      // Store phone for OTP verification and navigate
+      sessionStorage.setItem('pendingPhoneLogin', formattedPhone);
+      navigate("/verify-otp", { replace: true });
     } catch (error) {
       console.error("Phone login error:", error);
       toast.error("Failed to send OTP.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -85,7 +109,9 @@ export default function LoginScreen() {
             >
               Forgot password?
             </button>
-            <Button onClick={handleEmailLogin} className="w-full">Login</Button>
+            <Button onClick={handleEmailLogin} className="w-full" disabled={loading}>
+              {loading ? "Logging in..." : "Login"}
+            </Button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -95,7 +121,9 @@ export default function LoginScreen() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
-            <Button onClick={handlePhoneLogin} className="w-full">Send OTP</Button>
+            <Button onClick={handlePhoneLogin} className="w-full" disabled={loading}>
+              {loading ? "Sending..." : "Send OTP"}
+            </Button>
           </div>
         )}
 
