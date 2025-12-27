@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { getCurrentUser, signOut } from '@/services/authService';
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +11,7 @@ import { usersAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { TOAST_MESSAGES } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
+
 
 const ProfileScreen = () => {
   const navigate = useNavigate();
