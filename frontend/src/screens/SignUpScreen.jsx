@@ -28,7 +28,8 @@ export default function SignUpScreen() {
 
   const handlePhoneSignUp = async () => {
     try {
-      await sendSignUpOTP(phone);
+      const formattedPhone = phone.replace(/\s+/g, "");
+      await sendSignUpOTP(formattedPhone);
       toast.success("OTP sent to phone!");
       // navigate to OTP verification screen if implemented
     } catch (error) {
@@ -69,7 +70,7 @@ export default function SignUpScreen() {
           />
           <Input
             type="tel"
-            placeholder="Phone Number"
+            placeholder="+234 801 234 5678"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
           />

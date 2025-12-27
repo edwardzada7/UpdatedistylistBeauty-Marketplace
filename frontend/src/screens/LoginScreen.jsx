@@ -25,7 +25,8 @@ export default function LoginScreen() {
 
   const handlePhoneLogin = async () => {
     try {
-      await sendLoginOTP(phone);
+      const formattedPhone = phone.replace(/\s+/g, "");
+      await sendLoginOTP(formattedPhone);
       toast.success("OTP sent to your phone!");
       // navigate to OTP verification screen if implemented
     } catch (error) {
@@ -77,13 +78,20 @@ export default function LoginScreen() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+            <button
+              type="button"
+              onClick={() => navigate("/forgot-password")}
+              className="text-sm text-blue-500 underline mt-2"
+            >
+              Forgot password?
+            </button>
             <Button onClick={handleEmailLogin} className="w-full">Login</Button>
           </div>
         ) : (
           <div className="space-y-4">
             <Input
               type="tel"
-              placeholder="Phone Number"
+              placeholder="+234 801 234 5678"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
