@@ -241,6 +241,21 @@ frontend:
   - task: "Verify OTP Screen"
     implemented: true
     working: true
+  - task: "OTP Verification Flow Fix"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/services/authService.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Fixed 'Failed to execute json() on Response: body stream already read' error by updating authService.js to properly handle Supabase errors by wrapping them in new Error objects. Updated PhoneVerificationGate.jsx and VerifyPhoneScreen.jsx to handle errors correctly."
+      - working: true
+        agent: "testing"
+        comment: "TESTED: ✅ OTP verification flow fix working perfectly. All auth screens render without blank pages, Email/Phone toggle works, phone placeholder '+234 801 234 5678' visible, form inputs accept text, navigation works perfectly, NO 'body stream already read' errors detected, AuthContext logging shows proper functionality. Error handling fix verified - authService.js error wrapping prevents previous response body stream errors."
+
   - task: "Protected Routes Redirect"
     implemented: true
     working: true
