@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import SignUpScreen from "@/screens/SignUpScreen";
 import LoginScreen from "@/screens/LoginScreen";
 import ForgotPasswordScreen from "@/screens/ForgotPasswordScreen";
+import VerifyOTPScreen from "@/screens/VerifyOTPScreen";
 
 // App Screens
 import HomeScreen from "@/screens/HomeScreen";
@@ -15,9 +16,12 @@ import StylistsListScreen from "@/screens/StylistsListScreen";
 import StylistProfileScreen from "@/screens/StylistProfileScreen";
 import WalletScreen from "@/screens/WalletScreen";
 
-// Protected Route Component
+// Phone Verification Component
+import PhoneVerificationGate from "@/components/PhoneVerificationGate";
+
+// Protected Route Component - requires authentication
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, needsPhoneVerification, user, userData, refreshUser } = useAuth();
 
   if (loading) {
     return null; // AuthContext handles loading state
@@ -25,6 +29,17 @@ const ProtectedRoute = ({ children }) => {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  // If user needs phone verification, show the gate
+  if (needsPhoneVerification) {
+    return (
+      <PhoneVerificationGate 
+        user={user} 
+        userData={userData} 
+        onVerified={refreshUser} 
+      />
+    );
   }
 
   return children;
@@ -75,10 +90,23 @@ function AppRoutes() {
           </PublicRoute>
         }
       />
+      {/* OTP Verification for phone login - public route */}
+      <Route
+        path="/verify-otp"
+        element={<VerifyOTPScreen />}
+      />
 
       {/* Protected Routes */}
       <Route
         path="/"
+        element={
+          <ProtectedRoute>
+            <HomeScreen currentUser={userData} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/home"
         element={
           <ProtectedRoute>
             <HomeScreen currentUser={userData} />
