@@ -1,26 +1,21 @@
 import React, { useState } from "react";
-import { loginWithEmail, sendLoginOTP } from "@/services/authService";
-import { useAuth } from "@/contexts/AuthContext";
+import { loginWithEmail } from "@/services/authService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { APP_NAME, APP_TAGLINE } from "@/utils/constants";
+import { Loader2 } from "lucide-react";
 
 export default function LoginScreen() {
   const navigate = useNavigate();
-  const { refreshUser } = useAuth();
-  const [method, setMethod] = useState("email"); // email or phone
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
 
-  /**
-   * Handle email/password login
-   * After successful login, refreshes user data and navigates
-   * AuthContext will redirect to /verify-phone if needed
-   */
-  const handleEmailLogin = async () => {
+  const handleEmailLogin = async (e) => {
+    e?.preventDefault();
+    
     if (!email || !password) {
       toast.error("Please enter email and password");
       return;
@@ -28,25 +23,9 @@ export default function LoginScreen() {
     
     try {
       setLoading(true);
-      console.log('[LoginScreen] Attempting email login...');
-      
-      // Call Supabase login
-      const data = await loginWithEmail(email, password);
-      console.log('[LoginScreen] Login successful:', data?.user?.email);
-      
+      await loginWithEmail(email, password);
       toast.success("Logged in successfully!");
-      
-      // Refresh user data in context
-      // This will fetch userData from backend and update auth state
-      if (refreshUser) {
-        console.log('[LoginScreen] Refreshing user data...');
-        await refreshUser();
-      }
-      
-      // Navigate to home - ProtectedRoute will handle redirect to /verify-phone if needed
-      console.log('[LoginScreen] Navigating to /home...');
       navigate("/home", { replace: true });
-      
     } catch (error) {
       console.error("[LoginScreen] Login error:", error);
       toast.error(error.message || "Failed to login. Check credentials.");
@@ -55,132 +34,84 @@ export default function LoginScreen() {
     }
   };
 
-  /**
-   * Handle phone login - sends OTP
-   * User will be redirected to /verify-otp to enter the code
-   */
-  const handlePhoneLogin = async () => {
-    if (!phone) {
-      toast.error("Please enter your phone number");
-      return;
-    }
-    
-    try {
-      setLoading(true);
-      const formattedPhone = phone.replace(/\s+/g, "");
-      console.log('[LoginScreen] Sending OTP to:', formattedPhone);
-      
-      await sendLoginOTP(formattedPhone);
-      toast.success("OTP sent to your phone!");
-      
-      // Store phone for OTP verification screen
-      sessionStorage.setItem('pendingPhoneLogin', formattedPhone);
-      navigate("/verify-otp", { replace: true });
-      
-    } catch (error) {
-      console.error("[LoginScreen] Phone login error:", error);
-      toast.error(error.message || "Failed to send OTP.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-full max-w-md p-8 bg-white rounded-lg shadow-md">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
+      <div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl">
         
-        {/* Logo */}
-        <div className="flex justify-center mb-6">
-          <img src="/logo.png" alt="App Logo" className="h-16 w-16 object-contain" />
+        {/* Logo & Branding */}
+        <div className="flex flex-col items-center mb-8">
+          <div className="w-20 h-20 bg-gradient-to-br from-pink-500 via-purple-500 to-indigo-500 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-lg mb-4">
+            <span className="text-3xl">i</span>
+          </div>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
+            {APP_NAME}
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">{APP_TAGLINE}</p>
         </div>
 
-        {/* Header */}
-        <h2 className="text-2xl font-bold text-center mb-6">Login</h2>
+        {/* Welcome Text */}
+        <h2 className="text-xl font-semibold text-center text-gray-800 mb-6">
+          Welcome Back
+        </h2>
 
-        {/* Method Toggle */}
-        <div className="flex justify-center mb-4 space-x-2">
-          <button
-            type="button"
-            className={`px-4 py-2 rounded transition-colors ${
-              method === "email" 
-                ? "bg-blue-500 text-white" 
-                : "bg-gray-200 hover:bg-gray-300"
-            }`}
-            onClick={() => setMethod("email")}
-          >
-            Email
-          </button>
-          <button
-            type="button"
-            className={`px-4 py-2 rounded transition-colors ${
-              method === "phone" 
-                ? "bg-blue-500 text-white" 
-                : "bg-gray-200 hover:bg-gray-300"
-            }`}
-            onClick={() => setMethod("phone")}
-          >
-            Phone
-          </button>
-        </div>
-
-        {/* Form */}
-        {method === "email" ? (
-          <div className="space-y-4">
+        {/* Login Form */}
+        <form onSubmit={handleEmailLogin} className="space-y-4">
+          <div>
             <Input
               type="email"
-              placeholder="Email"
+              placeholder="Email address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleEmailLogin()}
+              className="h-12 text-base"
+              autoComplete="email"
             />
+          </div>
+          
+          <div>
             <Input
               type="password"
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleEmailLogin()}
+              className="h-12 text-base"
+              autoComplete="current-password"
             />
+          </div>
+
+          <div className="text-right">
             <button
               type="button"
               onClick={() => navigate("/forgot-password")}
-              className="text-sm text-blue-500 underline hover:text-blue-600"
+              className="text-sm text-purple-600 hover:text-purple-700 hover:underline"
             >
               Forgot password?
             </button>
-            <Button 
-              onClick={handleEmailLogin} 
-              className="w-full" 
-              disabled={loading}
-            >
-              {loading ? "Logging in..." : "Login"}
-            </Button>
           </div>
-        ) : (
-          <div className="space-y-4">
-            <Input
-              type="tel"
-              placeholder="+234 801 234 5678"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handlePhoneLogin()}
-            />
-            <Button 
-              onClick={handlePhoneLogin} 
-              className="w-full" 
-              disabled={loading}
-            >
-              {loading ? "Sending..." : "Send OTP"}
-            </Button>
-          </div>
-        )}
 
-        <p className="text-center mt-4">
+          <Button 
+            type="submit"
+            className="w-full h-12 text-base bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 hover:from-pink-600 hover:via-purple-600 hover:to-indigo-600 transition-all"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Signing in...
+              </>
+            ) : (
+              "Sign In"
+            )}
+          </Button>
+        </form>
+
+        {/* Sign Up Link */}
+        <p className="text-center mt-6 text-gray-600">
           Don't have an account?{" "}
           <span
-            className="text-blue-500 cursor-pointer hover:underline"
+            className="text-purple-600 font-medium cursor-pointer hover:underline"
             onClick={() => navigate("/signup")}
           >
-            Sign Up
+            Create Account
           </span>
         </p>
       </div>
