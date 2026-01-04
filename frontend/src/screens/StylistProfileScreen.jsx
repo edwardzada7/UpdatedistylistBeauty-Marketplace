@@ -16,10 +16,6 @@ const StylistProfileScreen = ({ currentUser }) => {
   const [stylist, setStylist] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  if (!currentUser) {
-    return null;
-  }
-
   useEffect(() => {
     fetchStylistProfile();
   }, [userId]);
