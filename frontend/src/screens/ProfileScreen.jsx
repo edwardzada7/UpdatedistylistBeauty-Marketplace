@@ -1,6 +1,4 @@
-
 import { useState, useEffect } from "react";
-import { getCurrentUser, signOut } from '@/services/authService';
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,9 +8,10 @@ import { ArrowLeft, User, Mail, Phone, Save, Loader2, LogOut } from "lucide-reac
 import { toast } from "sonner";
 import { usersAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { TOAST_MESSAGES } from "@/utils/constants";
+import { TOAST_MESSAGES, APP_NAME } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
-
+import LoadingSpinner from "@/components/LoadingSpinner";
+import EmptyState from "@/components/EmptyState";
 
 const ProfileScreen = () => {
   const navigate = useNavigate();
@@ -20,16 +19,16 @@ const ProfileScreen = () => {
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
-    name: userData?.name || "",
-    email: userData?.email || "",
-    phone: userData?.phone || "",
+    name: "",
+    email: "",
+    phone: "",
   });
 
   useEffect(() => {
     if (userData) {
       setFormData({
-        name: userData.name,
-        email: userData.email,
+        name: userData.name || "",
+        email: userData.email || "",
         phone: userData.phone || "",
       });
     }
@@ -43,7 +42,6 @@ const ProfileScreen = () => {
       await usersAPI.update(userData.id, formData);
       toast.success(TOAST_MESSAGES.PROFILE_UPDATED);
       setEditing(false);
-      // Refresh page to get updated data
       window.location.reload();
     } catch (error) {
       console.error("Failed to update profile:", error);
@@ -55,9 +53,9 @@ const ProfileScreen = () => {
 
   const handleCancel = () => {
     setFormData({
-      name: userData.name,
-      email: userData.email,
-      phone: userData.phone || "",
+      name: userData?.name || "",
+      email: userData?.email || "",
+      phone: userData?.phone || "",
     });
     setEditing(false);
   };
@@ -73,8 +71,30 @@ const ProfileScreen = () => {
     }
   };
 
+  // Show empty state if no user data
   if (!userData) {
-    return null;
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <header className="bg-white shadow-sm border-b">
+          <div className="container mx-auto px-4 py-4 flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Button>
+            <h1 className="text-xl font-bold">My Profile</h1>
+          </div>
+        </header>
+        <div className="container mx-auto px-4 py-8">
+          <EmptyState
+            title="Profile not loaded"
+            description="Unable to load your profile data. Please try again."
+            actionLabel="Go Home"
+            onAction={() => navigate("/")}
+          />
+        </div>
+        <BottomNavigation />
+      </div>
+    );
   }
 
   return (
@@ -82,13 +102,7 @@ const ProfileScreen = () => {
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="container mx-auto px-4 py-4 flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate("/")}
-            className="flex items-center gap-2"
-            data-testid="back-btn"
-          >
+          <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
             <ArrowLeft className="h-4 w-4" />
             Back
           </Button>
@@ -104,20 +118,16 @@ const ProfileScreen = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white text-2xl font-bold">
-                    {userData.name.charAt(0)}
+                    {userData.name?.charAt(0) || "U"}
                   </div>
                   <div>
-                    <CardTitle>{userData.name}</CardTitle>
-                    <p className="text-sm text-gray-600 capitalize">{userData.role}</p>
+                    <CardTitle>{userData.name || "User"}</CardTitle>
+                    <p className="text-sm text-gray-600 capitalize">{userData.role || "customer"}</p>
                   </div>
                 </div>
                 {!editing && (
                   <div className="flex gap-2">
-                    <Button
-                      onClick={() => setEditing(true)}
-                      size="sm"
-                      data-testid="edit-profile-btn"
-                    >
+                    <Button onClick={() => setEditing(true)} size="sm">
                       Edit Profile
                     </Button>
                     <Button
@@ -125,7 +135,6 @@ const ProfileScreen = () => {
                       size="sm"
                       variant="outline"
                       className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      data-testid="signout-btn"
                     >
                       <LogOut className="h-4 w-4 mr-1" />
                       Sign Out
@@ -148,7 +157,6 @@ const ProfileScreen = () => {
                         className="pl-10"
                         placeholder="Enter your full name"
                         required
-                        data-testid="name-input"
                       />
                     </div>
                   </div>
@@ -165,7 +173,6 @@ const ProfileScreen = () => {
                         className="pl-10"
                         placeholder="your@email.com"
                         required
-                        data-testid="email-input"
                       />
                     </div>
                   </div>
@@ -180,18 +187,12 @@ const ProfileScreen = () => {
                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                         className="pl-10"
                         placeholder="+234..."
-                        data-testid="phone-input"
                       />
                     </div>
                   </div>
 
                   <div className="flex gap-3">
-                    <Button
-                      type="submit"
-                      disabled={loading}
-                      className="flex-1"
-                      data-testid="save-profile-btn"
-                    >
+                    <Button type="submit" disabled={loading} className="flex-1">
                       {loading ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -204,13 +205,7 @@ const ProfileScreen = () => {
                         </>
                       )}
                     </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleCancel}
-                      disabled={loading}
-                      data-testid="cancel-edit-btn"
-                    >
+                    <Button type="button" variant="outline" onClick={handleCancel} disabled={loading}>
                       Cancel
                     </Button>
                   </div>
@@ -237,7 +232,7 @@ const ProfileScreen = () => {
                     <User className="h-5 w-5 text-gray-600 mt-0.5" />
                     <div>
                       <p className="text-sm text-gray-600">Account Type</p>
-                      <p className="font-medium capitalize">{userData.role}</p>
+                      <p className="font-medium capitalize">{userData.role || "customer"}</p>
                     </div>
                   </div>
                 </div>
@@ -247,11 +242,9 @@ const ProfileScreen = () => {
         </div>
       </div>
 
-      {/* Bottom Navigation */}
       <BottomNavigation />
     </div>
   );
 };
 
 export default ProfileScreen;
-
