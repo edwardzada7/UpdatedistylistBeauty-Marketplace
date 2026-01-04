@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ec4899;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#a855f7;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6366f1;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <circle cx="50" cy="50" r="48" fill="url(#logoGrad)"/>
+  <text x="50" y="42" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="white" text-anchor="middle">i</text>
+  <text x="50" y="70" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="white" text-anchor="middle">Stylist</text>
+</svg>

@@ -2,6 +2,10 @@
 export const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API_BASE = `${BACKEND_URL}/api`;
 
+// App Branding
+export const APP_NAME = "iStylist";
+export const APP_TAGLINE = "Book Beauty, Fashion & Event Services";
+
 // Currency
 export const CURRENCY = "₦";
 export const CURRENCY_NAME = "NGN";
@@ -30,19 +34,95 @@ export const USER_ROLES = {
   STYLIST: "stylist",
 };
 
-// Services offered by stylists
-export const STYLIST_SERVICES = [
-  { name: "Hair Styling", icon: "✂️", id: "hair" },
-  { name: "Makeup", icon: "💄", id: "makeup" },
-  { name: "Manicure", icon: "💅", id: "manicure" },
-  { name: "Pedicure", icon: "👣", id: "pedicure" },
-  { name: "Braiding", icon: "🧵", id: "braiding" },
-  { name: "Facial", icon: "✨", id: "facial" },
+// Service Categories with full structure
+export const SERVICE_CATEGORIES = [
+  {
+    id: "beauty-grooming",
+    name: "Beauty & Grooming",
+    icon: "✨",
+    color: "from-pink-500 to-rose-500",
+    services: [
+      { id: "barbers", name: "Barbers", icon: "✂️" },
+      { id: "braid-groomers", name: "Braid Groomers", icon: "🧵" },
+      { id: "dreadlocks", name: "Dreadlocks", icon: "🔒" },
+      { id: "hairdressers", name: "Hairdressers", icon: "💇" },
+      { id: "wig-specialists", name: "Wig Specialists", icon: "👩" },
+      { id: "makeup-artists", name: "Makeup Artists", icon: "💄" },
+      { id: "nail-technicians", name: "Nail Technicians", icon: "💅" },
+      { id: "manicure-pedicure", name: "Manicure & Pedicure", icon: "🦶" },
+      { id: "eyelash-technicians", name: "Eyelash Technicians", icon: "👁️" },
+      { id: "facials", name: "Facials (Estheticians)", icon: "🧖" },
+      { id: "cosmetologists", name: "Cosmetologists", icon: "🌸" },
+    ],
+  },
+  {
+    id: "body-aesthetics",
+    name: "Body & Aesthetics",
+    icon: "💎",
+    color: "from-purple-500 to-indigo-500",
+    notice: "Verified & Regulated Providers Only",
+    services: [
+      { id: "non-surgical-aesthetics", name: "Non-Surgical Aesthetics", icon: "💉" },
+      { id: "body-enhancement", name: "Non-Surgical Body Enhancement", icon: "✨" },
+      { id: "teeth-whitening", name: "Teeth Whitening", icon: "🦷" },
+      { id: "tattoo-removal", name: "Tattoo Removal", icon: "🔫" },
+      { id: "hair-transplant", name: "Hair Transplant", icon: "🧑" },
+      { id: "surgical-enhancement", name: "Surgical / Medical Body Enhancement", icon: "🏥" },
+    ],
+  },
+  {
+    id: "wellness-care",
+    name: "Wellness & Care",
+    icon: "🧘",
+    color: "from-green-500 to-teal-500",
+    services: [
+      { id: "spa-services", name: "Spa Services", icon: "🧖‍♀️" },
+      { id: "massage-therapy", name: "Massage Therapy", icon: "💆" },
+      { id: "body-therapy", name: "Body Therapy", icon: "🌿" },
+      { id: "wellness-treatments", name: "Wellness Treatments", icon: "🍃" },
+      { id: "relaxation-recovery", name: "Relaxation & Recovery", icon: "😌" },
+    ],
+  },
+  {
+    id: "fashion-bridal",
+    name: "Fashion & Bridal",
+    icon: "👗",
+    color: "from-amber-500 to-orange-500",
+    services: [
+      { id: "fashion-designers", name: "Fashion Designers", icon: "🎨" },
+      { id: "bridal-designers", name: "Bridal Designers", icon: "👰" },
+      { id: "models", name: "Models", icon: "🚶" },
+    ],
+  },
+  {
+    id: "events-entertainment",
+    name: "Events & Entertainment",
+    icon: "🎉",
+    color: "from-blue-500 to-cyan-500",
+    services: [
+      { id: "event-planners", name: "Event Planners", icon: "📋" },
+      { id: "mcs", name: "MCs", icon: "🎤" },
+      { id: "djs", name: "DJs", icon: "🎧" },
+      { id: "hype-men", name: "Hype Men", icon: "📢" },
+      { id: "artists-performers", name: "Artists / Performers", icon: "🎭" },
+      { id: "food-vendors", name: "Food Vendors", icon: "🍽️" },
+    ],
+  },
+  {
+    id: "classes-learning",
+    name: "Classes & Learning",
+    icon: "📚",
+    color: "from-violet-500 to-purple-500",
+    services: [
+      { id: "beauty-classes", name: "Beauty Classes", icon: "🎓" },
+    ],
+  },
 ];
 
-// App Info
-export const APP_NAME = "BeautyQ";
-export const APP_TAGLINE = "Find Your Perfect Stylist";
+// Legacy services for backward compatibility
+export const STYLIST_SERVICES = SERVICE_CATEGORIES.flatMap(cat => 
+  cat.services.map(s => ({ ...s, category: cat.id }))
+);
 
 // Phase Info
 export const PHASE = 1;
