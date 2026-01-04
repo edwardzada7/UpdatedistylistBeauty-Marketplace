@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Home, Users, Wallet, User as UserIcon } from "lucide-react";
+import { Home, Grid3X3, Users, Wallet, User as UserIcon } from "lucide-react";
 
 const BottomNavigation = () => {
   const navigate = useNavigate();
@@ -10,6 +10,11 @@ const BottomNavigation = () => {
       path: "/",
       icon: Home,
       label: "Home",
+    },
+    {
+      path: "/services",
+      icon: Grid3X3,
+      label: "Services",
     },
     {
       path: "/stylists",
