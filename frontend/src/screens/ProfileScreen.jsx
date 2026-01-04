@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { getCurrentUser, signOut } from '@/services/authService';
 import { useNavigate } from "react-router-dom";
@@ -253,3 +254,4 @@ const ProfileScreen = () => {
 };
 
 export default ProfileScreen;
+

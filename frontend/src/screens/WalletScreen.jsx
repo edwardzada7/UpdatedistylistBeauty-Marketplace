@@ -1,283 +1,188 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, Wallet, Plus, TrendingUp, Loader2 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Scissors, Wallet, User, Star, CheckCircle2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
-import { walletsAPI } from "@/services/api";
-import { CURRENCY, MIN_TOPUP_AMOUNT, QUICK_TOPUP_AMOUNTS, TOAST_MESSAGES } from "@/utils/constants";
-import LoadingSpinner from "@/components/LoadingSpinner";
+import { stylistsAPI } from "@/services/api";
+import { APP_NAME, APP_TAGLINE, CURRENCY } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
+import LoadingSpinner from "@/components/LoadingSpinner";
+import { useAuth } from "@/contexts/AuthContext";
 
-const WalletScreen = ({ currentUser }) => {
+export default function HomeScreen() {
   const navigate = useNavigate();
-  const [wallet, setWallet] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [isTopUpOpen, setIsTopUpOpen] = useState(false);
-  const [topUpAmount, setTopUpAmount] = useState("");
-  const [processing, setProcessing] = useState(false);
+  const { user, userData, loading } = useAuth();
+  const [topStylists, setTopStylists] = useState([]);
+  const [stats, setStats] = useState({ totalStylists: 0, verified: 0, premium: 0 });
+  const [loadingStylists, setLoadingStylists] = useState(true);
 
-  if (!currentUser) {
-    return null;
-  }
+  const userName = userData?.name || "User";
+  const displayName = userName.split(" ")[0];
 
   useEffect(() => {
-    fetchWallet();
-  }, []);
+    if (user) fetchTopStylists();
+  }, [user]);
 
-  const fetchWallet = async () => {
-    setLoading(true);
+  const fetchTopStylists = async () => {
+    setLoadingStylists(true);
     try {
-      const response = await walletsAPI.getByAuthId(currentUser.auth_id);
-      setWallet(response.data);
-    } catch (error) {
-      // If wallet doesn't exist, create one
-      if (error.response?.status === 404) {
-        await createWallet();
-      } else {
-        console.error("Failed to fetch wallet:", error);
-        toast.error("Failed to load wallet");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const createWallet = async () => {
-    try {
-      const response = await walletsAPI.create({
-        user_auth_id: currentUser.auth_id,
-        balance: 0.0,
+      const response = await stylistsAPI.getAll({ verifiedOnly: true, sortBy: "premium" });
+      const allStylists = response.data;
+      setTopStylists(allStylists.slice(0, 3));
+      setStats({
+        totalStylists: allStylists.length,
+        verified: allStylists.filter(s => s.is_verified).length,
+        premium: allStylists.filter(s => s.is_premium).length,
       });
-      setWallet(response.data);
-      toast.success("Wallet created successfully!");
-    } catch (error) {
-      console.error("Failed to create wallet:", error);
-      toast.error("Failed to create wallet");
-    }
-  };
-
-  const handleTopUp = async (e) => {
-    e.preventDefault();
-    const amount = parseFloat(topUpAmount);
-
-    if (!amount || amount <= 0) {
-      toast.error("Please enter a valid amount");
-      return;
-    }
-
-    if (amount < MIN_TOPUP_AMOUNT) {
-      toast.error(`Minimum top-up amount is ${CURRENCY}${MIN_TOPUP_AMOUNT}`);
-      return;
-    }
-
-    setProcessing(true);
-
-    try {
-      const response = await walletsAPI.topUp(wallet.id, amount);
-      setWallet((prev) => ({ ...prev, balance: response.data.new_balance }));
-      toast.success(`${CURRENCY}${amount.toLocaleString()} added to your wallet!`);
-      setIsTopUpOpen(false);
-      setTopUpAmount("");
-    } catch (error) {
-      console.error("Failed to top up wallet:", error);
-      toast.error(TOAST_MESSAGES.WALLET_TOPUP_FAILED);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load stylists");
     } finally {
-      setProcessing(false);
+      setLoadingStylists(false);
     }
   };
 
-  if (loading) {
-    return <LoadingSpinner fullScreen message="Loading wallet..." />;
-  }
+  if (loading) return <LoadingSpinner fullScreen message="Checking authentication..." />;
+  if (!user) return <div className="p-4">Please log in to see the home screen</div>;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
-      {/* Header */}
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
       <header className="bg-white shadow-sm border-b">
-        <div className="container mx-auto px-4 py-4 flex items-center gap-4">
+        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-600 to-purple-600 bg-clip-text text-transparent">
+              {APP_NAME}
+            </h1>
+            <p className="text-xs text-gray-600">{APP_TAGLINE}</p>
+          </div>
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate("/")}
-            data-testid="back-btn"
+            onClick={() => navigate("/profile")}
+            className="flex items-center gap-2"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <User className="h-4 w-4" />
+            <span className="hidden sm:inline">{userName}</span>
           </Button>
-          <h1 className="text-xl font-bold">My Wallet</h1>
         </div>
       </header>
 
-      {/* Content */}
-      <div className="container mx-auto px-4 py-8 pb-24 sm:pb-8">
-        <div className="max-w-2xl mx-auto space-y-6">
-          {/* Balance Card */}
-          <Card className="bg-gradient-to-br from-purple-600 to-pink-600 text-white border-0 shadow-xl" data-testid="balance-card">
-            <CardContent className="p-8">
-              <div className="flex items-start justify-between mb-6">
-                <div>
-                  <p className="text-purple-100 text-sm mb-2">Available Balance</p>
-                  <p className="text-4xl font-bold">
-                    {CURRENCY}{wallet?.balance?.toLocaleString() || "0"}
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                  <Wallet className="h-6 w-6" />
-                </div>
-              </div>
-              <Button
-                onClick={() => setIsTopUpOpen(true)}
-                className="w-full bg-white text-purple-600 hover:bg-purple-50"
-                size="lg"
-                data-testid="topup-btn"
-              >
-                <Plus className="mr-2 h-5 w-5" />
-                Top Up Wallet
-              </Button>
-            </CardContent>
-          </Card>
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-3">
+            Welcome, {displayName}! 👋
+          </h2>
+          <p className="text-gray-600 mb-6">Book verified beauty stylists in your area</p>
+        </div>
 
-          {/* Quick Top-Up */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Quick Top-Up</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-3">
-                {QUICK_TOPUP_AMOUNTS.map((amount) => (
-                  <Button
-                    key={amount}
-                    variant="outline"
-                    className="h-16 text-lg font-semibold"
-                    onClick={() => {
-                      setTopUpAmount(amount.toString());
-                      setIsTopUpOpen(true);
-                    }}
-                    data-testid={`quick-topup-${amount}`}
-                  >
-                    {CURRENCY}{amount.toLocaleString()}
-                  </Button>
-                ))}
+        <div className="grid sm:grid-cols-2 gap-4 max-w-2xl mx-auto mb-8">
+          <Card
+            className="cursor-pointer hover:shadow-lg transition-all hover:scale-105"
+            onClick={() => navigate("/stylists")}
+          >
+            <CardContent className="flex items-center gap-4 p-6">
+              <div className="p-3 bg-purple-100 rounded-full">
+                <Scissors className="h-6 w-6 text-purple-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg">Browse Stylists</h3>
+                <p className="text-sm text-gray-600">Find your perfect match</p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Info Card */}
-          <Card className="bg-blue-50 border-blue-200">
-            <CardContent className="p-6">
-              <div className="flex gap-3">
-                <TrendingUp className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <h3 className="font-semibold text-blue-900 mb-2">How It Works</h3>
-                  <ul className="space-y-1 text-sm text-blue-800">
-                    <li>• Top up your wallet to book stylists instantly</li>
-                    <li>• Secure payments with no hidden fees</li>
-                    <li>• Pay only for confirmed bookings</li>
-                    <li>• Refunds processed within 24 hours</li>
-                  </ul>
-                </div>
+          <Card
+            className="cursor-pointer hover:shadow-lg transition-all hover:scale-105"
+            onClick={() => navigate("/wallet")}
+          >
+            <CardContent className="flex items-center gap-4 p-6">
+              <div className="p-3 bg-green-100 rounded-full">
+                <Wallet className="h-6 w-6 text-green-600" />
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Transaction History Placeholder */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Recent Transactions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-gray-500">
-                <p className="text-sm">No transactions yet</p>
-                <p className="text-xs mt-1">Transaction history coming in Phase 2</p>
+              <div>
+                <h3 className="font-semibold text-lg">My Wallet</h3>
+                <p className="text-sm text-gray-600">Manage your balance</p>
               </div>
             </CardContent>
           </Card>
         </div>
+
+        <div className="max-w-4xl mx-auto mb-8">
+          <Card className="bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingUp className="h-5 w-5 text-purple-600" />
+                <h3 className="font-semibold text-purple-900">Marketplace Stats</h3>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-center">
+                  <p className="text-3xl font-bold text-purple-600">{stats.totalStylists}</p>
+                  <p className="text-xs text-gray-600 mt-1">Active Stylists</p>
+                </div>
+                <div className="text-center border-x border-purple-200">
+                  <p className="text-3xl font-bold text-green-600">{stats.verified}</p>
+                  <p className="text-xs text-gray-600 mt-1">Verified</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-3xl font-bold text-amber-600">{stats.premium}</p>
+                  <p className="text-xs text-gray-600 mt-1">Premium</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-gray-900">✨ Top Verified Stylists</h3>
+            <Button variant="link" onClick={() => navigate("/stylists")} size="sm">
+              View All →
+            </Button>
+          </div>
+
+          {loadingStylists ? (
+            <LoadingSpinner message="Loading top stylists..." />
+          ) : topStylists.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-gray-500">
+                <p>No verified stylists available yet</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid sm:grid-cols-3 gap-4">
+              {topStylists.map((stylist) => (
+                <Card
+                  key={stylist.user_id}
+                  className="cursor-pointer hover:shadow-lg transition-all"
+                  onClick={() => navigate(`/stylists/${stylist.user_id}`)}
+                >
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h4 className="font-semibold text-lg mb-1">{stylist.user_name || "Stylist"}</h4>
+                        <div className="flex items-center gap-1">
+                          {stylist.is_verified && <CheckCircle2 className="h-3 w-3 text-green-600" />}
+                          {stylist.is_premium && <Star className="h-3 w-3 text-amber-500 fill-amber-500" />}
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-2xl font-bold text-purple-600">
+                      {CURRENCY}{stylist.hourly_rate.toLocaleString()}
+                      <span className="text-sm text-gray-600">/hr</span>
+                    </p>
+                    {stylist.location && (
+                      <p className="text-xs text-gray-500 mt-2">📍 {stylist.location}</p>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Top-Up Dialog */}
-      <Dialog open={isTopUpOpen} onOpenChange={setIsTopUpOpen}>
-        <DialogContent data-testid="topup-dialog">
-          <DialogHeader>
-            <DialogTitle>Top Up Wallet</DialogTitle>
-            <DialogDescription>
-              Add funds to your wallet for seamless bookings
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleTopUp}>
-            <div className="space-y-4 py-4">
-              <div>
-                <Label htmlFor="amount">Amount (NGN) *</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  min={MIN_TOPUP_AMOUNT}
-                  step="100"
-                  value={topUpAmount}
-                  onChange={(e) => setTopUpAmount(e.target.value)}
-                  placeholder={`Enter amount (min. ${CURRENCY}${MIN_TOPUP_AMOUNT})`}
-                  required
-                  data-testid="topup-amount-input"
-                  className="mt-2"
-                />
-              </div>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-gray-600">Amount to add</span>
-                  <span className="font-medium">
-                    {CURRENCY}{topUpAmount ? parseFloat(topUpAmount).toLocaleString() : "0"}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Processing fee</span>
-                  <span className="font-medium text-green-600">{CURRENCY}0.00</span>
-                </div>
-                <div className="border-t mt-2 pt-2 flex justify-between">
-                  <span className="font-semibold">Total</span>
-                  <span className="font-bold text-lg">
-                    {CURRENCY}{topUpAmount ? parseFloat(topUpAmount).toLocaleString() : "0"}
-                  </span>
-                </div>
-              </div>
-              <p className="text-xs text-gray-500">
-                🛡️ This is a simulation. In production, integrate with payment gateway.
-              </p>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsTopUpOpen(false)}
-                disabled={processing}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={processing}
-                data-testid="confirm-topup-btn"
-              >
-                {processing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  "Confirm Top-Up"
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Bottom Navigation */}
       <BottomNavigation />
     </div>
   );
-};
-
-export default WalletScreen;
+}
