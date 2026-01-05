@@ -148,7 +148,7 @@ const ProfileScreen = () => {
                     <CardTitle className="text-2xl">{displayName}</CardTitle>
                     <div className="flex items-center gap-2 mt-2">
                       <Badge variant="outline" className="capitalize">
-                        {role === "stylist" ? "Provider" : "Customer"}
+                        {role === "provider" ? "Provider" : "Customer"}
                       </Badge>
                       {isProvider && providerData?.is_verified && (
                         <Badge className="bg-green-50 text-green-700 border-green-200">
