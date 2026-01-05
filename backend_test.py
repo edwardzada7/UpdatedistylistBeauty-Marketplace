@@ -506,7 +506,8 @@ if __name__ == "__main__":
         results["connection"],
         all(results["users_api"].values()),
         all(results["stylists_api"].values()),
-        all(results["wallets_api"].values())
+        all(results["wallets_api"].values()),
+        all(results["provider_services_api"].values())
     ])
     
     sys.exit(0 if all_passed else 1)
