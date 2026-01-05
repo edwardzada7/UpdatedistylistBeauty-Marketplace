@@ -21,7 +21,10 @@ function getErrorMessage(error, fallback = "An error occurred") {
  */
 export async function signUpWithEmail({ email, password, phone, fullName, role }) {
   try {
-    const { data, error } = await supabase.auth.signUp({
+    // Use a fresh client to avoid potential body stream issues
+    const freshClient = createFreshSupabaseClient();
+    
+    const { data, error } = await freshClient.auth.signUp({
       email,
       password,
       options: {
@@ -34,11 +37,18 @@ export async function signUpWithEmail({ email, password, phone, fullName, role }
     });
 
     if (error) {
-      throw new Error(getErrorMessage(error, "Failed to sign up"));
+      // Extract error message safely without accessing response body
+      const errorMsg = error.message || error.error_description || "Failed to sign up";
+      throw new Error(errorMsg);
     }
     return data;
   } catch (err) {
-    throw err instanceof Error ? err : new Error(getErrorMessage(err, "Failed to sign up"));
+    // Avoid re-throwing objects that might have consumed body streams
+    if (err instanceof Error) {
+      throw err;
+    }
+    const msg = typeof err === 'string' ? err : (err?.message || "Failed to sign up");
+    throw new Error(msg);
   }
 }
 
