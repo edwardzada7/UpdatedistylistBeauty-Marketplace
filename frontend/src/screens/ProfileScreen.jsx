@@ -5,11 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, User, Mail, Phone, Save, Loader2, LogOut, Shield, Star } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { ArrowLeft, User, Mail, Phone, Save, Loader2, LogOut, Shield, Star, MapPin, FileText } from "lucide-react";
 import { toast } from "sonner";
-import { usersAPI } from "@/services/api";
+import { usersAPI, stylistsAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { TOAST_MESSAGES, APP_NAME } from "@/utils/constants";
+import { TOAST_MESSAGES, APP_NAME, CURRENCY } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
@@ -19,10 +20,20 @@ const ProfileScreen = () => {
   const { user, userData, providerData, displayName, role, isProvider, signOut, refreshUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [editingProvider, setEditingProvider] = useState(false);
+  
+  // User form data
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     phone: "",
+  });
+  
+  // Provider form data
+  const [providerFormData, setProviderFormData] = useState({
+    hourly_rate: 0,
+    bio: "",
+    location: "",
   });
 
   // Initialize form data from userData or user metadata
@@ -42,6 +53,17 @@ const ProfileScreen = () => {
     }
   }, [userData, user]);
 
+  // Initialize provider form data
+  useEffect(() => {
+    if (providerData) {
+      setProviderFormData({
+        hourly_rate: providerData.hourly_rate || 0,
+        bio: providerData.bio || "",
+        location: providerData.location || "",
+      });
+    }
+  }, [providerData]);
+
   const handleUpdate = async (e) => {
     e.preventDefault();
     
@@ -53,12 +75,42 @@ const ProfileScreen = () => {
     setLoading(true);
     try {
       await usersAPI.update(userData.id, formData);
-      toast.success(TOAST_MESSAGES.PROFILE_UPDATED);
+      toast.success("Profile updated successfully!", {
+        description: "Your changes have been saved."
+      });
       setEditing(false);
       await refreshUser();
     } catch (error) {
       console.error("Failed to update profile:", error);
-      toast.error(TOAST_MESSAGES.PROFILE_UPDATE_FAILED);
+      toast.error("Failed to update profile", {
+        description: error.response?.data?.detail || error.message
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleProviderUpdate = async (e) => {
+    e.preventDefault();
+    
+    if (!userData?.id) {
+      toast.error("Unable to update provider info. Please try again later.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await stylistsAPI.update(userData.id, providerFormData);
+      toast.success("Provider info updated successfully!", {
+        description: "Your business profile has been updated."
+      });
+      setEditingProvider(false);
+      await refreshUser();
+    } catch (error) {
+      console.error("Failed to update provider info:", error);
+      toast.error("Failed to update provider info", {
+        description: error.response?.data?.detail || error.message
+      });
     } finally {
       setLoading(false);
     }
@@ -71,6 +123,15 @@ const ProfileScreen = () => {
       phone: userData?.phone || user?.user_metadata?.phone || "",
     });
     setEditing(false);
+  };
+
+  const handleProviderCancel = () => {
+    setProviderFormData({
+      hourly_rate: providerData?.hourly_rate || 0,
+      bio: providerData?.bio || "",
+      location: providerData?.location || "",
+    });
+    setEditingProvider(false);
   };
 
   const handleSignOut = async () => {
@@ -148,7 +209,7 @@ const ProfileScreen = () => {
                     <CardTitle className="text-2xl">{displayName}</CardTitle>
                     <div className="flex items-center gap-2 mt-2">
                       <Badge variant="outline" className="capitalize">
-                        {role === "provider" ? "Provider" : "Customer"}
+                        {role === "stylist" || role === "provider" ? "Provider" : "Customer"}
                       </Badge>
                       {isProvider && providerData?.is_verified && (
                         <Badge className="bg-green-50 text-green-700 border-green-200">
@@ -261,7 +322,9 @@ const ProfileScreen = () => {
                     <User className="h-5 w-5 text-gray-600 mt-0.5" />
                     <div>
                       <p className="text-sm text-gray-600">Account Type</p>
-                      <p className="font-medium capitalize">{role === "provider" ? "Service Provider" : "Customer"}</p>
+                      <p className="font-medium capitalize">
+                        {role === "stylist" || role === "provider" ? "Service Provider" : "Customer"}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -270,39 +333,121 @@ const ProfileScreen = () => {
           </Card>
 
           {/* Provider-specific info */}
-          {isProvider && providerData && (
+          {isProvider && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Provider Information</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg">
-                  <div>
-                    <p className="text-sm text-gray-600">Hourly Rate</p>
-                    <p className="text-2xl font-bold text-purple-600">
-                      ₦{providerData.hourly_rate?.toLocaleString() || "0"}
-                    </p>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => navigate("/my-services")}
-                    className="text-purple-600 border-purple-300"
-                  >
-                    Manage Services
-                  </Button>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Provider Information</CardTitle>
+                  {!editingProvider && (
+                    <Button onClick={() => setEditingProvider(true)} size="sm" variant="outline">
+                      Edit Info
+                    </Button>
+                  )}
                 </div>
+              </CardHeader>
+              <CardContent>
+                {editingProvider ? (
+                  <form onSubmit={handleProviderUpdate} className="space-y-6">
+                    <div>
+                      <Label htmlFor="hourly_rate">Hourly Rate ({CURRENCY})</Label>
+                      <Input
+                        id="hourly_rate"
+                        type="number"
+                        value={providerFormData.hourly_rate}
+                        onChange={(e) => setProviderFormData({ ...providerFormData, hourly_rate: parseFloat(e.target.value) || 0 })}
+                        className="mt-2"
+                        min={0}
+                      />
+                    </div>
 
-                {providerData.bio && (
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-600 mb-2">Bio</p>
-                    <p>{providerData.bio}</p>
-                  </div>
-                )}
+                    <div>
+                      <Label htmlFor="location">Location</Label>
+                      <div className="relative mt-2">
+                        <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          id="location"
+                          value={providerFormData.location}
+                          onChange={(e) => setProviderFormData({ ...providerFormData, location: e.target.value })}
+                          className="pl-10"
+                          placeholder="Your location"
+                        />
+                      </div>
+                    </div>
 
-                {providerData.location && (
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-600 mb-2">Location</p>
-                    <p>{providerData.location}</p>
+                    <div>
+                      <Label htmlFor="bio">Bio</Label>
+                      <Textarea
+                        id="bio"
+                        value={providerFormData.bio}
+                        onChange={(e) => setProviderFormData({ ...providerFormData, bio: e.target.value })}
+                        className="mt-2"
+                        placeholder="Tell clients about yourself and your services..."
+                        rows={4}
+                      />
+                    </div>
+
+                    <div className="flex gap-3">
+                      <Button type="submit" disabled={loading} className="flex-1">
+                        {loading ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="mr-2 h-4 w-4" />
+                            Save Provider Info
+                          </>
+                        )}
+                      </Button>
+                      <Button type="button" variant="outline" onClick={handleProviderCancel} disabled={loading}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg">
+                      <div>
+                        <p className="text-sm text-gray-600">Hourly Rate</p>
+                        <p className="text-2xl font-bold text-purple-600">
+                          {CURRENCY}{providerData?.hourly_rate?.toLocaleString() || "0"}
+                        </p>
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => navigate("/my-services")}
+                        className="text-purple-600 border-purple-300"
+                      >
+                        Manage Services
+                      </Button>
+                    </div>
+
+                    {providerData?.location && (
+                      <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
+                        <MapPin className="h-5 w-5 text-gray-600 mt-0.5" />
+                        <div>
+                          <p className="text-sm text-gray-600">Location</p>
+                          <p className="font-medium">{providerData.location}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {providerData?.bio && (
+                      <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
+                        <FileText className="h-5 w-5 text-gray-600 mt-0.5" />
+                        <div>
+                          <p className="text-sm text-gray-600">Bio</p>
+                          <p className="font-medium">{providerData.bio}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {!providerData?.location && !providerData?.bio && (
+                      <p className="text-sm text-gray-500 text-center py-4">
+                        Add a location and bio to help clients find you!
+                      </p>
+                    )}
                   </div>
                 )}
               </CardContent>
