@@ -19,9 +19,10 @@ class BackendTester:
         self.session = requests.Session()
         self.test_results = {
             "connection": False,
-            "users_api": {"get_all": False, "create": False, "get_by_auth": False},
-            "stylists_api": {"get_all": False, "create": False, "get_by_id": False},
+            "users_api": {"get_all": False, "create": False, "get_by_auth": False, "update": False},
+            "stylists_api": {"get_all": False, "create": False, "get_by_id": False, "update": False},
             "wallets_api": {"get_all": False, "create": False, "get_by_auth": False},
+            "provider_services_api": {"get_services": False, "create_service": False, "update_service": False, "bulk_update": False, "delete_service": False},
             "errors": []
         }
         
