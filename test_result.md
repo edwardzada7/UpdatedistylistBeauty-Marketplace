@@ -461,7 +461,9 @@ metadata:
 
 test_plan:
   current_focus:
-    - "iStylist Phase 1 Stabilization"
+    - "Provider Services CRUD API"
+    - "Provider Services Screen"
+    - "Profile Screen Edit Functionality"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
