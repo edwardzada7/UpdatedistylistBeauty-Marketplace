@@ -61,7 +61,7 @@ export default function WalletScreen() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate("/")}
+            onClick={() => navigate(isProvider ? "/dashboard" : "/")}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
