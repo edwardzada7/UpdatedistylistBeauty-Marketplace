@@ -8,19 +8,23 @@ import SignUpScreen from "@/screens/SignUpScreen";
 import LoginScreen from "@/screens/LoginScreen";
 import ForgotPasswordScreen from "@/screens/ForgotPasswordScreen";
 
-// App Screens
+// User (Customer) Screens
 import HomeScreen from "@/screens/HomeScreen";
 import ProfileScreen from "@/screens/ProfileScreen";
-import StylistsListScreen from "@/screens/StylistsListScreen";
-import StylistProfileScreen from "@/screens/StylistProfileScreen";
+import ProvidersListScreen from "@/screens/ProvidersListScreen";
+import ProviderProfileScreen from "@/screens/ProviderProfileScreen";
 import WalletScreen from "@/screens/WalletScreen";
 import ServicesScreen from "@/screens/ServicesScreen";
+
+// Provider (Stylist) Screens
+import ProviderDashboard from "@/screens/ProviderDashboard";
+import ProviderServicesScreen from "@/screens/ProviderServicesScreen";
 
 // Components
 import LoadingSpinner from "@/components/LoadingSpinner";
 
 /**
- * ProtectedRoute - Requires authentication only
+ * ProtectedRoute - Requires authentication
  * Redirects to /login if not authenticated
  */
 const ProtectedRoute = ({ children }) => {
@@ -39,24 +43,38 @@ const ProtectedRoute = ({ children }) => {
 
 /**
  * PublicRoute - Only accessible when NOT authenticated
- * Redirects to home if already authenticated
+ * Redirects based on user role
  */
 const PublicRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, isProvider } = useAuth();
 
   if (loading) {
     return <LoadingSpinner fullScreen message="Loading..." />;
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/home" replace />;
+    // Redirect based on role
+    return <Navigate to={isProvider ? "/dashboard" : "/home"} replace />;
   }
 
   return children;
 };
 
+/**
+ * RoleBasedRedirect - Redirects based on user role
+ */
+const RoleBasedRedirect = () => {
+  const { isAuthenticated, isProvider } = useAuth();
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return <Navigate to={isProvider ? "/dashboard" : "/home"} replace />;
+};
+
 function AppRoutes() {
-  const { userData, isAuthenticated } = useAuth();
+  const { userData, isProvider, displayName } = useAuth();
 
   return (
     <Routes>
@@ -86,20 +104,15 @@ function AppRoutes() {
         }
       />
 
-      {/* Protected Routes - Require authentication */}
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <HomeScreen currentUser={userData} />
-          </ProtectedRoute>
-        }
-      />
+      {/* Root redirect based on role */}
+      <Route path="/" element={<RoleBasedRedirect />} />
+
+      {/* USER (CUSTOMER) ROUTES */}
       <Route
         path="/home"
         element={
           <ProtectedRoute>
-            <HomeScreen currentUser={userData} />
+            <HomeScreen />
           </ProtectedRoute>
         }
       />
@@ -107,31 +120,41 @@ function AppRoutes() {
         path="/services"
         element={
           <ProtectedRoute>
-            <ServicesScreen currentUser={userData} />
+            <ServicesScreen />
           </ProtectedRoute>
         }
       />
       <Route
-        path="/profile"
+        path="/providers"
         element={
           <ProtectedRoute>
-            <ProfileScreen currentUser={userData} />
+            <ProvidersListScreen />
           </ProtectedRoute>
         }
       />
+      {/* Legacy route for backward compatibility */}
       <Route
         path="/stylists"
         element={
           <ProtectedRoute>
-            <StylistsListScreen currentUser={userData} />
+            <ProvidersListScreen />
           </ProtectedRoute>
         }
       />
       <Route
+        path="/providers/:userId"
+        element={
+          <ProtectedRoute>
+            <ProviderProfileScreen />
+          </ProtectedRoute>
+        }
+      />
+      {/* Legacy route */}
+      <Route
         path="/stylists/:userId"
         element={
           <ProtectedRoute>
-            <StylistProfileScreen currentUser={userData} />
+            <ProviderProfileScreen />
           </ProtectedRoute>
         }
       />
@@ -139,20 +162,39 @@ function AppRoutes() {
         path="/wallet"
         element={
           <ProtectedRoute>
-            <WalletScreen currentUser={userData} />
+            <WalletScreen />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <ProfileScreen />
           </ProtectedRoute>
         }
       />
 
-      {/* Catch all - redirect based on auth state */}
+      {/* PROVIDER (STYLIST) ROUTES */}
       <Route
-        path="*"
+        path="/dashboard"
         element={
-          isAuthenticated 
-            ? <Navigate to="/home" replace />
-            : <Navigate to="/login" replace />
+          <ProtectedRoute>
+            <ProviderDashboard />
+          </ProtectedRoute>
         }
       />
+      <Route
+        path="/my-services"
+        element={
+          <ProtectedRoute>
+            <ProviderServicesScreen />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Catch all - redirect based on auth state and role */}
+      <Route path="*" element={<RoleBasedRedirect />} />
     </Routes>
   );
 }
