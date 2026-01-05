@@ -5,43 +5,51 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Scissors, Wallet, User, Star, CheckCircle2, TrendingUp, Grid3X3, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { stylistsAPI } from "@/services/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { APP_NAME, APP_TAGLINE, CURRENCY, SERVICE_CATEGORIES } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
-const HomeScreen = ({ currentUser }) => {
+const HomeScreen = () => {
   const navigate = useNavigate();
-  const [topStylists, setTopStylists] = useState([]);
-  const [stats, setStats] = useState({ totalStylists: 0, verified: 0, premium: 0 });
+  const { displayName, isProvider } = useAuth();
+  const [topProviders, setTopProviders] = useState([]);
+  const [stats, setStats] = useState({ totalProviders: 0, verified: 0, premium: 0 });
   const [loading, setLoading] = useState(true);
 
-  const userName = currentUser?.name || "User";
-  const displayName = userName.split(" ")[0];
+  // Redirect providers to dashboard
+  useEffect(() => {
+    if (isProvider) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [isProvider, navigate]);
 
   useEffect(() => {
-    fetchTopStylists();
+    fetchTopProviders();
   }, []);
 
-  const fetchTopStylists = async () => {
+  const fetchTopProviders = async () => {
     try {
       const response = await stylistsAPI.getAll({ 
         verifiedOnly: true, 
         sortBy: "premium" 
       });
-      const allStylists = response.data;
-      setTopStylists(allStylists.slice(0, 3));
+      const allProviders = response.data;
+      setTopProviders(allProviders.slice(0, 3));
       
       setStats({
-        totalStylists: allStylists.length,
-        verified: allStylists.filter(s => s.is_verified).length,
-        premium: allStylists.filter(s => s.is_premium).length,
+        totalProviders: allProviders.length,
+        verified: allProviders.filter(s => s.is_verified).length,
+        premium: allProviders.filter(s => s.is_premium).length,
       });
     } catch (error) {
-      console.error("Failed to fetch stylists:", error);
+      console.error("Failed to fetch providers:", error);
     } finally {
       setLoading(false);
     }
   };
+
+  const firstName = displayName.split(" ")[0];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
@@ -66,7 +74,7 @@ const HomeScreen = ({ currentUser }) => {
             className="flex items-center gap-2"
           >
             <User className="h-4 w-4" />
-            <span className="hidden sm:inline">{userName}</span>
+            <span className="hidden sm:inline">{displayName}</span>
           </Button>
         </div>
       </header>
@@ -75,7 +83,7 @@ const HomeScreen = ({ currentUser }) => {
       <div className="container mx-auto px-4 py-8">
         <div className="text-center mb-8">
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-3">
-            Welcome, {displayName}! 👋
+            Welcome, {firstName}! 👋
           </h2>
           <p className="text-gray-600 mb-6">
             {APP_TAGLINE}
@@ -101,15 +109,15 @@ const HomeScreen = ({ currentUser }) => {
 
           <Card
             className="cursor-pointer hover:shadow-lg transition-all hover:scale-105"
-            onClick={() => navigate("/stylists")}
+            onClick={() => navigate("/providers")}
           >
             <CardContent className="flex items-center gap-4 p-6">
               <div className="p-3 bg-purple-100 rounded-full">
                 <Scissors className="h-6 w-6 text-purple-600" />
               </div>
               <div>
-                <h3 className="font-semibold text-lg">Stylists</h3>
-                <p className="text-sm text-gray-600">Find providers</p>
+                <h3 className="font-semibold text-lg">Providers</h3>
+                <p className="text-sm text-gray-600">Find services</p>
               </div>
             </CardContent>
           </Card>
@@ -169,7 +177,7 @@ const HomeScreen = ({ currentUser }) => {
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div className="text-center">
-                  <p className="text-3xl font-bold text-purple-600">{stats.totalStylists}</p>
+                  <p className="text-3xl font-bold text-purple-600">{stats.totalProviders}</p>
                   <p className="text-xs text-gray-600 mt-1">Active Providers</p>
                 </div>
                 <div className="text-center border-x border-purple-200">
@@ -185,25 +193,25 @@ const HomeScreen = ({ currentUser }) => {
           </Card>
         </div>
 
-        {/* Top Verified Stylists */}
+        {/* Top Verified Providers */}
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xl font-bold text-gray-900">✨ Top Verified Providers</h3>
-            <Button variant="link" onClick={() => navigate("/stylists")} size="sm">
+            <Button variant="link" onClick={() => navigate("/providers")} size="sm">
               View All →
             </Button>
           </div>
 
           {loading ? (
             <LoadingSpinner message="Loading top providers..." />
-          ) : topStylists.length === 0 ? (
+          ) : topProviders.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center text-gray-500">
                 <p>No verified providers available yet</p>
                 <Button 
                   variant="link" 
                   className="mt-2"
-                  onClick={() => navigate("/stylists")}
+                  onClick={() => navigate("/providers")}
                 >
                   Browse All Providers
                 </Button>
@@ -211,35 +219,35 @@ const HomeScreen = ({ currentUser }) => {
             </Card>
           ) : (
             <div className="grid sm:grid-cols-3 gap-4">
-              {topStylists.map((stylist) => (
+              {topProviders.map((provider) => (
                 <Card
-                  key={stylist.user_id}
+                  key={provider.user_id}
                   className="cursor-pointer hover:shadow-lg transition-all"
-                  onClick={() => navigate(`/stylists/${stylist.user_id}`)}
+                  onClick={() => navigate(`/providers/${provider.user_id}`)}
                 >
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <h4 className="font-semibold text-lg mb-1">
-                          {stylist.user_name || "Provider"}
+                          {provider.user_name || "Provider"}
                         </h4>
                         <div className="flex items-center gap-1">
-                          {stylist.is_verified && (
+                          {provider.is_verified && (
                             <CheckCircle2 className="h-3 w-3 text-green-600" />
                           )}
-                          {stylist.is_premium && (
+                          {provider.is_premium && (
                             <Star className="h-3 w-3 text-amber-500 fill-amber-500" />
                           )}
                         </div>
                       </div>
                     </div>
                     <p className="text-2xl font-bold text-purple-600">
-                      {CURRENCY}{stylist.hourly_rate?.toLocaleString() || "0"}
+                      {CURRENCY}{provider.hourly_rate?.toLocaleString() || "0"}
                       <span className="text-sm text-gray-600">/hr</span>
                     </p>
-                    {stylist.location && (
+                    {provider.location && (
                       <p className="text-xs text-gray-500 mt-2">
-                        📍 {stylist.location}
+                        📍 {provider.location}
                       </p>
                     )}
                   </CardContent>
