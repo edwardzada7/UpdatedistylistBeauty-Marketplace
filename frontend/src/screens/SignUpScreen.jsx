@@ -121,14 +121,14 @@ export default function SignUpScreen() {
               
               <button
                 type="button"
-                onClick={() => setRole("stylist")}
+                onClick={() => setRole("provider")}
                 className={`flex flex-col items-center p-4 rounded-xl border-2 transition-all ${
-                  role === "stylist"
+                  role === "provider"
                     ? "border-purple-500 bg-purple-50 text-purple-700"
                     : "border-gray-200 hover:border-gray-300 text-gray-600"
                 }`}
               >
-                <Scissors className={`h-6 w-6 mb-2 ${role === "stylist" ? "text-purple-500" : "text-gray-400"}`} />
+                <Scissors className={`h-6 w-6 mb-2 ${role === "provider" ? "text-purple-500" : "text-gray-400"}`} />
                 <span className="font-medium">Offer Services</span>
                 <span className="text-xs mt-1 opacity-70">As a Provider</span>
               </button>
