@@ -57,17 +57,32 @@ export async function signUpWithEmail({ email, password, phone, fullName, role }
  */
 export async function loginWithEmail(email, password) {
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({
+    // Use a fresh client to avoid potential body stream issues
+    const freshClient = createFreshSupabaseClient();
+    
+    const { data, error } = await freshClient.auth.signInWithPassword({
       email,
       password,
     });
 
     if (error) {
-      throw new Error(getErrorMessage(error, "Failed to login"));
+      // Extract error message safely
+      const errorMsg = error.message || error.error_description || "Failed to login";
+      throw new Error(errorMsg);
     }
+    
+    // Also update the main client session
+    if (data?.session) {
+      await supabase.auth.setSession(data.session);
+    }
+    
     return data;
   } catch (err) {
-    throw err instanceof Error ? err : new Error(getErrorMessage(err, "Failed to login"));
+    if (err instanceof Error) {
+      throw err;
+    }
+    const msg = typeof err === 'string' ? err : (err?.message || "Failed to login");
+    throw new Error(msg);
   }
 }
 
