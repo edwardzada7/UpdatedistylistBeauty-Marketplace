@@ -94,15 +94,15 @@ class WalletResponse(BaseModel):
     balance: float
 
 
-# Provider Services Models (for service toggle persistence)
+# Provider Services Models (using existing 'services' table)
 class ProviderServiceCreate(BaseModel):
-    provider_id: int  # user_id from stylists table
-    service_id: str  # service identifier from constants
-    service_name: str
+    provider_id: int  # user_id from stylists table (maps to stylist_id)
+    service_id: str  # service identifier from constants (stored in category)
+    service_name: str  # maps to 'name'
     price: float = 0.0
     duration: int = 60  # in minutes
-    enabled: bool = True
-    consultation_required: bool = False
+    enabled: bool = True  # Will be stored as category suffix '_disabled' if false
+    consultation_required: bool = False  # Not supported in current table, ignored
 
 class ProviderServiceUpdate(BaseModel):
     price: Optional[float] = None
@@ -112,13 +112,13 @@ class ProviderServiceUpdate(BaseModel):
 
 class ProviderServiceResponse(BaseModel):
     id: int
-    provider_id: int
-    service_id: str
-    service_name: str
+    provider_id: int  # stylist_id
+    service_id: str  # category
+    service_name: str  # name
     price: float
     duration: int
     enabled: bool
-    consultation_required: bool
+    consultation_required: bool = False
 
 
 # ==================== DATABASE CONNECTION TEST ====================
