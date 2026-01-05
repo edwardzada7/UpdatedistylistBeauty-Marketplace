@@ -425,6 +425,7 @@ class BackendTester:
         self.test_users_api()
         self.test_stylists_api()
         self.test_wallets_api()
+        self.test_provider_services_api()
         
         # Cleanup
         self.cleanup_test_data()
