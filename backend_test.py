@@ -74,7 +74,7 @@ class BackendTester:
     def test_users_api(self) -> Dict[str, bool]:
         """Test Users CRUD API endpoints"""
         print(f"\n👥 Testing Users API")
-        results = {"get_all": False, "create": False, "get_by_auth": False}
+        results = {"get_all": False, "create": False, "get_by_auth": False, "update": False}
         
         # Test GET /api/users
         try:
