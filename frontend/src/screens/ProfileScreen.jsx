@@ -261,7 +261,7 @@ const ProfileScreen = () => {
                     <User className="h-5 w-5 text-gray-600 mt-0.5" />
                     <div>
                       <p className="text-sm text-gray-600">Account Type</p>
-                      <p className="font-medium capitalize">{role === "stylist" ? "Service Provider" : "Customer"}</p>
+                      <p className="font-medium capitalize">{role === "provider" ? "Service Provider" : "Customer"}</p>
                     </div>
                   </div>
                 </div>
