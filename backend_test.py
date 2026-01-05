@@ -147,7 +147,7 @@ class BackendTester:
     def test_stylists_api(self) -> Dict[str, bool]:
         """Test Stylists CRUD API endpoints"""
         print(f"\n💄 Testing Stylists API")
-        results = {"get_all": False, "create": False, "get_by_id": False}
+        results = {"get_all": False, "create": False, "get_by_id": False, "update": False}
         
         # Test GET /api/stylists
         try:
