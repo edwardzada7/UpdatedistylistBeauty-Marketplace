@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,11 +8,11 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { 
   ArrowLeft, Save, Loader2, DollarSign, Clock, 
-  MessageSquare, CheckCircle2 
+  MessageSquare, CheckCircle2, AlertCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { stylistsAPI } from "@/services/api";
+import { stylistsAPI, providerServicesAPI } from "@/services/api";
 import { CURRENCY, SERVICE_CATEGORIES, STYLIST_SERVICES } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -23,22 +23,72 @@ const ProviderServicesScreen = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hourlyRate, setHourlyRate] = useState(providerData?.hourly_rate || 0);
+  const [hasChanges, setHasChanges] = useState(false);
   
-  // Service states - in real app, this would come from backend
+  // Service states
   const [services, setServices] = useState([]);
   
-  // Initialize services from categories
+  // Load services from database
+  const loadServices = useCallback(async () => {
+    if (!userData?.id) return;
+    
+    try {
+      setLoading(true);
+      
+      // Initialize all services from constants
+      const allServices = STYLIST_SERVICES.map(service => ({
+        ...service,
+        enabled: false,
+        price: 0,
+        duration: 60,
+        consultationRequired: false,
+        dbId: null, // ID from database if exists
+      }));
+      
+      // Try to load saved services from database
+      try {
+        const response = await providerServicesAPI.getByProviderId(userData.id);
+        const savedServices = response.data;
+        
+        // Merge saved data with all services
+        const mergedServices = allServices.map(service => {
+          const saved = savedServices.find(s => s.service_id === service.id);
+          if (saved) {
+            return {
+              ...service,
+              enabled: saved.enabled,
+              price: saved.price,
+              duration: saved.duration,
+              consultationRequired: saved.consultation_required,
+              dbId: saved.id,
+            };
+          }
+          return service;
+        });
+        
+        setServices(mergedServices);
+      } catch (error) {
+        // If provider_services table doesn't exist or is empty, use defaults
+        console.log("No saved services found, using defaults");
+        setServices(allServices);
+      }
+      
+      // Set hourly rate from provider data
+      if (providerData?.hourly_rate) {
+        setHourlyRate(providerData.hourly_rate);
+      }
+    } catch (error) {
+      console.error("Failed to load services:", error);
+      toast.error("Failed to load services");
+    } finally {
+      setLoading(false);
+    }
+  }, [userData?.id, providerData?.hourly_rate]);
+  
+  // Initial load
   useEffect(() => {
-    const allServices = STYLIST_SERVICES.map(service => ({
-      ...service,
-      enabled: false,
-      price: 0,
-      duration: 60,
-      consultationRequired: false,
-    }));
-    setServices(allServices);
-    setLoading(false);
-  }, []);
+    loadServices();
+  }, [loadServices]);
 
   // Redirect non-providers
   useEffect(() => {
@@ -51,40 +101,90 @@ const ProviderServicesScreen = () => {
     setServices(prev => prev.map(s => 
       s.id === serviceId ? { ...s, enabled: !s.enabled } : s
     ));
+    setHasChanges(true);
   };
 
   const handlePriceChange = (serviceId, price) => {
     setServices(prev => prev.map(s => 
       s.id === serviceId ? { ...s, price: parseFloat(price) || 0 } : s
     ));
+    setHasChanges(true);
   };
 
   const handleDurationChange = (serviceId, duration) => {
     setServices(prev => prev.map(s => 
       s.id === serviceId ? { ...s, duration: parseInt(duration) || 60 } : s
     ));
+    setHasChanges(true);
   };
 
   const handleConsultationToggle = (serviceId) => {
     setServices(prev => prev.map(s => 
       s.id === serviceId ? { ...s, consultationRequired: !s.consultationRequired } : s
     ));
+    setHasChanges(true);
+  };
+
+  const handleHourlyRateChange = (value) => {
+    setHourlyRate(parseFloat(value) || 0);
+    setHasChanges(true);
   };
 
   const handleSave = async () => {
+    if (!userData?.id) {
+      toast.error("User data not available");
+      return;
+    }
+    
     setSaving(true);
     try {
       // Update hourly rate
-      if (userData?.id) {
-        await stylistsAPI.update(userData.id, { hourly_rate: hourlyRate });
+      await stylistsAPI.update(userData.id, { hourly_rate: hourlyRate });
+      
+      // Prepare enabled services for bulk update
+      const enabledServices = services
+        .filter(s => s.enabled)
+        .map(s => ({
+          provider_id: userData.id,
+          service_id: s.id,
+          service_name: s.name,
+          price: s.price,
+          duration: s.duration,
+          enabled: true,
+          consultation_required: s.consultationRequired,
+        }));
+      
+      // Also save disabled services that were previously enabled (to track state)
+      const disabledServices = services
+        .filter(s => !s.enabled && s.dbId) // Only save disabled if they had a dbId (existed before)
+        .map(s => ({
+          provider_id: userData.id,
+          service_id: s.id,
+          service_name: s.name,
+          price: s.price,
+          duration: s.duration,
+          enabled: false,
+          consultation_required: s.consultationRequired,
+        }));
+      
+      const allServicesToSave = [...enabledServices, ...disabledServices];
+      
+      if (allServicesToSave.length > 0) {
+        await providerServicesAPI.bulkUpdate(userData.id, allServicesToSave);
       }
       
-      // In Phase 2, we would also save individual service settings
-      toast.success("Services updated successfully!");
+      // Refresh user data
       await refreshUser();
+      
+      setHasChanges(false);
+      toast.success("Services saved successfully!", {
+        description: `${enabledServices.length} active services`
+      });
     } catch (error) {
       console.error("Failed to save services:", error);
-      toast.error("Failed to save changes");
+      toast.error("Failed to save changes", {
+        description: error.response?.data?.detail || error.message
+      });
     } finally {
       setSaving(false);
     }
@@ -114,19 +214,27 @@ const ProviderServicesScreen = () => {
               <p className="text-xs text-gray-500">Manage your service offerings</p>
             </div>
           </div>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" />
-                Save Changes
-              </>
+          <div className="flex items-center gap-2">
+            {hasChanges && (
+              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Unsaved
+              </Badge>
             )}
-          </Button>
+            <Button onClick={handleSave} disabled={saving || !hasChanges}>
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save Changes
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -147,7 +255,7 @@ const ProviderServicesScreen = () => {
                   id="hourlyRate"
                   type="number"
                   value={hourlyRate}
-                  onChange={(e) => setHourlyRate(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => handleHourlyRateChange(e.target.value)}
                   className="mt-2"
                   min={0}
                 />
@@ -182,13 +290,22 @@ const ProviderServicesScreen = () => {
           const categoryServices = services.filter(s => s.category === category.id);
           if (categoryServices.length === 0) return null;
 
+          const enabledInCategory = categoryServices.filter(s => s.enabled).length;
+
           return (
             <Card key={category.id} className="mb-4">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <span className="text-xl">{category.icon}</span>
-                  {category.name}
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <span className="text-xl">{category.icon}</span>
+                    {category.name}
+                  </CardTitle>
+                  {enabledInCategory > 0 && (
+                    <Badge variant="outline" className="text-xs">
+                      {enabledInCategory} active
+                    </Badge>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -258,7 +375,7 @@ const ProviderServicesScreen = () => {
                             />
                             <Label htmlFor={`consult-${service.id}`} className="text-xs">
                               <MessageSquare className="h-3 w-3 inline mr-1" />
-                              Consultation Required
+                              Consultation
                             </Label>
                           </div>
                         </div>
@@ -271,10 +388,10 @@ const ProviderServicesScreen = () => {
           );
         })}
 
-        {/* Phase 2 Notice */}
-        <div className="p-4 bg-purple-50 rounded-xl border border-purple-100">
-          <p className="text-sm text-purple-700 text-center">
-            💡 Service availability scheduling and booking management coming in Phase 2
+        {/* Info Notice */}
+        <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+          <p className="text-sm text-blue-700 text-center">
+            💡 Toggle services ON to offer them. Set prices and durations for each service. Changes are saved when you click "Save Changes".
           </p>
         </div>
       </div>
