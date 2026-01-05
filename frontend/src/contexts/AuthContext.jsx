@@ -55,6 +55,71 @@ export const AuthProvider = ({ children }) => {
   }, [getRole]);
 
   /**
+   * Create user in backend if doesn't exist
+   */
+  const ensureUserExists = async (authUser) => {
+    if (!authUser) return null;
+    
+    try {
+      // Try to get existing user
+      const response = await usersAPI.getByAuthId(authUser.id);
+      return response.data;
+    } catch (error) {
+      // User doesn't exist, create one
+      if (error.response?.status === 404) {
+        const newUserData = {
+          auth_id: authUser.id,
+          name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+          email: authUser.email,
+          phone: authUser.user_metadata?.phone || null,
+          role: authUser.user_metadata?.role || 'user',
+          phone_verified: false,
+        };
+        
+        try {
+          const createResponse = await usersAPI.create(newUserData);
+          console.log("[AuthContext] Created new user:", createResponse.data);
+          return createResponse.data;
+        } catch (createError) {
+          console.error("[AuthContext] Failed to create user:", createError);
+          return null;
+        }
+      }
+      console.error("[AuthContext] Error fetching user:", error);
+      return null;
+    }
+  };
+
+  /**
+   * Ensure provider profile exists for stylist users
+   */
+  const ensureProviderExists = async (userRecord) => {
+    if (!userRecord || (userRecord.role !== 'stylist' && userRecord.role !== 'provider')) {
+      return null;
+    }
+    
+    try {
+      // Try to get existing provider profile
+      const response = await stylistsAPI.getById(userRecord.id);
+      return response.data;
+    } catch (error) {
+      // Provider profile doesn't exist, create one
+      if (error.response?.status === 404) {
+        try {
+          const registerResponse = await stylistsAPI.register(userRecord.id, 0, null, null);
+          console.log("[AuthContext] Created provider profile:", registerResponse.data);
+          return registerResponse.data?.provider || null;
+        } catch (regError) {
+          console.error("[AuthContext] Failed to create provider:", regError);
+          return null;
+        }
+      }
+      console.error("[AuthContext] Error fetching provider:", error);
+      return null;
+    }
+  };
+
+  /**
    * Load user and related data
    */
   const loadUser = useCallback(async () => {
@@ -64,18 +129,20 @@ export const AuthProvider = ({ children }) => {
 
       if (result?.user) {
         setUser(result.user);
-        setUserData(result.userData || null);
         
-        // If user is a provider, try to load their provider profile
-        if (result.userData?.role === "stylist" || result.userData?.role === "provider") {
-          try {
-            const providerResponse = await stylistsAPI.getById(result.userData.id);
-            setProviderData(providerResponse.data);
-          } catch (e) {
-            // Provider profile might not exist yet
-            console.log("No provider profile found:", e.message);
-            setProviderData(null);
-          }
+        // Ensure user exists in backend and get/create their record
+        let userRecord = result.userData;
+        if (!userRecord) {
+          userRecord = await ensureUserExists(result.user);
+        }
+        setUserData(userRecord);
+        
+        // If user is a provider, ensure provider profile exists
+        if (userRecord && (userRecord.role === "stylist" || userRecord.role === "provider")) {
+          const provider = await ensureProviderExists(userRecord);
+          setProviderData(provider);
+        } else {
+          setProviderData(null);
         }
       } else {
         setUser(null);
@@ -142,7 +209,7 @@ export const AuthProvider = ({ children }) => {
         role,
         isProvider: isProvider(),
         
-        // 🔕 PHONE VERIFICATION FULLY BYPASSED
+        // Phone verification bypassed
         needsPhoneVerification: false,
         isPhoneVerified: true,
       }}
