@@ -417,6 +417,42 @@ frontend:
         agent: "testing"
         comment: "FIXED AND TESTED: ✅ Updated SignUpScreen.jsx to use 'provider' role instead of 'stylist' role (lines 124, 126, 131). ✅ Updated ProfileScreen.jsx role checks to use 'provider' instead of 'stylist'. ✅ Verified role selection functionality works correctly - provider button selects with purple styling. ✅ Confirmed terminology is now consistent - 'As a Provider' text displays correctly, no 'As a Stylist' text found. ✅ Form submission works without errors. ✅ AuthContext already handles both 'stylist' and 'provider' roles for backward compatibility. All role-based routing and terminology fixes successfully implemented and tested."
 
+  - task: "Provider Services Screen"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/screens/ProviderServicesScreen.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Provider Services Screen implemented to allow providers to toggle services, set prices and durations. Uses providerServicesAPI to fetch and save services. Integrated with backend provider-services endpoints. Needs E2E testing with authenticated provider user."
+
+  - task: "Profile Screen Edit Functionality"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/screens/ProfileScreen.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Profile Screen updated with edit functionality for both user profile and provider info. Uses usersAPI.update() and stylistsAPI.update() for persistence. Includes edit forms for name, email, phone, hourly rate, bio, and location. Needs E2E testing with authenticated user."
+
+  - task: "Auth Service Body Stream Fix"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/services/authService.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Fixed 'body stream already read' error by using createFreshSupabaseClient() for signup and login operations. Error handling improved to extract error messages without accessing response body multiple times. Signup tested successfully with gmail.com domains (Supabase rejects fake email domains)."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
