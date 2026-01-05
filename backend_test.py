@@ -120,6 +120,7 @@ class BackendTester:
         # Test PUT /api/users/{user_id} (Profile update)
         if hasattr(self, 'created_user_id') and self.created_user_id:
             try:
+                unique_suffix = str(uuid.uuid4())[:8]
                 update_data = {
                     "name": f"Sarah Johnson Updated {unique_suffix}",
                     "phone": "+1987654321"
