@@ -25,9 +25,9 @@ export default function ServicesScreen() {
   );
 
   const handleServiceClick = (service, category) => {
-    // Navigate to stylists filtered by this service
+    // Navigate to providers filtered by this service
     toast.info(`Browsing ${service.name} providers...`);
-    navigate(`/stylists?service=${service.id}`);
+    navigate(`/providers?service=${service.id}`);
   };
 
   return (
