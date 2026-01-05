@@ -130,7 +130,7 @@ export default function SignUpScreen() {
               >
                 <Scissors className={`h-6 w-6 mb-2 ${role === "stylist" ? "text-purple-500" : "text-gray-400"}`} />
                 <span className="font-medium">Offer Services</span>
-                <span className="text-xs mt-1 opacity-70">As a Stylist</span>
+                <span className="text-xs mt-1 opacity-70">As a Provider</span>
               </button>
             </div>
           </div>
