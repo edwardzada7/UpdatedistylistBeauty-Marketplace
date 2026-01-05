@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, User, Mail, Phone, Save, Loader2, LogOut } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, User, Mail, Phone, Save, Loader2, LogOut, Shield, Star } from "lucide-react";
 import { toast } from "sonner";
 import { usersAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,7 +16,7 @@ import EmptyState from "@/components/EmptyState";
 
 const ProfileScreen = () => {
   const navigate = useNavigate();
-  const { userData, signOut } = useAuth();
+  const { user, userData, providerData, displayName, role, isProvider, signOut, refreshUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -24,6 +25,7 @@ const ProfileScreen = () => {
     phone: "",
   });
 
+  // Initialize form data from userData or user metadata
   useEffect(() => {
     if (userData) {
       setFormData({
@@ -31,18 +33,29 @@ const ProfileScreen = () => {
         email: userData.email || "",
         phone: userData.phone || "",
       });
+    } else if (user) {
+      setFormData({
+        name: user.user_metadata?.full_name || "",
+        email: user.email || "",
+        phone: user.user_metadata?.phone || "",
+      });
     }
-  }, [userData]);
+  }, [userData, user]);
 
   const handleUpdate = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    
+    if (!userData?.id) {
+      toast.error("Unable to update profile. Please try again later.");
+      return;
+    }
 
+    setLoading(true);
     try {
       await usersAPI.update(userData.id, formData);
       toast.success(TOAST_MESSAGES.PROFILE_UPDATED);
       setEditing(false);
-      window.location.reload();
+      await refreshUser();
     } catch (error) {
       console.error("Failed to update profile:", error);
       toast.error(TOAST_MESSAGES.PROFILE_UPDATE_FAILED);
@@ -53,9 +66,9 @@ const ProfileScreen = () => {
 
   const handleCancel = () => {
     setFormData({
-      name: userData?.name || "",
-      email: userData?.email || "",
-      phone: userData?.phone || "",
+      name: userData?.name || user?.user_metadata?.full_name || "",
+      email: userData?.email || user?.email || "",
+      phone: userData?.phone || user?.user_metadata?.phone || "",
     });
     setEditing(false);
   };
@@ -64,32 +77,31 @@ const ProfileScreen = () => {
     try {
       await signOut();
       toast.success("Logged out successfully");
-      navigate("/login");
+      navigate("/login", { replace: true });
     } catch (error) {
       console.error("Sign out error:", error);
       toast.error("Failed to log out");
     }
   };
 
-  // Show empty state if no user data
-  if (!userData) {
+  // Show empty state if no user at all
+  if (!user) {
     return (
       <div className="min-h-screen bg-gray-50">
         <header className="bg-white shadow-sm border-b">
           <div className="container mx-auto px-4 py-4 flex items-center gap-4">
             <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
               <ArrowLeft className="h-4 w-4" />
-              Back
             </Button>
             <h1 className="text-xl font-bold">My Profile</h1>
           </div>
         </header>
         <div className="container mx-auto px-4 py-8">
           <EmptyState
-            title="Profile not loaded"
-            description="Unable to load your profile data. Please try again."
-            actionLabel="Go Home"
-            onAction={() => navigate("/")}
+            title="Not logged in"
+            description="Please log in to view your profile"
+            actionLabel="Go to Login"
+            onAction={() => navigate("/login")}
           />
         </div>
         <BottomNavigation />
@@ -101,45 +113,62 @@ const ProfileScreen = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
-        <div className="container mx-auto px-4 py-4 flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
-            <ArrowLeft className="h-4 w-4" />
-            Back
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={() => navigate(isProvider ? "/dashboard" : "/")}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <h1 className="text-xl font-bold">My Profile</h1>
+          </div>
+          {/* Logout Button in Header */}
+          <Button
+            onClick={handleSignOut}
+            variant="outline"
+            size="sm"
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Logout
           </Button>
-          <h1 className="text-xl font-bold">My Profile</h1>
         </div>
       </header>
 
       {/* Content */}
       <div className="container mx-auto px-4 py-8 pb-24 sm:pb-8">
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-2xl mx-auto space-y-6">
+          {/* Profile Card */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white text-2xl font-bold">
-                    {userData.name?.charAt(0) || "U"}
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white text-3xl font-bold">
+                    {displayName.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <CardTitle>{userData.name || "User"}</CardTitle>
-                    <p className="text-sm text-gray-600 capitalize">{userData.role || "customer"}</p>
+                    <CardTitle className="text-2xl">{displayName}</CardTitle>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Badge variant="outline" className="capitalize">
+                        {role === "stylist" ? "Provider" : "Customer"}
+                      </Badge>
+                      {isProvider && providerData?.is_verified && (
+                        <Badge className="bg-green-50 text-green-700 border-green-200">
+                          <Shield className="h-3 w-3 mr-1" />
+                          Verified
+                        </Badge>
+                      )}
+                      {isProvider && providerData?.is_premium && (
+                        <Badge className="bg-amber-50 text-amber-700 border-amber-200">
+                          <Star className="h-3 w-3 mr-1" />
+                          Premium
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
                 {!editing && (
-                  <div className="flex gap-2">
-                    <Button onClick={() => setEditing(true)} size="sm">
-                      Edit Profile
-                    </Button>
-                    <Button
-                      onClick={handleSignOut}
-                      size="sm"
-                      variant="outline"
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <LogOut className="h-4 w-4 mr-1" />
-                      Sign Out
-                    </Button>
-                  </div>
+                  <Button onClick={() => setEditing(true)} size="sm">
+                    Edit Profile
+                  </Button>
                 )}
               </div>
             </CardHeader>
@@ -216,7 +245,7 @@ const ProfileScreen = () => {
                     <Mail className="h-5 w-5 text-gray-600 mt-0.5" />
                     <div>
                       <p className="text-sm text-gray-600">Email</p>
-                      <p className="font-medium">{userData.email}</p>
+                      <p className="font-medium">{userData?.email || user?.email || "Not set"}</p>
                     </div>
                   </div>
 
@@ -224,7 +253,7 @@ const ProfileScreen = () => {
                     <Phone className="h-5 w-5 text-gray-600 mt-0.5" />
                     <div>
                       <p className="text-sm text-gray-600">Phone</p>
-                      <p className="font-medium">{userData.phone || "Not provided"}</p>
+                      <p className="font-medium">{userData?.phone || user?.user_metadata?.phone || "Not provided"}</p>
                     </div>
                   </div>
 
@@ -232,11 +261,65 @@ const ProfileScreen = () => {
                     <User className="h-5 w-5 text-gray-600 mt-0.5" />
                     <div>
                       <p className="text-sm text-gray-600">Account Type</p>
-                      <p className="font-medium capitalize">{userData.role || "customer"}</p>
+                      <p className="font-medium capitalize">{role === "stylist" ? "Service Provider" : "Customer"}</p>
                     </div>
                   </div>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Provider-specific info */}
+          {isProvider && providerData && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Provider Information</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg">
+                  <div>
+                    <p className="text-sm text-gray-600">Hourly Rate</p>
+                    <p className="text-2xl font-bold text-purple-600">
+                      ₦{providerData.hourly_rate?.toLocaleString() || "0"}
+                    </p>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => navigate("/my-services")}
+                    className="text-purple-600 border-purple-300"
+                  >
+                    Manage Services
+                  </Button>
+                </div>
+
+                {providerData.bio && (
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <p className="text-sm text-gray-600 mb-2">Bio</p>
+                    <p>{providerData.bio}</p>
+                  </div>
+                )}
+
+                {providerData.location && (
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <p className="text-sm text-gray-600 mb-2">Location</p>
+                    <p>{providerData.location}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Logout Button at Bottom */}
+          <Card className="bg-red-50 border-red-200">
+            <CardContent className="p-4">
+              <Button
+                onClick={handleSignOut}
+                variant="outline"
+                className="w-full text-red-600 hover:text-red-700 hover:bg-red-100 border-red-300"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign Out of {APP_NAME}
+              </Button>
             </CardContent>
           </Card>
         </div>
