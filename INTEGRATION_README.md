@@ -95,7 +95,7 @@ CORS_ORIGINS="*"
 
 ### Frontend Environment Variables (`/app/frontend/.env`)
 ```env
-REACT_APP_BACKEND_URL=https://stylist-finder-8.preview.emergentagent.com
+REACT_APP_BACKEND_URL=https://salon-on-demand.preview.emergentagent.com
 ```
 
 ## Setup Instructions
