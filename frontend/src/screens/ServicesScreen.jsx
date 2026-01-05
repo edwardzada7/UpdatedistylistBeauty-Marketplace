@@ -139,7 +139,7 @@ export default function ServicesScreen() {
                 className="cursor-pointer hover:shadow-md transition-all hover:scale-105"
                 onClick={() => {
                   toast.info(`Browsing ${service.name}...`);
-                  navigate(`/stylists?service=${service.id}`);
+                  navigate(`/providers?service=${service.id}`);
                 }}
               >
                 <CardContent className="p-4 text-center">
