@@ -61,6 +61,24 @@ export const stylistsAPI = {
   create: (data) => api.post("/stylists", data),
   update: (userId, data) => api.put(`/stylists/${userId}`, data),
   delete: (userId) => api.delete(`/stylists/${userId}`),
+  // Register a user as provider
+  register: (userId, hourlyRate = 0, bio = null, location = null) => 
+    api.post(`/providers/register?user_id=${userId}&hourly_rate=${hourlyRate}${bio ? `&bio=${encodeURIComponent(bio)}` : ''}${location ? `&location=${encodeURIComponent(location)}` : ''}`),
+};
+
+// ==================== PROVIDER SERVICES API ====================
+
+export const providerServicesAPI = {
+  // Get all services for a provider
+  getByProviderId: (providerId) => api.get(`/provider-services/${providerId}`),
+  // Create/update a single service
+  create: (data) => api.post("/provider-services", data),
+  // Update a specific service
+  update: (serviceId, data) => api.put(`/provider-services/${serviceId}`, data),
+  // Bulk update services for a provider
+  bulkUpdate: (providerId, services) => api.post(`/provider-services/bulk/${providerId}`, services),
+  // Delete a service
+  delete: (serviceId) => api.delete(`/provider-services/${serviceId}`),
 };
 
 // ==================== WALLETS API ====================
