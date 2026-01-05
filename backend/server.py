@@ -612,6 +612,193 @@ async def delete_wallet(wallet_id: int):
         )
 
 
+# ==================== PROVIDER SERVICES ENDPOINTS ====================
+
+@api_router.post("/provider-services", response_model=ProviderServiceResponse, status_code=status.HTTP_201_CREATED)
+async def create_provider_service(service_data: ProviderServiceCreate):
+    """Create a new provider service"""
+    try:
+        # Check if service already exists for this provider
+        existing = supabase.table("provider_services").select("*").eq("provider_id", service_data.provider_id).eq("service_id", service_data.service_id).execute()
+        if existing.data:
+            # Update existing instead of creating new
+            update_data = {
+                "price": service_data.price,
+                "duration": service_data.duration,
+                "enabled": service_data.enabled,
+                "consultation_required": service_data.consultation_required,
+                "service_name": service_data.service_name
+            }
+            response = supabase.table("provider_services").update(update_data).eq("id", existing.data[0]["id"]).execute()
+            return response.data[0]
+        
+        service_dict = {
+            "provider_id": service_data.provider_id,
+            "service_id": service_data.service_id,
+            "service_name": service_data.service_name,
+            "price": service_data.price,
+            "duration": service_data.duration,
+            "enabled": service_data.enabled,
+            "consultation_required": service_data.consultation_required
+        }
+        
+        response = supabase.table("provider_services").insert(service_dict).execute()
+        return response.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create provider service: {str(e)}"
+        )
+
+@api_router.get("/provider-services/{provider_id}", response_model=List[ProviderServiceResponse])
+async def get_provider_services(provider_id: int):
+    """Get all services for a provider"""
+    try:
+        response = supabase.table("provider_services").select("*").eq("provider_id", provider_id).execute()
+        return response.data
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch provider services: {str(e)}"
+        )
+
+@api_router.put("/provider-services/{service_id}", response_model=ProviderServiceResponse)
+async def update_provider_service(service_id: int, service_update: ProviderServiceUpdate):
+    """Update a provider service"""
+    try:
+        existing = supabase.table("provider_services").select("*").eq("id", service_id).execute()
+        if not existing.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Provider service not found"
+            )
+        
+        update_data = service_update.model_dump(exclude_unset=True)
+        if not update_data:
+            return existing.data[0]
+        
+        response = supabase.table("provider_services").update(update_data).eq("id", service_id).execute()
+        return response.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update provider service: {str(e)}"
+        )
+
+@api_router.post("/provider-services/bulk/{provider_id}")
+async def bulk_update_provider_services(provider_id: int, services: List[ProviderServiceCreate]):
+    """Bulk update/create services for a provider"""
+    try:
+        results = []
+        for service_data in services:
+            # Check if service exists
+            existing = supabase.table("provider_services").select("*").eq("provider_id", provider_id).eq("service_id", service_data.service_id).execute()
+            
+            if existing.data:
+                # Update existing
+                update_data = {
+                    "price": service_data.price,
+                    "duration": service_data.duration,
+                    "enabled": service_data.enabled,
+                    "consultation_required": service_data.consultation_required,
+                    "service_name": service_data.service_name
+                }
+                response = supabase.table("provider_services").update(update_data).eq("id", existing.data[0]["id"]).execute()
+                results.append(response.data[0])
+            else:
+                # Create new
+                service_dict = {
+                    "provider_id": provider_id,
+                    "service_id": service_data.service_id,
+                    "service_name": service_data.service_name,
+                    "price": service_data.price,
+                    "duration": service_data.duration,
+                    "enabled": service_data.enabled,
+                    "consultation_required": service_data.consultation_required
+                }
+                response = supabase.table("provider_services").insert(service_dict).execute()
+                results.append(response.data[0])
+        
+        return {"message": f"Successfully updated {len(results)} services", "services": results}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to bulk update provider services: {str(e)}"
+        )
+
+@api_router.delete("/provider-services/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_provider_service(service_id: int):
+    """Delete a provider service"""
+    try:
+        existing = supabase.table("provider_services").select("*").eq("id", service_id).execute()
+        if not existing.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Provider service not found"
+            )
+        
+        supabase.table("provider_services").delete().eq("id", service_id).execute()
+        return None
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete provider service: {str(e)}"
+        )
+
+
+# ==================== AUTO PROVIDER REGISTRATION ====================
+
+@api_router.post("/providers/register")
+async def register_provider(user_id: int, hourly_rate: float = 0.0, bio: str = None, location: str = None):
+    """Register a user as a provider (creates stylist profile and updates user role)"""
+    try:
+        # Check if user exists
+        user = supabase.table("users").select("*").eq("id", user_id).execute()
+        if not user.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        # Check if already a provider
+        existing_stylist = supabase.table("stylists").select("*").eq("user_id", user_id).execute()
+        if existing_stylist.data:
+            return {"message": "User is already registered as a provider", "provider": existing_stylist.data[0]}
+        
+        # Create stylist profile
+        stylist_dict = {
+            "user_id": user_id,
+            "hourly_rate": hourly_rate,
+            "is_verified": False,
+            "is_premium": False,
+            "bio": bio,
+            "location": location
+        }
+        
+        stylist_response = supabase.table("stylists").insert(stylist_dict).execute()
+        
+        # Update user role to stylist
+        supabase.table("users").update({"role": "stylist"}).eq("id", user_id).execute()
+        
+        return {
+            "message": "Successfully registered as provider",
+            "provider": stylist_response.data[0]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to register provider: {str(e)}"
+        )
+
+
 # ==================== ROOT ENDPOINT ====================
 
 @api_router.get("/")
