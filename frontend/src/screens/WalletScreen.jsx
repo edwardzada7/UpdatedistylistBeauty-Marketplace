@@ -13,7 +13,7 @@ import EmptyState from "@/components/EmptyState";
 
 export default function WalletScreen() {
   const navigate = useNavigate();
-  const { user, userData } = useAuth();
+  const { user, userData, isProvider } = useAuth();
   const [wallet, setWallet] = useState(null);
   const [loading, setLoading] = useState(true);
 
