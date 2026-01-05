@@ -94,6 +94,33 @@ class WalletResponse(BaseModel):
     balance: float
 
 
+# Provider Services Models (for service toggle persistence)
+class ProviderServiceCreate(BaseModel):
+    provider_id: int  # user_id from stylists table
+    service_id: str  # service identifier from constants
+    service_name: str
+    price: float = 0.0
+    duration: int = 60  # in minutes
+    enabled: bool = True
+    consultation_required: bool = False
+
+class ProviderServiceUpdate(BaseModel):
+    price: Optional[float] = None
+    duration: Optional[int] = None
+    enabled: Optional[bool] = None
+    consultation_required: Optional[bool] = None
+
+class ProviderServiceResponse(BaseModel):
+    id: int
+    provider_id: int
+    service_id: str
+    service_name: str
+    price: float
+    duration: int
+    enabled: bool
+    consultation_required: bool
+
+
 # ==================== DATABASE CONNECTION TEST ====================
 
 @api_router.get("/test-connection")
