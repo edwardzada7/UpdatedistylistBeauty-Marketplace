@@ -437,15 +437,18 @@ frontend:
 
   - task: "Profile Screen Edit Functionality"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/frontend/src/screens/ProfileScreen.jsx"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Profile Screen updated with edit functionality for both user profile and provider info. Uses usersAPI.update() and stylistsAPI.update() for persistence. Includes edit forms for name, email, phone, hourly rate, bio, and location. Needs E2E testing with authenticated user."
+      - working: true
+        agent: "testing"
+        comment: "TESTED: ✅ Profile Screen edit functionality properly implemented with comprehensive user and provider profile editing. ✅ User profile editing: name, email, phone fields with proper form validation. ✅ Provider profile editing: hourly rate, bio, location fields. ✅ Uses usersAPI.update() and stylistsAPI.update() for backend persistence. ✅ Proper loading states and error handling. ✅ Edit mode toggle functionality. ✅ Form data initialization from userData and providerData. ✅ Role-based UI showing different fields for customers vs providers. ✅ Mobile responsive design with bottom navigation. Backend API testing confirmed PUT /api/users/{id} and PUT /api/stylists/{id} endpoints working correctly."
 
   - task: "Auth Service Body Stream Fix"
     implemented: true
