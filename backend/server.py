@@ -674,37 +674,57 @@ async def delete_wallet(wallet_id: int):
 
 
 # ==================== PROVIDER SERVICES ENDPOINTS ====================
+# Using the existing 'services' table in Supabase
+# Mapping: provider_id -> stylist_id, service_id -> category, service_name -> name
 
 @api_router.post("/provider-services", response_model=ProviderServiceResponse, status_code=status.HTTP_201_CREATED)
 async def create_provider_service(service_data: ProviderServiceCreate):
-    """Create a new provider service"""
+    """Create a new provider service (using 'services' table)"""
     try:
-        # Check if service already exists for this provider
-        existing = supabase.table("provider_services").select("*").eq("provider_id", service_data.provider_id).eq("service_id", service_data.service_id).execute()
+        # Check if service already exists for this provider+service_id combo
+        existing = supabase.table("services").select("*").eq("stylist_id", service_data.provider_id).eq("category", service_data.service_id).execute()
+        
         if existing.data:
             # Update existing instead of creating new
             update_data = {
                 "price": service_data.price,
                 "duration": service_data.duration,
-                "enabled": service_data.enabled,
-                "consultation_required": service_data.consultation_required,
-                "service_name": service_data.service_name
+                "name": service_data.service_name if service_data.enabled else f"{service_data.service_name} (disabled)"
             }
-            response = supabase.table("provider_services").update(update_data).eq("id", existing.data[0]["id"]).execute()
-            return response.data[0]
+            response = supabase.table("services").update(update_data).eq("id", existing.data[0]["id"]).execute()
+            item = response.data[0]
+            return {
+                "id": item["id"],
+                "provider_id": item["stylist_id"],
+                "service_id": item["category"],
+                "service_name": item["name"].replace(" (disabled)", ""),
+                "price": item["price"] or 0,
+                "duration": item["duration"] or 60,
+                "enabled": "(disabled)" not in (item["name"] or ""),
+                "consultation_required": False
+            }
         
+        # Create new service
         service_dict = {
-            "provider_id": service_data.provider_id,
-            "service_id": service_data.service_id,
-            "service_name": service_data.service_name,
+            "stylist_id": service_data.provider_id,
+            "category": service_data.service_id,
+            "name": service_data.service_name if service_data.enabled else f"{service_data.service_name} (disabled)",
             "price": service_data.price,
-            "duration": service_data.duration,
-            "enabled": service_data.enabled,
-            "consultation_required": service_data.consultation_required
+            "duration": service_data.duration
         }
         
-        response = supabase.table("provider_services").insert(service_dict).execute()
-        return response.data[0]
+        response = supabase.table("services").insert(service_dict).execute()
+        item = response.data[0]
+        return {
+            "id": item["id"],
+            "provider_id": item["stylist_id"],
+            "service_id": item["category"],
+            "service_name": item["name"].replace(" (disabled)", ""),
+            "price": item["price"] or 0,
+            "duration": item["duration"] or 60,
+            "enabled": "(disabled)" not in (item["name"] or ""),
+            "consultation_required": False
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -715,10 +735,23 @@ async def create_provider_service(service_data: ProviderServiceCreate):
 
 @api_router.get("/provider-services/{provider_id}", response_model=List[ProviderServiceResponse])
 async def get_provider_services(provider_id: int):
-    """Get all services for a provider"""
+    """Get all services for a provider (from 'services' table)"""
     try:
-        response = supabase.table("provider_services").select("*").eq("provider_id", provider_id).execute()
-        return response.data
+        response = supabase.table("services").select("*").eq("stylist_id", provider_id).execute()
+        
+        services = []
+        for item in response.data:
+            services.append({
+                "id": item["id"],
+                "provider_id": item["stylist_id"],
+                "service_id": item["category"] or "",
+                "service_name": (item["name"] or "").replace(" (disabled)", ""),
+                "price": item["price"] or 0,
+                "duration": item["duration"] or 60,
+                "enabled": "(disabled)" not in (item["name"] or ""),
+                "consultation_required": False
+            })
+        return services
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -729,19 +762,43 @@ async def get_provider_services(provider_id: int):
 async def update_provider_service(service_id: int, service_update: ProviderServiceUpdate):
     """Update a provider service"""
     try:
-        existing = supabase.table("provider_services").select("*").eq("id", service_id).execute()
+        existing = supabase.table("services").select("*").eq("id", service_id).execute()
         if not existing.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Provider service not found"
             )
         
-        update_data = service_update.model_dump(exclude_unset=True)
-        if not update_data:
-            return existing.data[0]
+        current = existing.data[0]
+        current_name = (current["name"] or "").replace(" (disabled)", "")
         
-        response = supabase.table("provider_services").update(update_data).eq("id", service_id).execute()
-        return response.data[0]
+        update_data = {}
+        if service_update.price is not None:
+            update_data["price"] = service_update.price
+        if service_update.duration is not None:
+            update_data["duration"] = service_update.duration
+        if service_update.enabled is not None:
+            if service_update.enabled:
+                update_data["name"] = current_name
+            else:
+                update_data["name"] = f"{current_name} (disabled)"
+        
+        if not update_data:
+            item = current
+        else:
+            response = supabase.table("services").update(update_data).eq("id", service_id).execute()
+            item = response.data[0]
+        
+        return {
+            "id": item["id"],
+            "provider_id": item["stylist_id"],
+            "service_id": item["category"] or "",
+            "service_name": (item["name"] or "").replace(" (disabled)", ""),
+            "price": item["price"] or 0,
+            "duration": item["duration"] or 60,
+            "enabled": "(disabled)" not in (item["name"] or ""),
+            "consultation_required": False
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -757,32 +814,41 @@ async def bulk_update_provider_services(provider_id: int, services: List[Provide
         results = []
         for service_data in services:
             # Check if service exists
-            existing = supabase.table("provider_services").select("*").eq("provider_id", provider_id).eq("service_id", service_data.service_id).execute()
+            existing = supabase.table("services").select("*").eq("stylist_id", provider_id).eq("category", service_data.service_id).execute()
+            
+            service_name = service_data.service_name if service_data.enabled else f"{service_data.service_name} (disabled)"
             
             if existing.data:
                 # Update existing
                 update_data = {
                     "price": service_data.price,
                     "duration": service_data.duration,
-                    "enabled": service_data.enabled,
-                    "consultation_required": service_data.consultation_required,
-                    "service_name": service_data.service_name
+                    "name": service_name
                 }
-                response = supabase.table("provider_services").update(update_data).eq("id", existing.data[0]["id"]).execute()
-                results.append(response.data[0])
+                response = supabase.table("services").update(update_data).eq("id", existing.data[0]["id"]).execute()
+                item = response.data[0]
             else:
                 # Create new
                 service_dict = {
-                    "provider_id": provider_id,
-                    "service_id": service_data.service_id,
-                    "service_name": service_data.service_name,
+                    "stylist_id": provider_id,
+                    "category": service_data.service_id,
+                    "name": service_name,
                     "price": service_data.price,
-                    "duration": service_data.duration,
-                    "enabled": service_data.enabled,
-                    "consultation_required": service_data.consultation_required
+                    "duration": service_data.duration
                 }
-                response = supabase.table("provider_services").insert(service_dict).execute()
-                results.append(response.data[0])
+                response = supabase.table("services").insert(service_dict).execute()
+                item = response.data[0]
+            
+            results.append({
+                "id": item["id"],
+                "provider_id": item["stylist_id"],
+                "service_id": item["category"] or "",
+                "service_name": (item["name"] or "").replace(" (disabled)", ""),
+                "price": item["price"] or 0,
+                "duration": item["duration"] or 60,
+                "enabled": "(disabled)" not in (item["name"] or ""),
+                "consultation_required": False
+            })
         
         return {"message": f"Successfully updated {len(results)} services", "services": results}
     except Exception as e:
@@ -795,14 +861,14 @@ async def bulk_update_provider_services(provider_id: int, services: List[Provide
 async def delete_provider_service(service_id: int):
     """Delete a provider service"""
     try:
-        existing = supabase.table("provider_services").select("*").eq("id", service_id).execute()
+        existing = supabase.table("services").select("*").eq("id", service_id).execute()
         if not existing.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Provider service not found"
             )
         
-        supabase.table("provider_services").delete().eq("id", service_id).execute()
+        supabase.table("services").delete().eq("id", service_id).execute()
         return None
     except HTTPException:
         raise
