@@ -141,6 +141,67 @@ async def test_connection():
         )
 
 
+@api_router.post("/init-provider-services-table")
+async def init_provider_services_table():
+    """Initialize provider_services table if it doesn't exist"""
+    import requests
+    
+    # SQL to create the provider_services table
+    sql = """
+    CREATE TABLE IF NOT EXISTS provider_services (
+        id SERIAL PRIMARY KEY,
+        provider_id INTEGER NOT NULL,
+        service_id VARCHAR(100) NOT NULL,
+        service_name VARCHAR(255) NOT NULL,
+        price DECIMAL(10, 2) DEFAULT 0.00,
+        duration INTEGER DEFAULT 60,
+        enabled BOOLEAN DEFAULT true,
+        consultation_required BOOLEAN DEFAULT false,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        UNIQUE(provider_id, service_id)
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_provider_services_provider_id ON provider_services(provider_id);
+    CREATE INDEX IF NOT EXISTS idx_provider_services_enabled ON provider_services(enabled);
+    """
+    
+    try:
+        # Use Supabase SQL API
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+        
+        # Execute SQL via Supabase REST API
+        response = requests.post(
+            f"{supabase_url}/rest/v1/rpc/exec_sql",
+            headers=headers,
+            json={"query": sql}
+        )
+        
+        if response.status_code == 404:
+            # RPC function doesn't exist, try direct table check
+            return {
+                "status": "manual_required",
+                "message": "Please run the SQL script manually in Supabase SQL Editor",
+                "sql": sql
+            }
+        
+        return {
+            "status": "success",
+            "message": "Provider services table initialized"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "sql": sql
+        }
+
+
 # ==================== USERS ENDPOINTS ====================
 
 @api_router.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
