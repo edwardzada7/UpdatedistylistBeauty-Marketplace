@@ -478,6 +478,15 @@ class BackendTester:
             else:
                 print(f"❌ Wallets API - {test}: FAILED")
                 
+        # Provider Services API
+        for test, result in self.test_results["provider_services_api"].items():
+            total_tests += 1
+            if result:
+                passed_tests += 1
+                print(f"✅ Provider Services API - {test}: PASSED")
+            else:
+                print(f"❌ Provider Services API - {test}: FAILED")
+                
         print("=" * 50)
         print(f"TOTAL: {passed_tests}/{total_tests} tests passed")
         
