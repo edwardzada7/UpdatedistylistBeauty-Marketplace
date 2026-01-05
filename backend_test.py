@@ -187,6 +187,24 @@ class BackendTester:
                         stylist = response.json()
                         self.log_success("GET /api/stylists/{user_id}", f"Retrieved stylist: ${stylist.get('hourly_rate')}/hr")
                         results["get_by_id"] = True
+                        
+                        # Test PUT /api/stylists/{user_id} (Provider profile update)
+                        update_data = {
+                            "hourly_rate": 85.0,
+                            "bio": "Updated bio: Professional hair stylist with 6 years experience",
+                            "location": "Los Angeles, CA"
+                        }
+                        response = self.session.put(
+                            f"{self.base_url}/stylists/{self.created_user_id}", 
+                            json=update_data,
+                            timeout=10
+                        )
+                        if response.status_code == 200:
+                            updated_stylist = response.json()
+                            self.log_success("PUT /api/stylists/{user_id}", f"Updated stylist rate: ${updated_stylist.get('hourly_rate')}/hr")
+                            results["update"] = True
+                        else:
+                            self.log_error("PUT /api/stylists/{user_id}", f"HTTP {response.status_code}: {response.text}")
                     else:
                         self.log_error("GET /api/stylists/{user_id}", f"HTTP {response.status_code}: {response.text}")
                         
