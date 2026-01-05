@@ -150,6 +150,18 @@ backend:
         agent: "testing"
         comment: "TESTED: All Wallets API endpoints working correctly. GET /api/wallets (retrieves wallets), GET /api/wallets/by-auth/{auth_id} (finds wallet by user auth ID). Auto-wallet creation appears to be implemented (wallets created automatically when users are created). All CRUD operations functional."
 
+  - task: "Provider Services CRUD API"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Implemented provider services API using existing 'services' table in Supabase. Endpoints: GET /api/provider-services/{provider_id}, POST /api/provider-services, PUT /api/provider-services/{service_id}, POST /api/provider-services/bulk/{provider_id}, DELETE /api/provider-services/{service_id}. All endpoints tested via curl and working correctly. Services can be enabled/disabled, prices and durations set. Uses existing Supabase 'services' table mapped to: stylist_id -> provider_id, category -> service_id, name -> service_name."
+
 frontend:
   - task: "Login Screen (Email/Password)"
     implemented: true
