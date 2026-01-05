@@ -38,6 +38,10 @@ class BackendTester:
             "phone_verified": False
         }
         
+        # Provider ID for testing (as specified in review request)
+        self.test_provider_id = 13  # Amaka Beauty Pro
+        self.created_service_id = None
+        
     def log_error(self, test_name: str, error: str):
         """Log an error for a specific test"""
         error_msg = f"{test_name}: {error}"
