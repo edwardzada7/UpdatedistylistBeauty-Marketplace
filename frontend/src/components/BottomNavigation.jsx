@@ -44,7 +44,7 @@ const BottomNavigation = () => {
       <nav className="flex justify-around items-center h-16">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const active = isActive(item.path);
+          const active = isActive(item);
           
           return (
             <button
