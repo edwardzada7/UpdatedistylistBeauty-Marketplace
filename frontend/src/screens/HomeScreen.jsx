@@ -109,7 +109,7 @@ const HomeScreen = () => {
 
           <Card
             className="cursor-pointer hover:shadow-lg transition-all hover:scale-105"
-            onClick={() => navigate("/providers")}
+            onClick={() => navigate("/user/providers")}
           >
             <CardContent className="flex items-center gap-4 p-6">
               <div className="p-3 bg-purple-100 rounded-full">
