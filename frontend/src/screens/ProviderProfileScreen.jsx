@@ -76,7 +76,7 @@ const ProviderProfileScreen = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate("/providers")}
+            onClick={() => navigate(-1)}
             data-testid="back-btn"
           >
             <ArrowLeft className="h-4 w-4" />
