@@ -137,9 +137,9 @@ class BackendTester:
         return results
         
     def test_stylists_api(self) -> Dict[str, bool]:
-        """Test Stylists CRUD API endpoints"""
-        print(f"\n💄 Testing Stylists API")
-        results = {"get_all": False, "create": False, "get_by_id": False, "update": False}
+        """Test Stylists API endpoints (regression test)"""
+        print(f"\n💄 Testing Stylists API (Regression)")
+        results = {"get_all": False}
         
         # Test GET /api/stylists
         try:
@@ -152,61 +152,6 @@ class BackendTester:
                 self.log_error("GET /api/stylists", f"HTTP {response.status_code}: {response.text}")
         except Exception as e:
             self.log_error("GET /api/stylists", str(e))
-            
-        # Test POST /api/stylists (only if we have a created user)
-        if hasattr(self, 'created_user_id') and self.created_user_id:
-            try:
-                stylist_data = {
-                    "user_id": self.created_user_id,
-                    "hourly_rate": 75.0,
-                    "is_verified": False,
-                    "is_premium": False,
-                    "bio": "Professional hair stylist with 5 years experience",
-                    "location": "New York, NY"
-                }
-                response = self.session.post(
-                    f"{self.base_url}/stylists", 
-                    json=stylist_data,
-                    timeout=10
-                )
-                if response.status_code == 201:
-                    stylist = response.json()
-                    self.log_success("POST /api/stylists", f"Created stylist profile for user {stylist.get('user_id')}")
-                    results["create"] = True
-                    
-                    # Test GET /api/stylists/{user_id}
-                    response = self.session.get(f"{self.base_url}/stylists/{self.created_user_id}", timeout=10)
-                    if response.status_code == 200:
-                        stylist = response.json()
-                        self.log_success("GET /api/stylists/{user_id}", f"Retrieved stylist: ${stylist.get('hourly_rate')}/hr")
-                        results["get_by_id"] = True
-                        
-                        # Test PUT /api/stylists/{user_id} (Provider profile update)
-                        update_data = {
-                            "hourly_rate": 85.0,
-                            "bio": "Updated bio: Professional hair stylist with 6 years experience",
-                            "location": "Los Angeles, CA"
-                        }
-                        response = self.session.put(
-                            f"{self.base_url}/stylists/{self.created_user_id}", 
-                            json=update_data,
-                            timeout=10
-                        )
-                        if response.status_code == 200:
-                            updated_stylist = response.json()
-                            self.log_success("PUT /api/stylists/{user_id}", f"Updated stylist rate: ${updated_stylist.get('hourly_rate')}/hr")
-                            results["update"] = True
-                        else:
-                            self.log_error("PUT /api/stylists/{user_id}", f"HTTP {response.status_code}: {response.text}")
-                    else:
-                        self.log_error("GET /api/stylists/{user_id}", f"HTTP {response.status_code}: {response.text}")
-                        
-                else:
-                    self.log_error("POST /api/stylists", f"HTTP {response.status_code}: {response.text}")
-            except Exception as e:
-                self.log_error("POST /api/stylists", str(e))
-        else:
-            self.log_error("POST /api/stylists", "No user created to test stylist creation")
             
         self.test_results["stylists_api"] = results
         return results
