@@ -193,6 +193,8 @@ const ProviderDashboard = () => {
       >
         Save Services
       </button>
+      
+      <BottomNavigation />
     </div>
   );
 };
