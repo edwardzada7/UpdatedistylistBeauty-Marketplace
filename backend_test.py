@@ -355,8 +355,77 @@ class BackendTester:
             
         self.test_results["provider_services_toggle_api"] = results
         return results
+    def test_providers_with_services_api(self) -> Dict[str, bool]:
+        """Test Providers with Services Listing API (Phase 1.4)"""
+        print(f"\n👥 Testing Providers with Services API (Phase 1.4)")
+        results = {"get_providers_with_services": False, "get_provider_full_profile": False, "filter_by_category": False}
         
-    def cleanup_test_data(self):
+        # Test GET /api/providers/with-services - Should return only providers with active services
+        try:
+            response = self.session.get(f"{self.base_url}/providers/with-services", timeout=10)
+            if response.status_code == 200:
+                providers = response.json()
+                if len(providers) > 0:
+                    # Check structure of first provider
+                    first_provider = providers[0]
+                    required_fields = ['provider_id', 'name', 'starting_price', 'primary_service', 'active_service_count', 'services']
+                    if all(field in first_provider for field in required_fields):
+                        self.log_success("GET /api/providers/with-services", f"Retrieved {len(providers)} providers with services. First provider: {first_provider.get('name')} ({first_provider.get('active_service_count')} services, starting at ₦{first_provider.get('starting_price')})")
+                        results["get_providers_with_services"] = True
+                    else:
+                        missing_fields = [field for field in required_fields if field not in first_provider]
+                        self.log_error("GET /api/providers/with-services", f"Missing required fields: {missing_fields}")
+                else:
+                    self.log_error("GET /api/providers/with-services", "No providers with services found")
+            else:
+                self.log_error("GET /api/providers/with-services", f"HTTP {response.status_code}: {response.text}")
+        except Exception as e:
+            self.log_error("GET /api/providers/with-services", str(e))
+            
+        # Test GET /api/providers/with-services?category_id=beauty-grooming - Filter by category
+        try:
+            response = self.session.get(f"{self.base_url}/providers/with-services?category_id=beauty-grooming", timeout=10)
+            if response.status_code == 200:
+                providers = response.json()
+                # Check that all providers have beauty-grooming services
+                valid_filter = True
+                for provider in providers:
+                    services = provider.get('services', [])
+                    if not any(service.get('category_id') == 'beauty-grooming' for service in services):
+                        valid_filter = False
+                        break
+                
+                if valid_filter:
+                    self.log_success("GET /api/providers/with-services?category_id=beauty-grooming", f"Retrieved {len(providers)} providers with beauty-grooming services")
+                    results["filter_by_category"] = True
+                else:
+                    self.log_error("GET /api/providers/with-services?category_id=beauty-grooming", "Filter not working correctly - found providers without beauty-grooming services")
+            else:
+                self.log_error("GET /api/providers/with-services?category_id=beauty-grooming", f"HTTP {response.status_code}: {response.text}")
+        except Exception as e:
+            self.log_error("GET /api/providers/with-services?category_id=beauty-grooming", str(e))
+            
+        # Test GET /api/providers/{provider_id}/full-profile - Get full provider profile with all services
+        try:
+            response = self.session.get(f"{self.base_url}/providers/{self.test_provider_id}/full-profile", timeout=10)
+            if response.status_code == 200:
+                profile = response.json()
+                required_fields = ['provider_id', 'name', 'total_services', 'services', 'services_by_category']
+                if all(field in profile for field in required_fields):
+                    services_count = profile.get('total_services', 0)
+                    categories_count = len(profile.get('services_by_category', {}))
+                    self.log_success("GET /api/providers/{provider_id}/full-profile", f"Retrieved full profile for provider {self.test_provider_id}: {profile.get('name')} ({services_count} services across {categories_count} categories)")
+                    results["get_provider_full_profile"] = True
+                else:
+                    missing_fields = [field for field in required_fields if field not in profile]
+                    self.log_error("GET /api/providers/{provider_id}/full-profile", f"Missing required fields: {missing_fields}")
+            else:
+                self.log_error("GET /api/providers/{provider_id}/full-profile", f"HTTP {response.status_code}: {response.text}")
+        except Exception as e:
+            self.log_error("GET /api/providers/{provider_id}/full-profile", str(e))
+            
+        self.test_results["providers_with_services_api"] = results
+        return results
         """Clean up test data created during testing"""
         print(f"\n🧹 Cleaning up test data...")
         
