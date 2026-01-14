@@ -94,31 +94,61 @@ class WalletResponse(BaseModel):
     balance: float
 
 
-# Provider Services Models (using existing 'services' table)
+# Provider Services Models (Phase 1.3 - Enhanced)
 class ProviderServiceCreate(BaseModel):
-    provider_id: int  # user_id from stylists table (maps to stylist_id)
-    service_id: str  # service identifier from constants (stored in category)
-    service_name: str  # maps to 'name'
+    provider_id: int  # user_id from stylists table
+    sub_service_id: str  # Sub-service identifier (e.g., "haircut", "box-braids")
+    sub_service_name: str  # Display name
+    service_id: str  # Parent service ID (e.g., "barbers")
+    category_id: str  # Category ID (e.g., "beauty-grooming")
     price: float = 0.0
-    duration: int = 60  # in minutes
-    enabled: bool = True  # Will be stored as category suffix '_disabled' if false
-    consultation_required: bool = False  # Not supported in current table, ignored
+    duration_minutes: int = 60
+    description: Optional[str] = None
+    in_store: bool = True
+    home_service: bool = False
+    travel_service: bool = False
+    is_active: bool = True
 
 class ProviderServiceUpdate(BaseModel):
     price: Optional[float] = None
-    duration: Optional[int] = None
-    enabled: Optional[bool] = None
-    consultation_required: Optional[bool] = None
+    duration_minutes: Optional[int] = None
+    description: Optional[str] = None
+    in_store: Optional[bool] = None
+    home_service: Optional[bool] = None
+    travel_service: Optional[bool] = None
+    is_active: Optional[bool] = None
 
 class ProviderServiceResponse(BaseModel):
     id: int
-    provider_id: int  # stylist_id
-    service_id: str  # category
-    service_name: str  # name
+    provider_id: int
+    sub_service_id: str
+    sub_service_name: str
+    service_id: str
+    category_id: str
     price: float
-    duration: int
-    enabled: bool
-    consultation_required: bool = False
+    duration_minutes: int
+    description: Optional[str] = None
+    in_store: bool
+    home_service: bool
+    travel_service: bool
+    is_active: bool
+
+# Bulk service toggle request
+class ServiceToggleRequest(BaseModel):
+    sub_service_id: str
+    sub_service_name: str
+    service_id: str
+    category_id: str
+    is_active: bool
+    price: float = 0.0
+    duration_minutes: int = 60
+    description: Optional[str] = None
+    in_store: bool = True
+    home_service: bool = False
+    travel_service: bool = False
+
+class BulkServiceToggleRequest(BaseModel):
+    services: List[ServiceToggleRequest]
 
 
 # ==================== DATABASE CONNECTION TEST ====================
