@@ -469,7 +469,9 @@ metadata:
   run_ui: true
 
 test_plan:
-  current_focus: []
+  current_focus: 
+    - "Phase 1.3 - Provider Services Toggle Screen"
+    - "Phase 1.4 - Updated Providers List Screen"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
