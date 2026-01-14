@@ -156,60 +156,120 @@ class BackendTester:
         self.test_results["stylists_api"] = results
         return results
         
-    def test_wallets_api(self) -> Dict[str, bool]:
-        """Test Wallets CRUD API endpoints"""
-        print(f"\n💰 Testing Wallets API")
-        results = {"get_all": False, "create": False, "get_by_auth": False}
+    def test_service_catalog_api(self) -> Dict[str, bool]:
+        """Test Service Catalog API endpoints (Phase 1.2)"""
+        print(f"\n📋 Testing Service Catalog API (Phase 1.2)")
+        results = {
+            "get_categories": False,
+            "get_category_by_id": False,
+            "get_services": False,
+            "get_service_by_id": False,
+            "get_sub_services": False,
+            "get_sub_services_by_service": False
+        }
         
-        # Test GET /api/wallets
+        # Test GET /api/catalog/categories - Should return 6 categories
         try:
-            response = self.session.get(f"{self.base_url}/wallets", timeout=10)
+            response = self.session.get(f"{self.base_url}/catalog/categories", timeout=10)
             if response.status_code == 200:
-                wallets = response.json()
-                self.log_success("GET /api/wallets", f"Retrieved {len(wallets)} wallets")
-                results["get_all"] = True
+                categories = response.json()
+                if len(categories) == 6:
+                    category_names = [cat.get('name', '') for cat in categories]
+                    expected_categories = ['Beauty & Grooming', 'Body & Aesthetics', 'Wellness & Care', 'Fashion & Bridal', 'Events & Entertainment', 'Classes & Learning']
+                    if all(name in str(category_names) for name in expected_categories):
+                        self.log_success("GET /api/catalog/categories", f"Retrieved {len(categories)} categories: {', '.join(category_names)}")
+                        results["get_categories"] = True
+                    else:
+                        self.log_error("GET /api/catalog/categories", f"Missing expected categories. Got: {category_names}")
+                else:
+                    self.log_error("GET /api/catalog/categories", f"Expected 6 categories, got {len(categories)}")
             else:
-                self.log_error("GET /api/wallets", f"HTTP {response.status_code}: {response.text}")
+                self.log_error("GET /api/catalog/categories", f"HTTP {response.status_code}: {response.text}")
         except Exception as e:
-            self.log_error("GET /api/wallets", str(e))
+            self.log_error("GET /api/catalog/categories", str(e))
             
-        # Test POST /api/wallets
+        # Test GET /api/catalog/categories/beauty-grooming - Should return category with services
         try:
-            wallet_data = {
-                "user_auth_id": self.test_auth_id,
-                "balance": 100.0
-            }
-            response = self.session.post(
-                f"{self.base_url}/wallets", 
-                json=wallet_data,
-                timeout=10
-            )
-            if response.status_code == 201:
-                wallet = response.json()
-                self.log_success("POST /api/wallets", f"Created wallet with balance: ${wallet.get('balance')}")
-                results["create"] = True
-            elif response.status_code == 400 and "already exists" in response.text:
-                # This is expected behavior - wallet auto-creation might be happening
-                self.log_success("POST /api/wallets", "Wallet already exists (auto-created) - this is expected behavior")
-                results["create"] = True
-            else:
-                self.log_error("POST /api/wallets", f"HTTP {response.status_code}: {response.text}")
-        except Exception as e:
-            self.log_error("POST /api/wallets", str(e))
-            
-        # Test GET /api/wallets/by-auth/{auth_id}
-        try:
-            response = self.session.get(f"{self.base_url}/wallets/by-auth/{self.test_auth_id}", timeout=10)
+            response = self.session.get(f"{self.base_url}/catalog/categories/beauty-grooming", timeout=10)
             if response.status_code == 200:
-                wallet = response.json()
-                self.log_success("GET /api/wallets/by-auth/{auth_id}", f"Found wallet with balance: ${wallet.get('balance')}")
-                results["get_by_auth"] = True
+                category = response.json()
+                if category.get('name') == 'Beauty & Grooming' and 'services' in category:
+                    services_count = len(category['services'])
+                    self.log_success("GET /api/catalog/categories/beauty-grooming", f"Retrieved Beauty & Grooming category with {services_count} services")
+                    results["get_category_by_id"] = True
+                else:
+                    self.log_error("GET /api/catalog/categories/beauty-grooming", "Invalid category structure or missing services")
             else:
-                self.log_error("GET /api/wallets/by-auth/{auth_id}", f"HTTP {response.status_code}: {response.text}")
+                self.log_error("GET /api/catalog/categories/beauty-grooming", f"HTTP {response.status_code}: {response.text}")
         except Exception as e:
-            self.log_error("GET /api/wallets/by-auth/{auth_id}", str(e))
+            self.log_error("GET /api/catalog/categories/beauty-grooming", str(e))
             
-        self.test_results["wallets_api"] = results
+        # Test GET /api/catalog/services - Should return all parent services
+        try:
+            response = self.session.get(f"{self.base_url}/catalog/services", timeout=10)
+            if response.status_code == 200:
+                services = response.json()
+                if len(services) >= 25:  # Should have 25+ services
+                    self.log_success("GET /api/catalog/services", f"Retrieved {len(services)} parent services")
+                    results["get_services"] = True
+                else:
+                    self.log_error("GET /api/catalog/services", f"Expected 25+ services, got {len(services)}")
+            else:
+                self.log_error("GET /api/catalog/services", f"HTTP {response.status_code}: {response.text}")
+        except Exception as e:
+            self.log_error("GET /api/catalog/services", str(e))
+            
+        # Test GET /api/catalog/services/barbers - Should return barbers service with 6 sub-services
+        try:
+            response = self.session.get(f"{self.base_url}/catalog/services/barbers", timeout=10)
+            if response.status_code == 200:
+                service = response.json()
+                if service.get('name') == 'Barbers' and 'sub_services' in service:
+                    sub_services_count = len(service['sub_services'])
+                    if sub_services_count == 6:
+                        self.log_success("GET /api/catalog/services/barbers", f"Retrieved Barbers service with {sub_services_count} sub-services")
+                        results["get_service_by_id"] = True
+                    else:
+                        self.log_error("GET /api/catalog/services/barbers", f"Expected 6 sub-services, got {sub_services_count}")
+                else:
+                    self.log_error("GET /api/catalog/services/barbers", "Invalid service structure or missing sub-services")
+            else:
+                self.log_error("GET /api/catalog/services/barbers", f"HTTP {response.status_code}: {response.text}")
+        except Exception as e:
+            self.log_error("GET /api/catalog/services/barbers", str(e))
+            
+        # Test GET /api/catalog/sub-services - Should return all sub-services (100+)
+        try:
+            response = self.session.get(f"{self.base_url}/catalog/sub-services", timeout=10)
+            if response.status_code == 200:
+                sub_services = response.json()
+                if len(sub_services) >= 100:
+                    self.log_success("GET /api/catalog/sub-services", f"Retrieved {len(sub_services)} sub-services")
+                    results["get_sub_services"] = True
+                else:
+                    self.log_error("GET /api/catalog/sub-services", f"Expected 100+ sub-services, got {len(sub_services)}")
+            else:
+                self.log_error("GET /api/catalog/sub-services", f"HTTP {response.status_code}: {response.text}")
+        except Exception as e:
+            self.log_error("GET /api/catalog/sub-services", str(e))
+            
+        # Test GET /api/catalog/sub-services/barbers - Should return 6 sub-services for barbers
+        try:
+            response = self.session.get(f"{self.base_url}/catalog/sub-services/barbers", timeout=10)
+            if response.status_code == 200:
+                sub_services = response.json()
+                if len(sub_services) == 6:
+                    sub_service_names = [sub.get('name', '') for sub in sub_services]
+                    self.log_success("GET /api/catalog/sub-services/barbers", f"Retrieved {len(sub_services)} barber sub-services: {', '.join(sub_service_names[:3])}...")
+                    results["get_sub_services_by_service"] = True
+                else:
+                    self.log_error("GET /api/catalog/sub-services/barbers", f"Expected 6 sub-services, got {len(sub_services)}")
+            else:
+                self.log_error("GET /api/catalog/sub-services/barbers", f"HTTP {response.status_code}: {response.text}")
+        except Exception as e:
+            self.log_error("GET /api/catalog/sub-services/barbers", str(e))
+            
+        self.test_results["service_catalog_api"] = results
         return results
         
     def test_provider_services_api(self) -> Dict[str, bool]:
