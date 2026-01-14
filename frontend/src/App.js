@@ -108,6 +108,86 @@ function AppRoutes() {
       {/* Root redirect based on role */}
       <Route path="/" element={<RoleBasedRedirect />} />
 
+      {/* ============================================= */}
+      {/* USER (CUSTOMER) ROUTES - New /user/* structure */}
+      {/* ============================================= */}
+      <Route
+        path="/user/home"
+        element={
+          <ProtectedRoute>
+            <HomeScreen />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/user/services"
+        element={
+          <ProtectedRoute>
+            <ServicesScreen />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/user/providers"
+        element={
+          <ProtectedRoute>
+            <ProvidersListScreen />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/user/providers/:userId"
+        element={
+          <ProtectedRoute>
+            <ProviderProfileScreen />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/user/wallet"
+        element={
+          <ProtectedRoute>
+            <WalletScreen />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* ============================================= */}
+      {/* PROVIDER (STYLIST) ROUTES - New /provider/* structure */}
+      {/* ============================================= */}
+      <Route
+        path="/provider/dashboard"
+        element={
+          <ProtectedRoute>
+            <ProviderDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/provider/services"
+        element={
+          <ProtectedRoute>
+            <ProviderServicesScreen />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* ============================================= */}
+      {/* SHARED ROUTES - Accessible by both roles */}
+      {/* ============================================= */}
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <ProfileScreen />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* ============================================= */}
+      {/* LEGACY ROUTES - Backward compatibility */}
+      {/* ============================================= */}
+      
       {/* USER (CUSTOMER) ROUTES */}
       <Route
         path="/home"
