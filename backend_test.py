@@ -470,28 +470,11 @@ class BackendTester:
         self.print_summary()
         
         return self.test_results
-        if not self.test_connection():
-            print("\n❌ Connection failed - aborting tests")
-            return self.test_results
-            
-        # Run API tests
-        self.test_users_api()
-        self.test_stylists_api()
-        self.test_wallets_api()
-        self.test_provider_services_api()
-        
-        # Cleanup
-        self.cleanup_test_data()
-        
-        # Print summary
-        self.print_summary()
-        
-        return self.test_results
         
     def print_summary(self):
-        """Print test results summary"""
-        print(f"\n📊 TEST SUMMARY")
-        print("=" * 50)
+        """Print test results summary for Phase 1.1-1.4"""
+        print(f"\n📊 iStylist Phase 1.1-1.4 TEST SUMMARY")
+        print("=" * 60)
         
         total_tests = 0
         passed_tests = 0
@@ -504,43 +487,52 @@ class BackendTester:
         else:
             print("❌ Database Connection: FAILED")
             
-        # Users API
+        # Users API (Regression)
         for test, result in self.test_results["users_api"].items():
             total_tests += 1
             if result:
                 passed_tests += 1
-                print(f"✅ Users API - {test}: PASSED")
+                print(f"✅ Users API (Regression) - {test}: PASSED")
             else:
-                print(f"❌ Users API - {test}: FAILED")
+                print(f"❌ Users API (Regression) - {test}: FAILED")
                 
-        # Stylists API
+        # Stylists API (Regression)
         for test, result in self.test_results["stylists_api"].items():
             total_tests += 1
             if result:
                 passed_tests += 1
-                print(f"✅ Stylists API - {test}: PASSED")
+                print(f"✅ Stylists API (Regression) - {test}: PASSED")
             else:
-                print(f"❌ Stylists API - {test}: FAILED")
+                print(f"❌ Stylists API (Regression) - {test}: FAILED")
                 
-        # Wallets API
-        for test, result in self.test_results["wallets_api"].items():
+        # Service Catalog API (Phase 1.2)
+        for test, result in self.test_results["service_catalog_api"].items():
             total_tests += 1
             if result:
                 passed_tests += 1
-                print(f"✅ Wallets API - {test}: PASSED")
+                print(f"✅ Service Catalog API (Phase 1.2) - {test}: PASSED")
             else:
-                print(f"❌ Wallets API - {test}: FAILED")
+                print(f"❌ Service Catalog API (Phase 1.2) - {test}: FAILED")
                 
-        # Provider Services API
-        for test, result in self.test_results["provider_services_api"].items():
+        # Provider Services Toggle API (Phase 1.3)
+        for test, result in self.test_results["provider_services_toggle_api"].items():
             total_tests += 1
             if result:
                 passed_tests += 1
-                print(f"✅ Provider Services API - {test}: PASSED")
+                print(f"✅ Provider Services Toggle API (Phase 1.3) - {test}: PASSED")
             else:
-                print(f"❌ Provider Services API - {test}: FAILED")
+                print(f"❌ Provider Services Toggle API (Phase 1.3) - {test}: FAILED")
                 
-        print("=" * 50)
+        # Providers with Services API (Phase 1.4)
+        for test, result in self.test_results["providers_with_services_api"].items():
+            total_tests += 1
+            if result:
+                passed_tests += 1
+                print(f"✅ Providers with Services API (Phase 1.4) - {test}: PASSED")
+            else:
+                print(f"❌ Providers with Services API (Phase 1.4) - {test}: FAILED")
+                
+        print("=" * 60)
         print(f"TOTAL: {passed_tests}/{total_tests} tests passed")
         
         if self.test_results["errors"]:
@@ -559,8 +551,9 @@ if __name__ == "__main__":
         results["connection"],
         all(results["users_api"].values()),
         all(results["stylists_api"].values()),
-        all(results["wallets_api"].values()),
-        all(results["provider_services_api"].values())
+        all(results["service_catalog_api"].values()),
+        all(results["provider_services_toggle_api"].values()),
+        all(results["providers_with_services_api"].values())
     ])
     
     sys.exit(0 if all_passed else 1)
