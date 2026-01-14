@@ -191,7 +191,7 @@ const ProvidersListScreen = () => {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => navigate("/providers")}
+                onClick={() => navigate("/user/providers", { replace: true })}
                 className="whitespace-nowrap"
               >
                 Clear filter ✕
