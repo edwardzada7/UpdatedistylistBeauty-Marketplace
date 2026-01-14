@@ -70,7 +70,8 @@ const RoleBasedRedirect = () => {
     return <Navigate to="/login" replace />;
   }
   
-  return <Navigate to={isProvider ? "/dashboard" : "/home"} replace />;
+  // Redirect to new path structure
+  return <Navigate to={isProvider ? "/provider/dashboard" : "/user/home"} replace />;
 };
 
 function AppRoutes() {
