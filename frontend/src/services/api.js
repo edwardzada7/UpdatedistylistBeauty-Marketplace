@@ -66,19 +66,70 @@ export const stylistsAPI = {
     api.post(`/providers/register?user_id=${userId}&hourly_rate=${hourlyRate}${bio ? `&bio=${encodeURIComponent(bio)}` : ''}${location ? `&location=${encodeURIComponent(location)}` : ''}`),
 };
 
-// ==================== PROVIDER SERVICES API ====================
+// ==================== PROVIDER SERVICES API (Enhanced Phase 1.3) ====================
 
 export const providerServicesAPI = {
   // Get all services for a provider
-  getByProviderId: (providerId) => api.get(`/provider-services/${providerId}`),
+  getByProviderId: (providerId, activeOnly = false) => 
+    api.get(`/provider-services/${providerId}${activeOnly ? '?active_only=true' : ''}`),
+  
   // Create/update a single service
   create: (data) => api.post("/provider-services", data),
+  
   // Update a specific service
   update: (serviceId, data) => api.put(`/provider-services/${serviceId}`, data),
-  // Bulk update services for a provider
-  bulkUpdate: (providerId, services) => api.post(`/provider-services/bulk/${providerId}`, services),
+  
+  // Bulk toggle services for a provider
+  toggleServices: (providerId, services) => 
+    api.post(`/provider-services/toggle/${providerId}`, { services }),
+  
   // Delete a service
   delete: (serviceId) => api.delete(`/provider-services/${serviceId}`),
+};
+
+// ==================== SERVICE CATALOG API ====================
+
+export const catalogAPI = {
+  // Get all service categories
+  getCategories: () => api.get("/catalog/categories"),
+  
+  // Get a specific category with services
+  getCategory: (categoryId) => api.get(`/catalog/categories/${categoryId}`),
+  
+  // Get all services (parent-level)
+  getServices: () => api.get("/catalog/services"),
+  
+  // Get a specific service with sub-services
+  getService: (serviceId) => api.get(`/catalog/services/${serviceId}`),
+  
+  // Get all sub-services (flat list)
+  getAllSubServices: () => api.get("/catalog/sub-services"),
+  
+  // Get sub-services by parent service
+  getSubServicesByService: (serviceId) => api.get(`/catalog/sub-services/${serviceId}`),
+};
+
+// ==================== PROVIDERS API (Phase 1.4) ====================
+
+export const providersAPI = {
+  // Get providers with active services (for user browsing)
+  getWithServices: (filters = {}) => {
+    const queryParams = new URLSearchParams();
+    if (filters.categoryId) queryParams.append("category_id", filters.categoryId);
+    if (filters.serviceId) queryParams.append("service_id", filters.serviceId);
+    if (filters.city) queryParams.append("city", filters.city);
+    if (filters.minPrice) queryParams.append("min_price", filters.minPrice);
+    if (filters.maxPrice) queryParams.append("max_price", filters.maxPrice);
+    
+    return api.get(`/providers/with-services${queryParams.toString() ? `?${queryParams}` : ""}`);
+  },
+  
+  // Get full provider profile for booking
+  getFullProfile: (providerId) => api.get(`/providers/${providerId}/full-profile`),
+  
+  // Register as provider
+  register: (userId, hourlyRate = 0, bio = null, location = null) => 
+    api.post(`/providers/register?user_id=${userId}&hourly_rate=${hourlyRate}${bio ? `&bio=${encodeURIComponent(bio)}` : ''}${location ? `&location=${encodeURIComponent(location)}` : ''}`),
 };
 
 // ==================== WALLETS API ====================
