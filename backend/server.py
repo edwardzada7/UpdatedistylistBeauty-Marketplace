@@ -704,57 +704,118 @@ async def delete_wallet(wallet_id: int):
 
 
 # ==================== PROVIDER SERVICES ENDPOINTS ====================
-# Using the existing 'services' table in Supabase
-# Mapping: provider_id -> stylist_id, service_id -> category, service_name -> name
+# Using the existing 'services' table in Supabase with enhanced schema
+# Table mapping: stylist_id -> provider_id, category -> sub_service_id (composite), name -> sub_service_name
+
+def parse_category_field(category_str):
+    """Parse the category field which stores: category_id|service_id|sub_service_id"""
+    if not category_str:
+        return {"category_id": "", "service_id": "", "sub_service_id": ""}
+    parts = category_str.split("|")
+    return {
+        "category_id": parts[0] if len(parts) > 0 else "",
+        "service_id": parts[1] if len(parts) > 1 else "",
+        "sub_service_id": parts[2] if len(parts) > 2 else parts[0]
+    }
+
+def build_category_field(category_id, service_id, sub_service_id):
+    """Build the composite category field"""
+    return f"{category_id}|{service_id}|{sub_service_id}"
+
+def parse_service_record(item):
+    """Parse a services table record into ProviderServiceResponse format"""
+    parsed = parse_category_field(item.get("category"))
+    name_parts = (item.get("name") or "").split("||")
+    sub_service_name = name_parts[0].replace(" (disabled)", "")
+    description = name_parts[1] if len(name_parts) > 1 else None
+    
+    # Parse service modes from name suffix
+    in_store = True
+    home_service = False
+    travel_service = False
+    if "||modes:" in (item.get("name") or ""):
+        modes_part = item.get("name").split("||modes:")[-1].split("||")[0] if "||modes:" in item.get("name") else ""
+        in_store = "in_store" in modes_part
+        home_service = "home" in modes_part
+        travel_service = "travel" in modes_part
+    
+    return {
+        "id": item["id"],
+        "provider_id": item.get("stylist_id") or 0,
+        "sub_service_id": parsed["sub_service_id"],
+        "sub_service_name": sub_service_name,
+        "service_id": parsed["service_id"],
+        "category_id": parsed["category_id"],
+        "price": float(item.get("price") or 0),
+        "duration_minutes": item.get("duration") or 60,
+        "description": description,
+        "in_store": in_store,
+        "home_service": home_service,
+        "travel_service": travel_service,
+        "is_active": "(disabled)" not in (item.get("name") or "")
+    }
+
+def build_service_name(sub_service_name, description, in_store, home_service, travel_service, is_active):
+    """Build the service name field with metadata"""
+    name = sub_service_name if is_active else f"{sub_service_name} (disabled)"
+    if description:
+        name += f"||{description}"
+    modes = []
+    if in_store:
+        modes.append("in_store")
+    if home_service:
+        modes.append("home")
+    if travel_service:
+        modes.append("travel")
+    if modes:
+        name += f"||modes:{','.join(modes)}"
+    return name
 
 @api_router.post("/provider-services", response_model=ProviderServiceResponse, status_code=status.HTTP_201_CREATED)
 async def create_provider_service(service_data: ProviderServiceCreate):
-    """Create a new provider service (using 'services' table)"""
+    """Create or update a provider service"""
     try:
-        # Check if service already exists for this provider+service_id combo
-        existing = supabase.table("services").select("*").eq("stylist_id", service_data.provider_id).eq("category", service_data.service_id).execute()
+        category_field = build_category_field(
+            service_data.category_id, 
+            service_data.service_id, 
+            service_data.sub_service_id
+        )
+        
+        # Check if service already exists
+        existing = supabase.table("services").select("*").eq(
+            "stylist_id", service_data.provider_id
+        ).eq("category", category_field).execute()
+        
+        service_name = build_service_name(
+            service_data.sub_service_name,
+            service_data.description,
+            service_data.in_store,
+            service_data.home_service,
+            service_data.travel_service,
+            service_data.is_active
+        )
         
         if existing.data:
-            # Update existing instead of creating new
+            # Update existing
             update_data = {
+                "name": service_name,
                 "price": service_data.price,
-                "duration": service_data.duration,
-                "name": service_data.service_name if service_data.enabled else f"{service_data.service_name} (disabled)"
+                "duration": service_data.duration_minutes
             }
             response = supabase.table("services").update(update_data).eq("id", existing.data[0]["id"]).execute()
-            item = response.data[0]
-            return {
-                "id": item["id"],
-                "provider_id": item["stylist_id"],
-                "service_id": item["category"],
-                "service_name": item["name"].replace(" (disabled)", ""),
-                "price": item["price"] or 0,
-                "duration": item["duration"] or 60,
-                "enabled": "(disabled)" not in (item["name"] or ""),
-                "consultation_required": False
-            }
+            return parse_service_record(response.data[0])
         
-        # Create new service
+        # Create new
         service_dict = {
             "stylist_id": service_data.provider_id,
-            "category": service_data.service_id,
-            "name": service_data.service_name if service_data.enabled else f"{service_data.service_name} (disabled)",
+            "category": category_field,
+            "name": service_name,
             "price": service_data.price,
-            "duration": service_data.duration
+            "duration": service_data.duration_minutes
         }
         
         response = supabase.table("services").insert(service_dict).execute()
-        item = response.data[0]
-        return {
-            "id": item["id"],
-            "provider_id": item["stylist_id"],
-            "service_id": item["category"],
-            "service_name": item["name"].replace(" (disabled)", ""),
-            "price": item["price"] or 0,
-            "duration": item["duration"] or 60,
-            "enabled": "(disabled)" not in (item["name"] or ""),
-            "consultation_required": False
-        }
+        return parse_service_record(response.data[0])
     except HTTPException:
         raise
     except Exception as e:
@@ -763,24 +824,17 @@ async def create_provider_service(service_data: ProviderServiceCreate):
             detail=f"Failed to create provider service: {str(e)}"
         )
 
-@api_router.get("/provider-services/{provider_id}", response_model=List[ProviderServiceResponse])
-async def get_provider_services(provider_id: int):
-    """Get all services for a provider (from 'services' table)"""
+@api_router.get("/provider-services/{provider_id}")
+async def get_provider_services(provider_id: int, active_only: bool = False):
+    """Get all services for a provider"""
     try:
         response = supabase.table("services").select("*").eq("stylist_id", provider_id).execute()
         
-        services = []
-        for item in response.data:
-            services.append({
-                "id": item["id"],
-                "provider_id": item["stylist_id"],
-                "service_id": item["category"] or "",
-                "service_name": (item["name"] or "").replace(" (disabled)", ""),
-                "price": item["price"] or 0,
-                "duration": item["duration"] or 60,
-                "enabled": "(disabled)" not in (item["name"] or ""),
-                "consultation_required": False
-            })
+        services = [parse_service_record(item) for item in response.data]
+        
+        if active_only:
+            services = [s for s in services if s["is_active"]]
+        
         return services
     except Exception as e:
         raise HTTPException(
@@ -800,35 +854,33 @@ async def update_provider_service(service_id: int, service_update: ProviderServi
             )
         
         current = existing.data[0]
-        current_name = (current["name"] or "").replace(" (disabled)", "")
+        current_parsed = parse_service_record(current)
+        
+        # Build updated values
+        is_active = service_update.is_active if service_update.is_active is not None else current_parsed["is_active"]
+        in_store = service_update.in_store if service_update.in_store is not None else current_parsed["in_store"]
+        home_service = service_update.home_service if service_update.home_service is not None else current_parsed["home_service"]
+        travel_service = service_update.travel_service if service_update.travel_service is not None else current_parsed["travel_service"]
+        description = service_update.description if service_update.description is not None else current_parsed["description"]
         
         update_data = {}
         if service_update.price is not None:
             update_data["price"] = service_update.price
-        if service_update.duration is not None:
-            update_data["duration"] = service_update.duration
-        if service_update.enabled is not None:
-            if service_update.enabled:
-                update_data["name"] = current_name
-            else:
-                update_data["name"] = f"{current_name} (disabled)"
+        if service_update.duration_minutes is not None:
+            update_data["duration"] = service_update.duration_minutes
         
-        if not update_data:
-            item = current
-        else:
-            response = supabase.table("services").update(update_data).eq("id", service_id).execute()
-            item = response.data[0]
+        # Always update name if any mode or status changed
+        update_data["name"] = build_service_name(
+            current_parsed["sub_service_name"],
+            description,
+            in_store,
+            home_service,
+            travel_service,
+            is_active
+        )
         
-        return {
-            "id": item["id"],
-            "provider_id": item["stylist_id"],
-            "service_id": item["category"] or "",
-            "service_name": (item["name"] or "").replace(" (disabled)", ""),
-            "price": item["price"] or 0,
-            "duration": item["duration"] or 60,
-            "enabled": "(disabled)" not in (item["name"] or ""),
-            "consultation_required": False
-        }
+        response = supabase.table("services").update(update_data).eq("id", service_id).execute()
+        return parse_service_record(response.data[0])
     except HTTPException:
         raise
     except Exception as e:
@@ -837,54 +889,58 @@ async def update_provider_service(service_id: int, service_update: ProviderServi
             detail=f"Failed to update provider service: {str(e)}"
         )
 
-@api_router.post("/provider-services/bulk/{provider_id}")
-async def bulk_update_provider_services(provider_id: int, services: List[ProviderServiceCreate]):
-    """Bulk update/create services for a provider"""
+@api_router.post("/provider-services/toggle/{provider_id}")
+async def toggle_provider_services(provider_id: int, request: BulkServiceToggleRequest):
+    """Bulk toggle services for a provider - upsert behavior"""
     try:
         results = []
-        for service_data in services:
-            # Check if service exists
-            existing = supabase.table("services").select("*").eq("stylist_id", provider_id).eq("category", service_data.service_id).execute()
+        for svc in request.services:
+            category_field = build_category_field(svc.category_id, svc.service_id, svc.sub_service_id)
             
-            service_name = service_data.service_name if service_data.enabled else f"{service_data.service_name} (disabled)"
+            # Check if service exists
+            existing = supabase.table("services").select("*").eq(
+                "stylist_id", provider_id
+            ).eq("category", category_field).execute()
+            
+            service_name = build_service_name(
+                svc.sub_service_name,
+                svc.description,
+                svc.in_store,
+                svc.home_service,
+                svc.travel_service,
+                svc.is_active
+            )
             
             if existing.data:
                 # Update existing
                 update_data = {
-                    "price": service_data.price,
-                    "duration": service_data.duration,
-                    "name": service_name
+                    "name": service_name,
+                    "price": svc.price,
+                    "duration": svc.duration_minutes
                 }
                 response = supabase.table("services").update(update_data).eq("id", existing.data[0]["id"]).execute()
-                item = response.data[0]
+                results.append(parse_service_record(response.data[0]))
             else:
-                # Create new
-                service_dict = {
-                    "stylist_id": provider_id,
-                    "category": service_data.service_id,
-                    "name": service_name,
-                    "price": service_data.price,
-                    "duration": service_data.duration
-                }
-                response = supabase.table("services").insert(service_dict).execute()
-                item = response.data[0]
-            
-            results.append({
-                "id": item["id"],
-                "provider_id": item["stylist_id"],
-                "service_id": item["category"] or "",
-                "service_name": (item["name"] or "").replace(" (disabled)", ""),
-                "price": item["price"] or 0,
-                "duration": item["duration"] or 60,
-                "enabled": "(disabled)" not in (item["name"] or ""),
-                "consultation_required": False
-            })
+                # Create new only if is_active is True
+                if svc.is_active:
+                    service_dict = {
+                        "stylist_id": provider_id,
+                        "category": category_field,
+                        "name": service_name,
+                        "price": svc.price,
+                        "duration": svc.duration_minutes
+                    }
+                    response = supabase.table("services").insert(service_dict).execute()
+                    results.append(parse_service_record(response.data[0]))
         
-        return {"message": f"Successfully updated {len(results)} services", "services": results}
+        return {
+            "message": f"Successfully updated {len(results)} services",
+            "services": results
+        }
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to bulk update provider services: {str(e)}"
+            detail=f"Failed to toggle provider services: {str(e)}"
         )
 
 @api_router.delete("/provider-services/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -906,6 +962,194 @@ async def delete_provider_service(service_id: int):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete provider service: {str(e)}"
+        )
+
+
+# ==================== SERVICE CATALOG ENDPOINTS ====================
+
+@api_router.get("/catalog/categories")
+async def get_service_categories():
+    """Get all service categories"""
+    from service_catalog import get_all_categories
+    return get_all_categories()
+
+@api_router.get("/catalog/categories/{category_id}")
+async def get_category(category_id: str):
+    """Get a specific category with its services"""
+    from service_catalog import get_category
+    category = get_category(category_id)
+    if not category:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Category not found"
+        )
+    return category
+
+@api_router.get("/catalog/services")
+async def get_all_services():
+    """Get all services (parent-level)"""
+    from service_catalog import get_all_services
+    return get_all_services()
+
+@api_router.get("/catalog/services/{service_id}")
+async def get_service(service_id: str):
+    """Get a specific service with its sub-services"""
+    from service_catalog import get_service
+    service = get_service(service_id)
+    if not service:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Service not found"
+        )
+    return service
+
+@api_router.get("/catalog/sub-services")
+async def get_all_sub_services():
+    """Get all sub-services (flat list)"""
+    from service_catalog import get_all_sub_services
+    return get_all_sub_services()
+
+@api_router.get("/catalog/sub-services/{service_id}")
+async def get_sub_services_by_service(service_id: str):
+    """Get all sub-services for a specific service"""
+    from service_catalog import get_sub_services_by_service
+    return get_sub_services_by_service(service_id)
+
+
+# ==================== PROVIDER LISTING ENDPOINTS (Phase 1.4) ====================
+
+@api_router.get("/providers/with-services")
+async def get_providers_with_services(
+    category_id: Optional[str] = None,
+    service_id: Optional[str] = None,
+    city: Optional[str] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None
+):
+    """Get providers who have at least one active service"""
+    try:
+        # Get all stylists with their user data
+        stylists_response = supabase.table("stylists").select(
+            "*, users!stylists_user_id_fkey(name, email)"
+        ).execute()
+        
+        providers_with_services = []
+        
+        for stylist in stylists_response.data:
+            provider_id = stylist["user_id"]
+            
+            # Get active services for this provider
+            services_response = supabase.table("services").select("*").eq(
+                "stylist_id", provider_id
+            ).execute()
+            
+            active_services = []
+            for svc in services_response.data:
+                parsed = parse_service_record(svc)
+                if parsed["is_active"]:
+                    # Apply filters
+                    if category_id and parsed["category_id"] != category_id:
+                        continue
+                    if service_id and parsed["service_id"] != service_id:
+                        continue
+                    if min_price and parsed["price"] < min_price:
+                        continue
+                    if max_price and parsed["price"] > max_price:
+                        continue
+                    active_services.append(parsed)
+            
+            # Only include providers with at least 1 active service
+            if active_services:
+                # Apply location filter
+                if city and stylist.get("location") and city.lower() not in stylist.get("location", "").lower():
+                    continue
+                
+                # Calculate min price
+                min_service_price = min(s["price"] for s in active_services) if active_services else 0
+                
+                # Get primary service (first active service by category)
+                primary_service = active_services[0] if active_services else None
+                
+                providers_with_services.append({
+                    "provider_id": provider_id,
+                    "name": stylist["users"]["name"] if stylist.get("users") else "Provider",
+                    "bio": stylist.get("bio"),
+                    "location": stylist.get("location"),
+                    "rating": stylist.get("rating", 0),
+                    "is_verified": stylist.get("is_verified", False),
+                    "is_premium": stylist.get("is_premium", False),
+                    "starting_price": min_service_price,
+                    "primary_service": primary_service["sub_service_name"] if primary_service else None,
+                    "primary_category": primary_service["category_id"] if primary_service else None,
+                    "active_service_count": len(active_services),
+                    "services": active_services[:5]  # Return first 5 services for preview
+                })
+        
+        # Sort by rating, then by premium status
+        providers_with_services.sort(
+            key=lambda x: (-x["is_premium"], -x["is_verified"], -x["rating"], x["starting_price"])
+        )
+        
+        return providers_with_services
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch providers: {str(e)}"
+        )
+
+@api_router.get("/providers/{provider_id}/full-profile")
+async def get_provider_full_profile(provider_id: int):
+    """Get full provider profile with all services for booking"""
+    try:
+        # Get stylist data
+        stylist_response = supabase.table("stylists").select(
+            "*, users!stylists_user_id_fkey(name, email)"
+        ).eq("user_id", provider_id).execute()
+        
+        if not stylist_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Provider not found"
+            )
+        
+        stylist = stylist_response.data[0]
+        
+        # Get all services
+        services_response = supabase.table("services").select("*").eq(
+            "stylist_id", provider_id
+        ).execute()
+        
+        services = [parse_service_record(svc) for svc in services_response.data]
+        active_services = [s for s in services if s["is_active"]]
+        
+        # Group services by category
+        services_by_category = {}
+        for svc in active_services:
+            cat_id = svc["category_id"]
+            if cat_id not in services_by_category:
+                services_by_category[cat_id] = []
+            services_by_category[cat_id].append(svc)
+        
+        return {
+            "provider_id": provider_id,
+            "name": stylist["users"]["name"] if stylist.get("users") else "Provider",
+            "bio": stylist.get("bio"),
+            "location": stylist.get("location"),
+            "rating": stylist.get("rating", 0),
+            "is_verified": stylist.get("is_verified", False),
+            "is_premium": stylist.get("is_premium", False),
+            "travel_available": stylist.get("travel_available", False),
+            "travel_fee_per_km": stylist.get("travel_fee_per_km", 0),
+            "total_services": len(active_services),
+            "services": active_services,
+            "services_by_category": services_by_category
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch provider profile: {str(e)}"
         )
 
 
