@@ -49,7 +49,7 @@ const ProviderProfileScreen = () => {
       <div className="min-h-screen bg-gray-50">
         <header className="bg-white shadow-sm border-b">
           <div className="container mx-auto px-4 py-4 flex items-center gap-4">
-            <Button variant="ghost" size="sm" onClick={() => navigate("/providers")}>
+            <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <h1 className="text-xl font-bold">Provider Profile</h1>
@@ -60,7 +60,7 @@ const ProviderProfileScreen = () => {
             title="Provider not found"
             description="This provider profile doesn't exist or has been removed."
             actionLabel="Browse Providers"
-            onAction={() => navigate("/providers")}
+            onAction={() => navigate("/user/providers", { replace: true })}
           />
         </div>
         <BottomNavigation />
