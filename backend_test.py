@@ -272,56 +272,70 @@ class BackendTester:
         self.test_results["service_catalog_api"] = results
         return results
         
-    def test_provider_services_api(self) -> Dict[str, bool]:
-        """Test Provider Services CRUD API endpoints"""
-        print(f"\n🛍️ Testing Provider Services API")
-        results = {"get_services": False, "create_service": False, "update_service": False, "bulk_update": False, "delete_service": False}
+    def test_provider_services_toggle_api(self) -> Dict[str, bool]:
+        """Test Enhanced Provider Services Toggle API (Phase 1.3)"""
+        print(f"\n🔄 Testing Provider Services Toggle API (Phase 1.3)")
+        results = {"toggle_services": False, "get_provider_services": False, "update_service": False}
         
-        # Test GET /api/provider-services/{provider_id}
+        # Test POST /api/provider-services/toggle/{provider_id} - Bulk toggle services
+        try:
+            toggle_data = {
+                "services": [
+                    {
+                        "sub_service_id": "box-braids",
+                        "sub_service_name": "Box Braids",
+                        "service_id": "hair-braiders",
+                        "category_id": "beauty-grooming",
+                        "is_active": True,
+                        "price": 15000,
+                        "duration_minutes": 240,
+                        "in_store": True,
+                        "home_service": True,
+                        "travel_service": False
+                    }
+                ]
+            }
+            response = self.session.post(
+                f"{self.base_url}/provider-services/toggle/{self.test_provider_id}", 
+                json=toggle_data,
+                timeout=10
+            )
+            if response.status_code == 200:
+                result = response.json()
+                services_count = len(result.get('services', []))
+                self.log_success("POST /api/provider-services/toggle/{provider_id}", f"Successfully toggled {services_count} services for provider {self.test_provider_id}")
+                results["toggle_services"] = True
+                
+                # Store service ID for update test
+                if result.get('services') and len(result['services']) > 0:
+                    self.created_service_id = result['services'][0].get('id')
+            else:
+                self.log_error("POST /api/provider-services/toggle/{provider_id}", f"HTTP {response.status_code}: {response.text}")
+        except Exception as e:
+            self.log_error("POST /api/provider-services/toggle/{provider_id}", str(e))
+            
+        # Test GET /api/provider-services/{provider_id} - Should return toggled services
         try:
             response = self.session.get(f"{self.base_url}/provider-services/{self.test_provider_id}", timeout=10)
             if response.status_code == 200:
                 services = response.json()
-                self.log_success("GET /api/provider-services/{provider_id}", f"Retrieved {len(services)} services for provider {self.test_provider_id}")
-                results["get_services"] = True
+                active_services = [s for s in services if s.get('is_active', False)]
+                self.log_success("GET /api/provider-services/{provider_id}", f"Retrieved {len(services)} services ({len(active_services)} active) for provider {self.test_provider_id}")
+                results["get_provider_services"] = True
             else:
                 self.log_error("GET /api/provider-services/{provider_id}", f"HTTP {response.status_code}: {response.text}")
         except Exception as e:
             self.log_error("GET /api/provider-services/{provider_id}", str(e))
             
-        # Test POST /api/provider-services
-        try:
-            service_data = {
-                "provider_id": self.test_provider_id,
-                "service_id": "hairdressers",
-                "service_name": "Hairdressers",
-                "price": 5000,
-                "duration": 60,
-                "enabled": True,
-                "consultation_required": False
-            }
-            response = self.session.post(
-                f"{self.base_url}/provider-services", 
-                json=service_data,
-                timeout=10
-            )
-            if response.status_code == 201:
-                service = response.json()
-                self.log_success("POST /api/provider-services", f"Created service: {service.get('service_name')} - ${service.get('price')}")
-                results["create_service"] = True
-                self.created_service_id = service.get('id')
-            else:
-                self.log_error("POST /api/provider-services", f"HTTP {response.status_code}: {response.text}")
-        except Exception as e:
-            self.log_error("POST /api/provider-services", str(e))
-            
-        # Test PUT /api/provider-services/{service_id}
+        # Test PUT /api/provider-services/{service_id} - Update individual service
         if self.created_service_id:
             try:
                 update_data = {
-                    "price": 6000,
-                    "duration": 90,
-                    "enabled": False
+                    "price": 18000,
+                    "duration_minutes": 300,
+                    "is_active": True,
+                    "home_service": False,
+                    "travel_service": True
                 }
                 response = self.session.put(
                     f"{self.base_url}/provider-services/{self.created_service_id}", 
@@ -330,7 +344,7 @@ class BackendTester:
                 )
                 if response.status_code == 200:
                     service = response.json()
-                    self.log_success("PUT /api/provider-services/{service_id}", f"Updated service: ${service.get('price')}, enabled: {service.get('enabled')}")
+                    self.log_success("PUT /api/provider-services/{service_id}", f"Updated service: ₦{service.get('price')}, {service.get('duration_minutes')} mins, travel: {service.get('travel_service')}")
                     results["update_service"] = True
                 else:
                     self.log_error("PUT /api/provider-services/{service_id}", f"HTTP {response.status_code}: {response.text}")
@@ -339,57 +353,7 @@ class BackendTester:
         else:
             self.log_error("PUT /api/provider-services/{service_id}", "No service created to test update")
             
-        # Test POST /api/provider-services/bulk/{provider_id}
-        try:
-            bulk_services = [
-                {
-                    "provider_id": self.test_provider_id,
-                    "service_id": "makeup",
-                    "service_name": "Makeup Artist",
-                    "price": 4000,
-                    "duration": 45,
-                    "enabled": True,
-                    "consultation_required": False
-                },
-                {
-                    "provider_id": self.test_provider_id,
-                    "service_id": "nails",
-                    "service_name": "Nail Technician",
-                    "price": 3000,
-                    "duration": 30,
-                    "enabled": True,
-                    "consultation_required": False
-                }
-            ]
-            response = self.session.post(
-                f"{self.base_url}/provider-services/bulk/{self.test_provider_id}", 
-                json=bulk_services,
-                timeout=10
-            )
-            if response.status_code == 200:
-                result = response.json()
-                self.log_success("POST /api/provider-services/bulk/{provider_id}", f"Bulk updated {len(result.get('services', []))} services")
-                results["bulk_update"] = True
-            else:
-                self.log_error("POST /api/provider-services/bulk/{provider_id}", f"HTTP {response.status_code}: {response.text}")
-        except Exception as e:
-            self.log_error("POST /api/provider-services/bulk/{provider_id}", str(e))
-            
-        # Test DELETE /api/provider-services/{service_id}
-        if self.created_service_id:
-            try:
-                response = self.session.delete(f"{self.base_url}/provider-services/{self.created_service_id}", timeout=10)
-                if response.status_code == 204:
-                    self.log_success("DELETE /api/provider-services/{service_id}", "Service deleted successfully")
-                    results["delete_service"] = True
-                else:
-                    self.log_error("DELETE /api/provider-services/{service_id}", f"HTTP {response.status_code}: {response.text}")
-            except Exception as e:
-                self.log_error("DELETE /api/provider-services/{service_id}", str(e))
-        else:
-            self.log_error("DELETE /api/provider-services/{service_id}", "No service created to test deletion")
-            
-        self.test_results["provider_services_api"] = results
+        self.test_results["provider_services_toggle_api"] = results
         return results
         
     def cleanup_test_data(self):
