@@ -1,404 +1,426 @@
-import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
-import { 
-  ArrowLeft, Save, Loader2, DollarSign, Clock, 
-  MessageSquare, CheckCircle2, AlertCircle
-} from "lucide-react";
-import { toast } from "sonner";
+import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { stylistsAPI, providerServicesAPI } from "@/services/api";
-import { CURRENCY, SERVICE_CATEGORIES, STYLIST_SERVICES } from "@/utils/constants";
+import { providerServicesAPI } from "@/services/api";
+import { SERVICE_CATALOG, CURRENCY, getAllSubServices } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "react-hot-toast";
+import { ChevronDown, ChevronRight, Save, Store, Home, Car } from "lucide-react";
 
-const ProviderServicesScreen = () => {
-  const navigate = useNavigate();
-  const { userData, providerData, isProvider, refreshUser } = useAuth();
+export default function ProviderServicesScreen() {
+  const { userData, providerData, isProvider } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [hourlyRate, setHourlyRate] = useState(providerData?.hourly_rate || 0);
+  const [expandedCategories, setExpandedCategories] = useState({});
+  const [expandedServices, setExpandedServices] = useState({});
+  const [providerServices, setProviderServices] = useState({});
   const [hasChanges, setHasChanges] = useState(false);
   
-  // Service states
-  const [services, setServices] = useState([]);
+  const providerId = userData?.id;
   
-  // Load services from database
-  const loadServices = useCallback(async () => {
-    if (!userData?.id) return;
+  // Get all sub-services from catalog
+  const allSubServices = useMemo(() => getAllSubServices(), []);
+  
+  // Load provider's existing services
+  useEffect(() => {
+    if (!providerId) return;
     
-    try {
-      setLoading(true);
-      
-      // Initialize all services from constants
-      const allServices = STYLIST_SERVICES.map(service => ({
-        ...service,
-        enabled: false,
-        price: 0,
-        duration: 60,
-        consultationRequired: false,
-        dbId: null, // ID from database if exists
-      }));
-      
-      // Try to load saved services from database
+    const loadServices = async () => {
       try {
-        const response = await providerServicesAPI.getByProviderId(userData.id);
-        const savedServices = response.data;
+        setLoading(true);
+        const response = await providerServicesAPI.getByProviderId(providerId);
         
-        // Merge saved data with all services
-        const mergedServices = allServices.map(service => {
-          const saved = savedServices.find(s => s.service_id === service.id);
-          if (saved) {
-            return {
-              ...service,
-              enabled: saved.enabled,
-              price: saved.price,
-              duration: saved.duration,
-              consultationRequired: saved.consultation_required,
-              dbId: saved.id,
-            };
-          }
-          return service;
+        // Convert to lookup map by sub_service_id
+        const servicesMap = {};
+        (response.data || []).forEach(svc => {
+          servicesMap[svc.sub_service_id] = {
+            id: svc.id,
+            is_active: svc.is_active,
+            price: svc.price,
+            duration_minutes: svc.duration_minutes,
+            in_store: svc.in_store,
+            home_service: svc.home_service,
+            travel_service: svc.travel_service,
+            description: svc.description || ""
+          };
         });
-        
-        setServices(mergedServices);
+        setProviderServices(servicesMap);
       } catch (error) {
-        // If provider_services table doesn't exist or is empty, use defaults
-        console.log("No saved services found, using defaults");
-        setServices(allServices);
+        console.error("Failed to load services:", error);
+        toast.error("Failed to load your services");
+      } finally {
+        setLoading(false);
       }
-      
-      // Set hourly rate from provider data
-      if (providerData?.hourly_rate) {
-        setHourlyRate(providerData.hourly_rate);
-      }
-    } catch (error) {
-      console.error("Failed to load services:", error);
-      toast.error("Failed to load services");
-    } finally {
-      setLoading(false);
-    }
-  }, [userData?.id, providerData?.hourly_rate]);
-  
-  // Initial load
-  useEffect(() => {
-    loadServices();
-  }, [loadServices]);
-
-  // Redirect non-providers
-  useEffect(() => {
-    if (!isProvider) {
-      navigate("/home", { replace: true });
-    }
-  }, [isProvider, navigate]);
-
-  const handleToggleService = (serviceId) => {
-    setServices(prev => prev.map(s => 
-      s.id === serviceId ? { ...s, enabled: !s.enabled } : s
-    ));
-    setHasChanges(true);
-  };
-
-  const handlePriceChange = (serviceId, price) => {
-    setServices(prev => prev.map(s => 
-      s.id === serviceId ? { ...s, price: parseFloat(price) || 0 } : s
-    ));
-    setHasChanges(true);
-  };
-
-  const handleDurationChange = (serviceId, duration) => {
-    setServices(prev => prev.map(s => 
-      s.id === serviceId ? { ...s, duration: parseInt(duration) || 60 } : s
-    ));
-    setHasChanges(true);
-  };
-
-  const handleConsultationToggle = (serviceId) => {
-    setServices(prev => prev.map(s => 
-      s.id === serviceId ? { ...s, consultationRequired: !s.consultationRequired } : s
-    ));
-    setHasChanges(true);
-  };
-
-  const handleHourlyRateChange = (value) => {
-    setHourlyRate(parseFloat(value) || 0);
-    setHasChanges(true);
-  };
-
-  const handleSave = async () => {
-    if (!userData?.id) {
-      toast.error("User data not available");
-      return;
-    }
+    };
     
-    setSaving(true);
+    loadServices();
+  }, [providerId]);
+  
+  // Toggle category expansion
+  const toggleCategory = (categoryId) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [categoryId]: !prev[categoryId]
+    }));
+  };
+  
+  // Toggle service expansion
+  const toggleService = (serviceId) => {
+    setExpandedServices(prev => ({
+      ...prev,
+      [serviceId]: !prev[serviceId]
+    }));
+  };
+  
+  // Toggle a sub-service on/off
+  const toggleSubService = (subService) => {
+    const current = providerServices[subService.id] || {
+      is_active: false,
+      price: subService.defaultPrice || 0,
+      duration_minutes: subService.defaultDuration || 60,
+      in_store: true,
+      home_service: false,
+      travel_service: false,
+      description: ""
+    };
+    
+    setProviderServices(prev => ({
+      ...prev,
+      [subService.id]: {
+        ...current,
+        is_active: !current.is_active
+      }
+    }));
+    setHasChanges(true);
+  };
+  
+  // Update price for a sub-service
+  const updatePrice = (subServiceId, price) => {
+    setProviderServices(prev => ({
+      ...prev,
+      [subServiceId]: {
+        ...(prev[subServiceId] || {}),
+        price: parseFloat(price) || 0
+      }
+    }));
+    setHasChanges(true);
+  };
+  
+  // Update duration for a sub-service
+  const updateDuration = (subServiceId, duration) => {
+    setProviderServices(prev => ({
+      ...prev,
+      [subServiceId]: {
+        ...(prev[subServiceId] || {}),
+        duration_minutes: parseInt(duration) || 60
+      }
+    }));
+    setHasChanges(true);
+  };
+  
+  // Toggle service mode
+  const toggleServiceMode = (subServiceId, mode) => {
+    setProviderServices(prev => ({
+      ...prev,
+      [subServiceId]: {
+        ...(prev[subServiceId] || {}),
+        [mode]: !(prev[subServiceId]?.[mode] || false)
+      }
+    }));
+    setHasChanges(true);
+  };
+  
+  // Save all changes
+  const saveChanges = async () => {
+    if (!providerId) return;
+    
     try {
-      // Update hourly rate
-      await stylistsAPI.update(userData.id, { hourly_rate: hourlyRate });
+      setSaving(true);
       
-      // Prepare enabled services for bulk update
-      const enabledServices = services
-        .filter(s => s.enabled)
-        .map(s => ({
-          provider_id: userData.id,
-          service_id: s.id,
-          service_name: s.name,
-          price: s.price,
-          duration: s.duration,
-          enabled: true,
-          consultation_required: s.consultationRequired,
-        }));
+      // Build services array for bulk toggle
+      const servicesToToggle = [];
       
-      // Also save disabled services that were previously enabled (to track state)
-      const disabledServices = services
-        .filter(s => !s.enabled && s.dbId) // Only save disabled if they had a dbId (existed before)
-        .map(s => ({
-          provider_id: userData.id,
-          service_id: s.id,
-          service_name: s.name,
-          price: s.price,
-          duration: s.duration,
-          enabled: false,
-          consultation_required: s.consultationRequired,
-        }));
+      Object.entries(providerServices).forEach(([subServiceId, data]) => {
+        // Find the sub-service in catalog
+        const subService = allSubServices.find(s => s.id === subServiceId);
+        if (!subService) return;
+        
+        servicesToToggle.push({
+          sub_service_id: subServiceId,
+          sub_service_name: subService.name,
+          service_id: subService.serviceId,
+          category_id: subService.categoryId,
+          is_active: data.is_active || false,
+          price: data.price || subService.defaultPrice || 0,
+          duration_minutes: data.duration_minutes || subService.defaultDuration || 60,
+          in_store: data.in_store !== false,
+          home_service: data.home_service || false,
+          travel_service: data.travel_service || false,
+          description: data.description || null
+        });
+      });
       
-      const allServicesToSave = [...enabledServices, ...disabledServices];
-      
-      if (allServicesToSave.length > 0) {
-        await providerServicesAPI.bulkUpdate(userData.id, allServicesToSave);
+      if (servicesToToggle.length > 0) {
+        await providerServicesAPI.toggleServices(providerId, servicesToToggle);
       }
       
-      // Refresh user data
-      await refreshUser();
-      
+      toast.success("Services saved successfully!");
       setHasChanges(false);
-      toast.success("Services saved successfully!", {
-        description: `${enabledServices.length} active services`
-      });
     } catch (error) {
       console.error("Failed to save services:", error);
-      toast.error("Failed to save changes", {
-        description: error.response?.data?.detail || error.message
-      });
+      toast.error("Failed to save services");
     } finally {
       setSaving(false);
     }
   };
-
-  const enabledServices = services.filter(s => s.enabled);
-
-  if (loading) {
-    return <LoadingSpinner fullScreen message="Loading services..." />;
-  }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate("/dashboard")}
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <div>
-              <h1 className="text-xl font-bold">My Services</h1>
-              <p className="text-xs text-gray-500">Manage your service offerings</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {hasChanges && (
-              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
-                <AlertCircle className="h-3 w-3 mr-1" />
-                Unsaved
-              </Badge>
-            )}
-            <Button onClick={handleSave} disabled={saving || !hasChanges}>
-              {saving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="mr-2 h-4 w-4" />
-                  Save Changes
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <div className="container mx-auto px-4 py-6 pb-24 sm:pb-6">
-        {/* Hourly Rate Card */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-green-600" />
-              Default Hourly Rate
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <Label htmlFor="hourlyRate">Rate per hour ({CURRENCY})</Label>
-                <Input
-                  id="hourlyRate"
-                  type="number"
-                  value={hourlyRate}
-                  onChange={(e) => handleHourlyRateChange(e.target.value)}
-                  className="mt-2"
-                  min={0}
-                />
-              </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-600">Current Rate</p>
-                <p className="text-2xl font-bold text-purple-600">
-                  {CURRENCY}{hourlyRate.toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Active Services Summary */}
-        <Card className="mb-6 bg-purple-50 border-purple-200">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-purple-700">Active Services</p>
-                <p className="text-2xl font-bold text-purple-900">{enabledServices.length}</p>
-              </div>
-              <Badge className="bg-purple-600 text-white">
-                {enabledServices.length} / {services.length}
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Services by Category */}
-        {SERVICE_CATEGORIES.map((category) => {
-          const categoryServices = services.filter(s => s.category === category.id);
-          if (categoryServices.length === 0) return null;
-
-          const enabledInCategory = categoryServices.filter(s => s.enabled).length;
-
-          return (
-            <Card key={category.id} className="mb-4">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <span className="text-xl">{category.icon}</span>
-                    {category.name}
-                  </CardTitle>
-                  {enabledInCategory > 0 && (
-                    <Badge variant="outline" className="text-xs">
-                      {enabledInCategory} active
-                    </Badge>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {categoryServices.map((service) => (
-                    <div
-                      key={service.id}
-                      className={`p-4 rounded-lg border transition-all ${
-                        service.enabled 
-                          ? "bg-green-50 border-green-200" 
-                          : "bg-gray-50 border-gray-200"
-                      }`}
-                    >
-                      {/* Service Header */}
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <span className="text-xl">{service.icon}</span>
-                          <div>
-                            <p className="font-medium">{service.name}</p>
-                            {service.enabled && (
-                              <Badge variant="outline" className="text-xs bg-green-100 text-green-700 border-green-300">
-                                <CheckCircle2 className="h-3 w-3 mr-1" />
-                                Active
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        <Switch
-                          checked={service.enabled}
-                          onCheckedChange={() => handleToggleService(service.id)}
-                        />
-                      </div>
-
-                      {/* Service Settings (only shown when enabled) */}
-                      {service.enabled && (
-                        <div className="grid sm:grid-cols-3 gap-4 pt-3 border-t">
-                          {/* Price */}
-                          <div>
-                            <Label className="text-xs text-gray-600">Price ({CURRENCY})</Label>
-                            <Input
-                              type="number"
-                              value={service.price}
-                              onChange={(e) => handlePriceChange(service.id, e.target.value)}
-                              className="mt-1 h-9"
-                              min={0}
-                            />
-                          </div>
-
-                          {/* Duration */}
-                          <div>
-                            <Label className="text-xs text-gray-600">Duration (mins)</Label>
-                            <Input
-                              type="number"
-                              value={service.duration}
-                              onChange={(e) => handleDurationChange(service.id, e.target.value)}
-                              className="mt-1 h-9"
-                              min={15}
-                              step={15}
-                            />
-                          </div>
-
-                          {/* Consultation Required */}
-                          <div className="flex items-center gap-2">
-                            <Switch
-                              id={`consult-${service.id}`}
-                              checked={service.consultationRequired}
-                              onCheckedChange={() => handleConsultationToggle(service.id)}
-                            />
-                            <Label htmlFor={`consult-${service.id}`} className="text-xs">
-                              <MessageSquare className="h-3 w-3 inline mr-1" />
-                              Consultation
-                            </Label>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-
-        {/* Info Notice */}
-        <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-          <p className="text-sm text-blue-700 text-center">
-            💡 Toggle services ON to offer them. Set prices and durations for each service. Changes are saved when you click "Save Changes".
-          </p>
+  
+  // Count active services
+  const activeServiceCount = Object.values(providerServices).filter(s => s.is_active).length;
+  
+  // Calculate total potential price
+  const totalActivePrice = Object.entries(providerServices)
+    .filter(([_, data]) => data.is_active)
+    .reduce((sum, [_, data]) => sum + (data.price || 0), 0);
+  
+  if (!isProvider) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Provider Access Only</h2>
+          <p className="text-gray-600">You need to be registered as a provider to manage services.</p>
         </div>
       </div>
-
+    );
+  }
+  
+  if (loading) {
+    return <LoadingSpinner fullScreen message="Loading your services..." />;
+  }
+  
+  return (
+    <div className="min-h-screen bg-gray-50 pb-24">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6">
+        <h1 className="text-2xl font-bold">Manage Services</h1>
+        <p className="text-purple-100 mt-1">Toggle services, set your prices and durations</p>
+        
+        {/* Stats */}
+        <div className="flex gap-4 mt-4">
+          <div className="bg-white/20 rounded-lg px-4 py-2">
+            <p className="text-xs text-purple-100">Active Services</p>
+            <p className="text-xl font-bold">{activeServiceCount}</p>
+          </div>
+          <div className="bg-white/20 rounded-lg px-4 py-2">
+            <p className="text-xs text-purple-100">Total Value</p>
+            <p className="text-xl font-bold">{CURRENCY}{totalActivePrice.toLocaleString()}</p>
+          </div>
+        </div>
+      </div>
+      
+      {/* Save Button (Sticky) */}
+      {hasChanges && (
+        <div className="sticky top-0 z-20 bg-yellow-50 border-b border-yellow-200 p-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-yellow-800">You have unsaved changes</p>
+            <Button 
+              onClick={saveChanges} 
+              disabled={saving}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {saving ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        </div>
+      )}
+      
+      {/* Categories List */}
+      <div className="p-4 space-y-4">
+        {Object.values(SERVICE_CATALOG).map(category => (
+          <div key={category.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
+            {/* Category Header */}
+            <button
+              onClick={() => toggleCategory(category.id)}
+              className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{category.icon}</span>
+                <div className="text-left">
+                  <h3 className="font-semibold text-gray-800">{category.name}</h3>
+                  <p className="text-xs text-gray-500">
+                    {Object.keys(category.services).length} services
+                  </p>
+                </div>
+              </div>
+              {expandedCategories[category.id] ? (
+                <ChevronDown className="w-5 h-5 text-gray-400" />
+              ) : (
+                <ChevronRight className="w-5 h-5 text-gray-400" />
+              )}
+            </button>
+            
+            {/* Category Content */}
+            {expandedCategories[category.id] && (
+              <div className="border-t">
+                {Object.values(category.services).map(service => (
+                  <div key={service.id} className="border-b last:border-b-0">
+                    {/* Service Header */}
+                    <button
+                      onClick={() => toggleService(service.id)}
+                      className="w-full flex items-center justify-between p-3 pl-6 hover:bg-gray-50 transition"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>{service.icon}</span>
+                        <span className="font-medium text-gray-700">{service.name}</span>
+                        {service.requiresVerification && (
+                          <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded">
+                            Verified Only
+                          </span>
+                        )}
+                      </div>
+                      {expandedServices[service.id] ? (
+                        <ChevronDown className="w-4 h-4 text-gray-400" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-gray-400" />
+                      )}
+                    </button>
+                    
+                    {/* Sub-Services */}
+                    {expandedServices[service.id] && (
+                      <div className="bg-gray-50 px-4 py-2">
+                        {(service.subServices || []).map(subService => {
+                          const serviceData = providerServices[subService.id] || {
+                            is_active: false,
+                            price: subService.defaultPrice,
+                            duration_minutes: subService.defaultDuration,
+                            in_store: true,
+                            home_service: false,
+                            travel_service: false
+                          };
+                          
+                          return (
+                            <div 
+                              key={subService.id} 
+                              className={`py-3 border-b last:border-b-0 ${
+                                serviceData.is_active ? 'bg-purple-50 -mx-4 px-4' : ''
+                              }`}
+                            >
+                              {/* Sub-Service Toggle Row */}
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <Switch
+                                    checked={serviceData.is_active}
+                                    onCheckedChange={() => toggleSubService(subService)}
+                                  />
+                                  <span className={`text-sm ${serviceData.is_active ? 'font-medium text-gray-900' : 'text-gray-600'}`}>
+                                    {subService.name}
+                                  </span>
+                                </div>
+                                <span className="text-xs text-gray-400">
+                                  ~{subService.defaultDuration}min
+                                </span>
+                              </div>
+                              
+                              {/* Price & Duration Inputs (shown when active) */}
+                              {serviceData.is_active && (
+                                <div className="mt-3 space-y-3">
+                                  {/* Price & Duration Row */}
+                                  <div className="flex gap-3">
+                                    <div className="flex-1">
+                                      <label className="text-xs text-gray-500 mb-1 block">
+                                        Price ({CURRENCY})
+                                      </label>
+                                      <Input
+                                        type="number"
+                                        value={serviceData.price || ""}
+                                        onChange={(e) => updatePrice(subService.id, e.target.value)}
+                                        placeholder={subService.defaultPrice.toString()}
+                                        className="h-9"
+                                      />
+                                    </div>
+                                    <div className="w-24">
+                                      <label className="text-xs text-gray-500 mb-1 block">
+                                        Duration (min)
+                                      </label>
+                                      <Input
+                                        type="number"
+                                        value={serviceData.duration_minutes || ""}
+                                        onChange={(e) => updateDuration(subService.id, e.target.value)}
+                                        placeholder={subService.defaultDuration.toString()}
+                                        className="h-9"
+                                      />
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Service Modes */}
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => toggleServiceMode(subService.id, 'in_store')}
+                                      className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
+                                        serviceData.in_store 
+                                          ? 'bg-purple-600 text-white' 
+                                          : 'bg-gray-200 text-gray-600'
+                                      }`}
+                                    >
+                                      <Store className="w-3 h-3" />
+                                      In-Store
+                                    </button>
+                                    <button
+                                      onClick={() => toggleServiceMode(subService.id, 'home_service')}
+                                      className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
+                                        serviceData.home_service 
+                                          ? 'bg-purple-600 text-white' 
+                                          : 'bg-gray-200 text-gray-600'
+                                      }`}
+                                    >
+                                      <Home className="w-3 h-3" />
+                                      Home Visit
+                                    </button>
+                                    <button
+                                      onClick={() => toggleServiceMode(subService.id, 'travel_service')}
+                                      className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
+                                        serviceData.travel_service 
+                                          ? 'bg-purple-600 text-white' 
+                                          : 'bg-gray-200 text-gray-600'
+                                      }`}
+                                    >
+                                      <Car className="w-3 h-3" />
+                                      Travel
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      
+      {/* Fixed Save Button at Bottom */}
+      {hasChanges && (
+        <div className="fixed bottom-20 left-0 right-0 p-4 bg-gradient-to-t from-gray-50 to-transparent">
+          <Button 
+            onClick={saveChanges} 
+            disabled={saving}
+            className="w-full bg-purple-600 hover:bg-purple-700 h-12 text-lg"
+          >
+            <Save className="w-5 h-5 mr-2" />
+            {saving ? "Saving..." : `Save ${activeServiceCount} Services`}
+          </Button>
+        </div>
+      )}
+      
       <BottomNavigation />
     </div>
   );
-};
-
-export default ProviderServicesScreen;
+}
