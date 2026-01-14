@@ -47,9 +47,9 @@ class BackendTester:
         unique_suffix = str(uuid.uuid4())[:8]
         self.test_user_data = {
             "auth_id": self.test_auth_id,
-            "name": f"Sarah Johnson {unique_suffix}",
-            "email": f"sarah.johnson.{unique_suffix}@email.com",
-            "phone": "+1234567890",
+            "name": f"Amaka Beauty Pro {unique_suffix}",
+            "email": f"amaka.beauty.{unique_suffix}@gmail.com",
+            "phone": "+2348012345678",
             "role": "customer",
             "phone_verified": False
         }
