@@ -426,6 +426,8 @@ class BackendTester:
             
         self.test_results["providers_with_services_api"] = results
         return results
+        
+    def cleanup_test_data(self):
         """Clean up test data created during testing"""
         print(f"\n🧹 Cleaning up test data...")
         
@@ -443,11 +445,31 @@ class BackendTester:
                 print(f"⚠️ Error during cleanup: {str(e)}")
                 
     def run_all_tests(self) -> Dict[str, Any]:
-        """Run all backend API tests"""
-        print("🚀 Starting Backend API Tests for Beauty Stylist Marketplace")
+        """Run all backend API tests for Phase 1.1-1.4"""
+        print("🚀 Starting iStylist Phase 1.1-1.4 Backend API Tests")
         print(f"Testing against: {self.base_url}")
         
         # Test connection first
+        if not self.test_connection():
+            print("\n❌ Connection failed - aborting tests")
+            return self.test_results
+            
+        # Run existing API tests (regression)
+        self.test_users_api()
+        self.test_stylists_api()
+        
+        # Run new Phase 1.1-1.4 API tests
+        self.test_service_catalog_api()
+        self.test_provider_services_toggle_api()
+        self.test_providers_with_services_api()
+        
+        # Cleanup
+        self.cleanup_test_data()
+        
+        # Print summary
+        self.print_summary()
+        
+        return self.test_results
         if not self.test_connection():
             print("\n❌ Connection failed - aborting tests")
             return self.test_results
