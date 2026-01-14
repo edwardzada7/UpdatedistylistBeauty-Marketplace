@@ -197,7 +197,7 @@ const HomeScreen = () => {
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xl font-bold text-gray-900">✨ Top Verified Providers</h3>
-            <Button variant="link" onClick={() => navigate("/providers")} size="sm">
+            <Button variant="link" onClick={() => navigate("/user/providers")} size="sm">
               View All →
             </Button>
           </div>
@@ -211,7 +211,7 @@ const HomeScreen = () => {
                 <Button 
                   variant="link" 
                   className="mt-2"
-                  onClick={() => navigate("/providers")}
+                  onClick={() => navigate("/user/providers")}
                 >
                   Browse All Providers
                 </Button>
