@@ -53,8 +53,8 @@ const PublicRoute = ({ children }) => {
   }
 
   if (isAuthenticated) {
-    // Redirect based on role
-    return <Navigate to={isProvider ? "/dashboard" : "/home"} replace />;
+    // Redirect based on role to new path structure
+    return <Navigate to={isProvider ? "/provider/dashboard" : "/user/home"} replace />;
   }
 
   return children;
