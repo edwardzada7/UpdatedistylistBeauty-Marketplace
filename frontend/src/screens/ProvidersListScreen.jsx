@@ -229,7 +229,7 @@ const ProvidersListScreen = () => {
               <Card
                 key={provider.provider_id}
                 className="cursor-pointer hover:shadow-lg transition-all"
-                onClick={() => navigate(`/providers/${provider.provider_id}`)}
+                onClick={() => navigate(`/user/providers/${provider.provider_id}`)}
                 data-testid={`provider-card-${provider.provider_id}`}
               >
                 <CardContent className="p-4">
