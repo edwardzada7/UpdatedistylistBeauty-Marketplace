@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/contexts/AuthContext";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import BottomNavigation from "@/components/BottomNavigation";
 
 const ProviderDashboard = () => {
+  const { userData } = useAuth();
   const [services, setServices] = useState([]);
   const [providerServices, setProviderServices] = useState({});
   const [loading, setLoading] = useState(true);
 
-  const userId = supabase.auth.user()?.id; // Current provider ID
+  // Get userId from AuthContext (Supabase v2 compatible)
+  const userId = userData?.id;
 
   useEffect(() => {
     const fetchServices = async () => {
