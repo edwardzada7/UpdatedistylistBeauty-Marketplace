@@ -247,14 +247,6 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/profile"
-        element={
-          <ProtectedRoute>
-            <ProfileScreen />
-          </ProtectedRoute>
-        }
-      />
 
       {/* PROVIDER (STYLIST) ROUTES */}
       <Route
