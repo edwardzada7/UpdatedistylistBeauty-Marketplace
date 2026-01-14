@@ -7,7 +7,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { toast } from "react-hot-toast";
+import { toast } from "sonner";
 import { ChevronDown, ChevronRight, Save, Store, Home, Car } from "lucide-react";
 
 export default function ProviderServicesScreen() {
