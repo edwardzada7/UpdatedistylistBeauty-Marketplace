@@ -216,7 +216,7 @@ const ProvidersListScreen = () => {
             onAction={() => {
               setSearchQuery("");
               setFilterVerified(FILTER_OPTIONS.ALL);
-              if (filterServiceName) navigate("/providers");
+              if (filterServiceName) navigate("/user/providers", { replace: true });
             }}
           />
         ) : (
