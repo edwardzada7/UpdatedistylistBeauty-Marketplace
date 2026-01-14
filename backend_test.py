@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Backend API Testing for Beauty Stylist Marketplace App
-Tests all CRUD operations for Users, Stylists, and Wallets APIs
+Backend API Testing for iStylist Phase 1.1-1.4 Implementation
+Tests Service Catalog and Provider Services APIs
 """
 
 import requests
@@ -19,10 +19,26 @@ class BackendTester:
         self.session = requests.Session()
         self.test_results = {
             "connection": False,
-            "users_api": {"get_all": False, "create": False, "get_by_auth": False, "update": False},
-            "stylists_api": {"get_all": False, "create": False, "get_by_id": False, "update": False},
-            "wallets_api": {"get_all": False, "create": False, "get_by_auth": False},
-            "provider_services_api": {"get_services": False, "create_service": False, "update_service": False, "bulk_update": False, "delete_service": False},
+            "users_api": {"get_all": False, "create": False, "get_by_auth": False},
+            "stylists_api": {"get_all": False},
+            "service_catalog_api": {
+                "get_categories": False,
+                "get_category_by_id": False,
+                "get_services": False,
+                "get_service_by_id": False,
+                "get_sub_services": False,
+                "get_sub_services_by_service": False
+            },
+            "provider_services_toggle_api": {
+                "toggle_services": False,
+                "get_provider_services": False,
+                "update_service": False
+            },
+            "providers_with_services_api": {
+                "get_providers_with_services": False,
+                "get_provider_full_profile": False,
+                "filter_by_category": False
+            },
             "errors": []
         }
         
