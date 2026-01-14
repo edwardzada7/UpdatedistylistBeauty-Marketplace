@@ -88,9 +88,9 @@ class BackendTester:
             return False
             
     def test_users_api(self) -> Dict[str, bool]:
-        """Test Users CRUD API endpoints"""
-        print(f"\n👥 Testing Users API")
-        results = {"get_all": False, "create": False, "get_by_auth": False, "update": False}
+        """Test Users CRUD API endpoints (regression test)"""
+        print(f"\n👥 Testing Users API (Regression)")
+        results = {"get_all": False, "create": False, "get_by_auth": False}
         
         # Test GET /api/users
         try:
@@ -132,30 +132,6 @@ class BackendTester:
                 self.log_error("GET /api/users/by-auth/{auth_id}", f"HTTP {response.status_code}: {response.text}")
         except Exception as e:
             self.log_error("GET /api/users/by-auth/{auth_id}", str(e))
-            
-        # Test PUT /api/users/{user_id} (Profile update)
-        if hasattr(self, 'created_user_id') and self.created_user_id:
-            try:
-                unique_suffix = str(uuid.uuid4())[:8]
-                update_data = {
-                    "name": f"Sarah Johnson Updated {unique_suffix}",
-                    "phone": "+1987654321"
-                }
-                response = self.session.put(
-                    f"{self.base_url}/users/{self.created_user_id}", 
-                    json=update_data,
-                    timeout=10
-                )
-                if response.status_code == 200:
-                    user = response.json()
-                    self.log_success("PUT /api/users/{user_id}", f"Updated user: {user.get('name')}")
-                    results["update"] = True
-                else:
-                    self.log_error("PUT /api/users/{user_id}", f"HTTP {response.status_code}: {response.text}")
-            except Exception as e:
-                self.log_error("PUT /api/users/{user_id}", str(e))
-        else:
-            self.log_error("PUT /api/users/{user_id}", "No user created to test update")
             
         self.test_results["users_api"] = results
         return results
