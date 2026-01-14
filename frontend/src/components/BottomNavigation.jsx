@@ -7,28 +7,36 @@ const BottomNavigation = () => {
   const location = useLocation();
   const { isProvider } = useAuth();
 
-  // Different nav items for providers vs users
+  // Different nav items for providers vs users - using new /user/* and /provider/* paths
   const userNavItems = [
-    { path: "/home", icon: Home, label: "Home" },
-    { path: "/services", icon: Grid3X3, label: "Services" },
-    { path: "/providers", icon: Users, label: "Providers" },
-    { path: "/wallet", icon: Wallet, label: "Wallet" },
-    { path: "/profile", icon: UserIcon, label: "Profile" },
+    { path: "/user/home", icon: Home, label: "Home", legacyPaths: ["/home"] },
+    { path: "/user/services", icon: Grid3X3, label: "Services", legacyPaths: ["/services"] },
+    { path: "/user/providers", icon: Users, label: "Providers", legacyPaths: ["/providers", "/stylists"] },
+    { path: "/user/wallet", icon: Wallet, label: "Wallet", legacyPaths: ["/wallet"] },
+    { path: "/profile", icon: UserIcon, label: "Profile", legacyPaths: [] },
   ];
 
   const providerNavItems = [
-    { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { path: "/my-services", icon: Grid3X3, label: "Services" },
-    { path: "/wallet", icon: Wallet, label: "Wallet" },
-    { path: "/profile", icon: Settings, label: "Settings" },
+    { path: "/provider/dashboard", icon: LayoutDashboard, label: "Dashboard", legacyPaths: ["/dashboard"] },
+    { path: "/provider/services", icon: Grid3X3, label: "Services", legacyPaths: ["/my-services"] },
+    { path: "/user/wallet", icon: Wallet, label: "Wallet", legacyPaths: ["/wallet"] },
+    { path: "/profile", icon: Settings, label: "Settings", legacyPaths: [] },
   ];
 
   const navItems = isProvider ? providerNavItems : userNavItems;
 
-  const isActive = (path) => {
-    if (path === "/home" && location.pathname === "/") return true;
-    if (path === "/dashboard" && location.pathname === "/") return true;
-    return location.pathname === path || location.pathname.startsWith(path + "/");
+  const isActive = (item) => {
+    const currentPath = location.pathname;
+    // Check primary path
+    if (currentPath === item.path || currentPath.startsWith(item.path + "/")) return true;
+    // Check legacy paths
+    for (const legacy of item.legacyPaths || []) {
+      if (currentPath === legacy || currentPath.startsWith(legacy + "/")) return true;
+    }
+    // Check root path
+    if (item.path === "/user/home" && currentPath === "/") return true;
+    if (item.path === "/provider/dashboard" && currentPath === "/") return true;
+    return false;
   };
 
   return (
