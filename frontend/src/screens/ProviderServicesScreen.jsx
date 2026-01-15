@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { providerServicesAPI } from "@/services/api";
 import { SERVICE_CATALOG, CURRENCY, getAllSubServices } from "@/utils/constants";
@@ -6,9 +7,10 @@ import BottomNavigation from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { ChevronDown, ChevronRight, Save, Store, Home, Car } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Save, Store, Home, Car } from "lucide-react";
 
 export default function ProviderServicesScreen() {
   const { userData, providerData, isProvider } = useAuth();
