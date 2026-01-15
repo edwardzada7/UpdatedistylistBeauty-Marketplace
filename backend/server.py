@@ -35,12 +35,20 @@ class UserCreate(BaseModel):
     phone: Optional[str] = None
     role: str = "customer"  # customer or stylist
     phone_verified: bool = False
+    # Phase 1.9 - Privacy & Identity fields
+    country: Optional[str] = None
+    city: Optional[str] = None
+    gender: Optional[str] = None  # male, female, other, prefer_not_to_say
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
-    email: Optional[EmailStr] = None
+    # Note: email is NOT included - it's read-only from auth
     phone: Optional[str] = None
     phone_verified: Optional[bool] = None
+    # Phase 1.9 - Privacy & Identity fields
+    country: Optional[str] = None
+    city: Optional[str] = None
+    gender: Optional[str] = None
 
 class UserResponse(BaseModel):
     id: int
@@ -51,6 +59,10 @@ class UserResponse(BaseModel):
     role: str
     phone_verified: Optional[bool] = False
     profile_completed: Optional[bool] = False
+    # Phase 1.9 - Privacy & Identity fields
+    country: Optional[str] = None
+    city: Optional[str] = None
+    gender: Optional[str] = None
 
 # Stylist Models
 class StylistCreate(BaseModel):
@@ -60,6 +72,9 @@ class StylistCreate(BaseModel):
     is_premium: bool = False
     bio: Optional[str] = None
     location: Optional[str] = None
+    # Phase 1.9 - Provider Type
+    provider_type: Optional[str] = "individual"  # individual or business
+    business_name: Optional[str] = None
 
 class StylistUpdate(BaseModel):
     hourly_rate: Optional[float] = None
@@ -67,6 +82,9 @@ class StylistUpdate(BaseModel):
     is_premium: Optional[bool] = None
     bio: Optional[str] = None
     location: Optional[str] = None
+    # Phase 1.9 - Provider Type
+    provider_type: Optional[str] = None
+    business_name: Optional[str] = None
 
 class StylistResponse(BaseModel):
     user_id: int  # Primary key
@@ -76,6 +94,9 @@ class StylistResponse(BaseModel):
     bio: Optional[str] = None
     location: Optional[str] = None
     rating: Optional[float] = 0.0
+    # Phase 1.9 - Provider Type
+    provider_type: Optional[str] = "individual"
+    business_name: Optional[str] = None
     # Populated from join with users table
     user_name: Optional[str] = None
     user_email: Optional[str] = None
