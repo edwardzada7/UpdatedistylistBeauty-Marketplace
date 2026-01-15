@@ -126,12 +126,18 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 - Filter by category, service type
 - Starting price display
 
-### Phase 1.9 - Privacy & Trust ✅ (Current)
+### Phase 1.9 - Privacy & Trust ✅
 - Email privacy controls
 - Location fields (country/city)
 - Gender field (optional)
 - Provider type (individual/business)
 - Profile save stability
+
+### Phase 1.9.1 - Service UX Improvements ✅ (NEW)
+- Service description support (optional per service)
+- Back button on Provider Services screen
+- Descriptions displayed to users on booking page
+- No changes to pricing, duration, or toggle logic
 
 ---
 
