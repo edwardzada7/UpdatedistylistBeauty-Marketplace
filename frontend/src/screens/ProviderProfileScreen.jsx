@@ -266,6 +266,13 @@ const ProviderProfileScreen = () => {
                           </div>
                         </div>
                         
+                        {/* Service Description - only shown if provider added one */}
+                        {service.description && !service.description.startsWith('modes:') && (
+                          <p className="text-sm text-gray-600 mt-2 bg-gray-50 p-2 rounded" data-testid={`service-description-${service.id}`}>
+                            {service.description}
+                          </p>
+                        )}
+                        
                         {/* Service Modes */}
                         <div className="flex gap-2 mt-2">
                           {service.in_store && (
