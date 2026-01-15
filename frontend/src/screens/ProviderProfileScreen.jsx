@@ -194,7 +194,7 @@ const ProviderProfileScreen = () => {
                 </div>
               </div>
 
-              {/* Details - No Email Shown */}
+              {/* Details - No Email/Phone Shown */}
               <div className="space-y-4">
                 {provider.location && (
                   <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
@@ -202,6 +202,17 @@ const ProviderProfileScreen = () => {
                     <div>
                       <p className="text-sm text-gray-600">Location</p>
                       <p className="font-medium">{provider.location}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Gender - only shown if not null */}
+                {provider.gender && provider.gender !== "prefer_not_to_say" && (
+                  <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg" data-testid="provider-gender">
+                    <User className="h-5 w-5 text-gray-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm text-gray-600">Gender</p>
+                      <p className="font-medium capitalize">{provider.gender}</p>
                     </div>
                   </div>
                 )}
