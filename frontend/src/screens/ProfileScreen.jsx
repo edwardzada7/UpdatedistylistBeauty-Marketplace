@@ -430,8 +430,43 @@ const ProfileScreen = () => {
               <CardContent>
                 {editingProvider ? (
                   <form onSubmit={handleProviderUpdate} className="space-y-6">
+                    {/* Phase 1.9 - Provider Type Selection */}
                     <div>
-                      <Label htmlFor="location">Location</Label>
+                      <Label htmlFor="provider_type">Provider Type</Label>
+                      <Select
+                        value={providerFormData.provider_type}
+                        onValueChange={(value) => setProviderFormData({ ...providerFormData, provider_type: value })}
+                      >
+                        <SelectTrigger className="mt-2">
+                          <SelectValue placeholder="Select provider type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="individual">Individual</SelectItem>
+                          <SelectItem value="business">Business</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Phase 1.9 - Business Name (only shown if provider_type is business) */}
+                    {providerFormData.provider_type === "business" && (
+                      <div>
+                        <Label htmlFor="business_name">Business Name *</Label>
+                        <div className="relative mt-2">
+                          <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                          <Input
+                            id="business_name"
+                            value={providerFormData.business_name}
+                            onChange={(e) => setProviderFormData({ ...providerFormData, business_name: e.target.value })}
+                            className="pl-10"
+                            placeholder="Your business name"
+                            required={providerFormData.provider_type === "business"}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <Label htmlFor="location">Service Location</Label>
                       <div className="relative mt-2">
                         <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <Input
