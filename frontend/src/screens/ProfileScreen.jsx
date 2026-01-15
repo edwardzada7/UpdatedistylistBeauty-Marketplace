@@ -526,11 +526,24 @@ const ProfileScreen = () => {
                       </Button>
                     </div>
 
+                    {/* Phase 1.9 - Provider Type Display */}
+                    <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
+                      <Building2 className="h-5 w-5 text-gray-600 mt-0.5" />
+                      <div>
+                        <p className="text-sm text-gray-600">Provider Type</p>
+                        <p className="font-medium capitalize">
+                          {providerData?.provider_type === "business" 
+                            ? `Business${providerData?.business_name ? ` - ${providerData.business_name}` : ''}` 
+                            : "Individual"}
+                        </p>
+                      </div>
+                    </div>
+
                     {providerData?.location && (
                       <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
                         <MapPin className="h-5 w-5 text-gray-600 mt-0.5" />
                         <div>
-                          <p className="text-sm text-gray-600">Location</p>
+                          <p className="text-sm text-gray-600">Service Location</p>
                           <p className="font-medium">{providerData.location}</p>
                         </div>
                       </div>
