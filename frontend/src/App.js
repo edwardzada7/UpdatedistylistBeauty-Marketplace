@@ -17,7 +17,7 @@ import WalletScreen from "@/screens/WalletScreen";
 import ServicesScreen from "@/screens/ServicesScreen";
 
 // Provider (Stylist) Screens
-import ProviderDashboard from "@/screens/ProviderDashboard";
+import StylistDashboard from "@/screens/StylistDashboard";
 import ProviderServicesScreen from "@/screens/ProviderServicesScreen";
 
 // Components
