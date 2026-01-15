@@ -134,8 +134,10 @@ const ProfileScreen = () => {
   const handleCancel = () => {
     setFormData({
       name: userData?.name || user?.user_metadata?.full_name || "",
-      email: userData?.email || user?.email || "",
       phone: userData?.phone || user?.user_metadata?.phone || "",
+      country: userData?.country || "",
+      city: userData?.city || "",
+      gender: userData?.gender || "",
     });
     setEditing(false);
   };
@@ -145,6 +147,8 @@ const ProfileScreen = () => {
       hourly_rate: providerData?.hourly_rate || 0,
       bio: providerData?.bio || "",
       location: providerData?.location || "",
+      provider_type: providerData?.provider_type || "individual",
+      business_name: providerData?.business_name || "",
     });
     setEditingProvider(false);
   };
