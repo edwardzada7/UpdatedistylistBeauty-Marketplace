@@ -452,6 +452,9 @@ async def get_all_stylists(
                 "bio": item.get("bio"),
                 "location": item.get("location"),
                 "rating": item.get("rating", 0.0),
+                # Phase 1.9 - Provider Type
+                "provider_type": item.get("provider_type", "individual"),
+                "business_name": item.get("business_name"),
                 "user_name": item["users"]["name"] if item.get("users") else None,
                 "user_email": item["users"]["email"] if item.get("users") else None
             }
@@ -492,6 +495,9 @@ async def get_stylist(user_id: int):
             "bio": item.get("bio"),
             "location": item.get("location"),
             "rating": item.get("rating", 0.0),
+            # Phase 1.9 - Provider Type
+            "provider_type": item.get("provider_type", "individual"),
+            "business_name": item.get("business_name"),
             "user_name": item["users"]["name"] if item.get("users") else None,
             "user_email": item["users"]["email"] if item.get("users") else None
         }
