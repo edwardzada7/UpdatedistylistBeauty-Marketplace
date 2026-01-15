@@ -270,20 +270,21 @@ const ProfileScreen = () => {
                     </div>
                   </div>
 
+                  {/* Email - Read Only (Phase 1.9) */}
                   <div>
-                    <Label htmlFor="email">Email Address *</Label>
+                    <Label htmlFor="email">Email Address (from account)</Label>
                     <div className="relative mt-2">
                       <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                       <Input
                         id="email"
                         type="email"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="pl-10"
-                        placeholder="your@email.com"
-                        required
+                        value={userData?.email || user?.email || ""}
+                        className="pl-10 bg-gray-50 cursor-not-allowed"
+                        disabled
+                        readOnly
                       />
                     </div>
+                    <p className="text-xs text-gray-500 mt-1">Email cannot be changed here</p>
                   </div>
 
                   <div>
@@ -298,6 +299,55 @@ const ProfileScreen = () => {
                         placeholder="+234..."
                       />
                     </div>
+                  </div>
+
+                  {/* Phase 1.9 - Location Fields */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="country">Country</Label>
+                      <div className="relative mt-2">
+                        <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          id="country"
+                          value={formData.country}
+                          onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                          className="pl-10"
+                          placeholder="Your country"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="city">City</Label>
+                      <div className="relative mt-2">
+                        <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          id="city"
+                          value={formData.city}
+                          onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                          className="pl-10"
+                          placeholder="Your city"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Phase 1.9 - Gender (Optional) */}
+                  <div>
+                    <Label htmlFor="gender">Gender (optional)</Label>
+                    <Select
+                      value={formData.gender}
+                      onValueChange={(value) => setFormData({ ...formData, gender: value })}
+                    >
+                      <SelectTrigger className="mt-2">
+                        <SelectValue placeholder="Select gender (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">Male</SelectItem>
+                        <SelectItem value="female">Female</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                        <SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="flex gap-3">
