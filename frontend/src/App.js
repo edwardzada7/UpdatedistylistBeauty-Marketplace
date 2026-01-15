@@ -253,7 +253,7 @@ function AppRoutes() {
         path="/dashboard"
         element={
           <ProtectedRoute>
-            <ProviderDashboard />
+            <StylistDashboard />
           </ProtectedRoute>
         }
       />
