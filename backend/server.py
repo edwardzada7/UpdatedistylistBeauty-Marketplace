@@ -1166,8 +1166,13 @@ async def get_provider_full_profile(provider_id: int):
         return {
             "provider_id": provider_id,
             "name": stylist["users"]["name"] if stylist.get("users") else "Provider",
+            # Phase 1.9 - Show business_name if business type
+            "display_name": stylist.get("business_name") if stylist.get("provider_type") == "business" and stylist.get("business_name") else (stylist["users"]["name"] if stylist.get("users") else "Provider"),
             "bio": stylist.get("bio"),
             "location": stylist.get("location"),
+            # Phase 1.9 - Provider type info
+            "provider_type": stylist.get("provider_type", "individual"),
+            "business_name": stylist.get("business_name"),
             "rating": stylist.get("rating", 0),
             "is_verified": stylist.get("is_verified", False),
             "is_premium": stylist.get("is_premium", False),
@@ -1176,6 +1181,7 @@ async def get_provider_full_profile(provider_id: int):
             "total_services": len(active_services),
             "services": active_services,
             "services_by_category": services_by_category
+            # Note: Email is NOT included for privacy
         }
     except HTTPException:
         raise
