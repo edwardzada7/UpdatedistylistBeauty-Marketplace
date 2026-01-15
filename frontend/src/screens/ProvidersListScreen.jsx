@@ -236,17 +236,24 @@ const ProvidersListScreen = () => {
                   <div className="flex gap-4">
                     {/* Avatar */}
                     <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
-                      {provider.name?.charAt(0) || "P"}
+                      {(provider.display_name || provider.name)?.charAt(0) || "P"}
                     </div>
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
+                          {/* Phase 1.9 - Use display_name */}
                           <h3 className="font-semibold text-lg truncate">
-                            {provider.name || "Provider"}
+                            {provider.display_name || provider.name || "Provider"}
                           </h3>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            {/* Phase 1.9 - Show business badge */}
+                            {provider.provider_type === "business" && (
+                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                Business
+                              </Badge>
+                            )}
                             {provider.is_verified && (
                               <Badge variant="secondary" className="bg-green-50 text-green-700 border-green-200">
                                 <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -282,10 +289,11 @@ const ProvidersListScreen = () => {
                         </p>
                       )}
 
+                      {/* Phase 1.9 - Show only city portion of location (no full address) */}
                       {provider.location && (
                         <p className="text-sm text-gray-600 mt-2 flex items-center gap-1">
                           <MapPin className="h-3 w-3" />
-                          {provider.location}
+                          {provider.location.split(',')[0]}
                         </p>
                       )}
 
