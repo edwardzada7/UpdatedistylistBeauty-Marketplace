@@ -122,10 +122,17 @@ const ProviderProfileScreen = () => {
               {/* Avatar & Basic Info */}
               <div className="flex gap-4 mb-6">
                 <div className="w-24 h-24 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white text-3xl font-bold flex-shrink-0">
-                  {provider.name?.charAt(0) || "P"}
+                  {(provider.display_name || provider.name)?.charAt(0) || "P"}
                 </div>
                 <div className="flex-1">
-                  <h2 className="text-2xl font-bold mb-2">{provider.name || "Provider"}</h2>
+                  {/* Phase 1.9 - Use display_name (business name for business, personal name for individual) */}
+                  <h2 className="text-2xl font-bold mb-2">{provider.display_name || provider.name || "Provider"}</h2>
+                  {/* Show provider type badge */}
+                  {provider.provider_type === "business" && (
+                    <Badge variant="outline" className="mb-2 bg-blue-50 text-blue-700 border-blue-200">
+                      Business
+                    </Badge>
+                  )}
                   <div className="flex flex-wrap gap-2 mb-3">
                     {provider.is_verified && (
                       <Badge className="bg-green-50 text-green-700 border-green-200">
