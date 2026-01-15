@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { ArrowLeft, ChevronDown, ChevronRight, Save, Store, Home, Car } from "lucide-react";
 
 export default function ProviderServicesScreen() {
+  const navigate = useNavigate();
   const { userData, providerData, isProvider } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
