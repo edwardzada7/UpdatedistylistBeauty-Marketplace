@@ -1160,9 +1160,9 @@ async def get_providers_with_services(
 async def get_provider_full_profile(provider_id: int):
     """Get full provider profile with all services for booking"""
     try:
-        # Get stylist data
+        # Get stylist data with user info including gender
         stylist_response = supabase.table("stylists").select(
-            "*, users!stylists_user_id_fkey(name, email)"
+            "*, users!stylists_user_id_fkey(name, email, gender, city, country)"
         ).eq("user_id", provider_id).execute()
         
         if not stylist_response.data:
@@ -1199,6 +1199,8 @@ async def get_provider_full_profile(provider_id: int):
             # Phase 1.9 - Provider type info
             "provider_type": stylist.get("provider_type", "individual"),
             "business_name": stylist.get("business_name"),
+            # Phase 1.9 - Gender (public metadata)
+            "gender": stylist["users"].get("gender") if stylist.get("users") else None,
             "rating": stylist.get("rating", 0),
             "is_verified": stylist.get("is_verified", False),
             "is_premium": stylist.get("is_premium", False),
