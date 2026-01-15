@@ -1160,9 +1160,10 @@ async def get_providers_with_services(
 async def get_provider_full_profile(provider_id: int):
     """Get full provider profile with all services for booking"""
     try:
-        # Get stylist data with user info including gender
+        # Get stylist data with user info (only request columns that exist)
+        # Note: gender, city, country require Phase 1.9 DB migration
         stylist_response = supabase.table("stylists").select(
-            "*, users!stylists_user_id_fkey(name, email, gender, city, country)"
+            "*, users!stylists_user_id_fkey(name, email)"
         ).eq("user_id", provider_id).execute()
         
         if not stylist_response.data:
@@ -1172,6 +1173,23 @@ async def get_provider_full_profile(provider_id: int):
             )
         
         stylist = stylist_response.data[0]
+        
+        # Try to fetch user's additional fields (gender, city, country) if they exist
+        user_extra = {}
+        try:
+            user_response = supabase.table("users").select("*").eq(
+                "id", stylist.get("user_id")
+            ).execute()
+            if user_response.data:
+                user_data = user_response.data[0]
+                user_extra = {
+                    "gender": user_data.get("gender"),
+                    "city": user_data.get("city"),
+                    "country": user_data.get("country")
+                }
+        except Exception:
+            # If columns don't exist, just continue without them
+            pass
         
         # Get all services
         services_response = supabase.table("services").select("*").eq(
@@ -1199,8 +1217,8 @@ async def get_provider_full_profile(provider_id: int):
             # Phase 1.9 - Provider type info
             "provider_type": stylist.get("provider_type", "individual"),
             "business_name": stylist.get("business_name"),
-            # Phase 1.9 - Gender (public metadata)
-            "gender": stylist["users"].get("gender") if stylist.get("users") else None,
+            # Phase 1.9 - Gender (public metadata, if column exists)
+            "gender": user_extra.get("gender"),
             "rating": stylist.get("rating", 0),
             "is_verified": stylist.get("is_verified", False),
             "is_premium": stylist.get("is_premium", False),
