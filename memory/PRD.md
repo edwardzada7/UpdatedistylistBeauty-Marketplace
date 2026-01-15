@@ -139,6 +139,12 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 - Descriptions displayed to users on booking page
 - No changes to pricing, duration, or toggle logic
 
+### Phase 1.9.2 - Gender Visibility Fix ✅
+- Gender field now included in provider full-profile API
+- Gender displayed on user-facing provider profile (when not null)
+- "prefer_not_to_say" option hidden from public view
+- Email and phone remain hidden (privacy preserved)
+
 ---
 
 ## Backlog / Future Tasks
