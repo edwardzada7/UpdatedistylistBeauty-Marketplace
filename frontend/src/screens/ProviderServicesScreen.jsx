@@ -219,6 +219,20 @@ export default function ProviderServicesScreen() {
     <div className="min-h-screen bg-gray-50 pb-24">
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6">
+        {/* Back Button Row */}
+        <div className="flex items-center gap-3 mb-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/provider/dashboard")}
+            className="text-white hover:bg-white/20 -ml-2"
+            data-testid="back-to-dashboard-btn"
+          >
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Back
+          </Button>
+        </div>
+        
         <h1 className="text-2xl font-bold">Manage Services</h1>
         <p className="text-purple-100 mt-1">Toggle services, set your prices and durations</p>
         
