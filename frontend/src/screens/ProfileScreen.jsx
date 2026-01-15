@@ -48,14 +48,19 @@ const ProfileScreen = () => {
     if (userData) {
       setFormData({
         name: userData.name || "",
-        email: userData.email || "",
         phone: userData.phone || "",
+        // Phase 1.9 fields
+        country: userData.country || "",
+        city: userData.city || "",
+        gender: userData.gender || "",
       });
     } else if (user) {
       setFormData({
         name: user.user_metadata?.full_name || "",
-        email: user.email || "",
         phone: user.user_metadata?.phone || "",
+        country: "",
+        city: "",
+        gender: "",
       });
     }
   }, [userData, user]);
@@ -67,6 +72,9 @@ const ProfileScreen = () => {
         hourly_rate: providerData.hourly_rate || 0,
         bio: providerData.bio || "",
         location: providerData.location || "",
+        // Phase 1.9 - Provider Type
+        provider_type: providerData.provider_type || "individual",
+        business_name: providerData.business_name || "",
       });
     }
   }, [providerData]);
