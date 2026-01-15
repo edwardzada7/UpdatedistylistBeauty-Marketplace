@@ -349,18 +349,6 @@ const ProfileScreen = () => {
                 {editingProvider ? (
                   <form onSubmit={handleProviderUpdate} className="space-y-6">
                     <div>
-                      <Label htmlFor="hourly_rate">Hourly Rate ({CURRENCY})</Label>
-                      <Input
-                        id="hourly_rate"
-                        type="number"
-                        value={providerFormData.hourly_rate}
-                        onChange={(e) => setProviderFormData({ ...providerFormData, hourly_rate: parseFloat(e.target.value) || 0 })}
-                        className="mt-2"
-                        min={0}
-                      />
-                    </div>
-
-                    <div>
                       <Label htmlFor="location">Location</Label>
                       <div className="relative mt-2">
                         <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -369,7 +357,7 @@ const ProfileScreen = () => {
                           value={providerFormData.location}
                           onChange={(e) => setProviderFormData({ ...providerFormData, location: e.target.value })}
                           className="pl-10"
-                          placeholder="Your location"
+                          placeholder="City, Country"
                         />
                       </div>
                     </div>
@@ -409,17 +397,15 @@ const ProfileScreen = () => {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg">
                       <div>
-                        <p className="text-sm text-gray-600">Hourly Rate</p>
-                        <p className="text-2xl font-bold text-purple-600">
-                          {CURRENCY}{providerData?.hourly_rate?.toLocaleString() || "0"}
-                        </p>
+                        <p className="text-sm text-gray-600">Manage Your Services</p>
+                        <p className="text-sm text-gray-500">Set pricing, duration & availability</p>
                       </div>
                       <Button 
-                        variant="outline" 
-                        onClick={() => navigate("/my-services")}
-                        className="text-purple-600 border-purple-300"
+                        variant="default" 
+                        onClick={() => navigate("/provider/services")}
+                        className="bg-purple-600 hover:bg-purple-700"
                       >
-                        Manage Services
+                        My Services
                       </Button>
                     </div>
 
