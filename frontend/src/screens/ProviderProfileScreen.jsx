@@ -293,7 +293,7 @@ const ProviderProfileScreen = () => {
                 ))
               ) : (
                 <div className="text-center py-8 text-gray-500">
-                  <p>This provider hasn't added any services yet.</p>
+                  <p>This provider hasn&apos;t added any services yet.</p>
                 </div>
               )}
             </CardContent>
