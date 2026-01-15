@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 import uuid
 
 # Get backend URL from frontend .env
-BACKEND_URL = "https://salon-on-demand.preview.emergentagent.com/api"
+BACKEND_URL = "https://pro-beauty-hub-10.preview.emergentagent.com/api"
 
 class BackendTester:
     def __init__(self):
