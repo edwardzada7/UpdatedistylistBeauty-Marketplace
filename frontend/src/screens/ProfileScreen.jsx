@@ -26,8 +26,11 @@ const ProfileScreen = () => {
   // User form data
   const [formData, setFormData] = useState({
     name: "",
-    email: "",
     phone: "",
+    // Phase 1.9 - Privacy & Identity fields
+    country: "",
+    city: "",
+    gender: "",
   });
   
   // Provider form data
@@ -35,6 +38,9 @@ const ProfileScreen = () => {
     hourly_rate: 0,
     bio: "",
     location: "",
+    // Phase 1.9 - Provider Type
+    provider_type: "individual",
+    business_name: "",
   });
 
   // Initialize form data from userData or user metadata
