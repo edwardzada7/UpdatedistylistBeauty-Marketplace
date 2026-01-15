@@ -374,7 +374,7 @@ const ProfileScreen = () => {
                   <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
                     <Mail className="h-5 w-5 text-gray-600 mt-0.5" />
                     <div>
-                      <p className="text-sm text-gray-600">Email</p>
+                      <p className="text-sm text-gray-600">Email (private)</p>
                       <p className="font-medium">{userData?.email || user?.email || "Not set"}</p>
                     </div>
                   </div>
@@ -386,6 +386,19 @@ const ProfileScreen = () => {
                       <p className="font-medium">{userData?.phone || user?.user_metadata?.phone || "Not provided"}</p>
                     </div>
                   </div>
+
+                  {/* Phase 1.9 - Location Display */}
+                  {(userData?.city || userData?.country) && (
+                    <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
+                      <MapPin className="h-5 w-5 text-gray-600 mt-0.5" />
+                      <div>
+                        <p className="text-sm text-gray-600">Location</p>
+                        <p className="font-medium">
+                          {[userData?.city, userData?.country].filter(Boolean).join(", ") || "Not set"}
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
                     <User className="h-5 w-5 text-gray-600 mt-0.5" />
