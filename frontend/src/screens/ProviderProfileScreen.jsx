@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Star, CheckCircle2, MapPin, Mail, Calendar } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ArrowLeft, Star, CheckCircle2, MapPin, Calendar, Clock, Store, Home, Car, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
-import { stylistsAPI } from "@/services/api";
-import { CURRENCY, STYLIST_SERVICES, TOAST_MESSAGES } from "@/utils/constants";
+import { providersAPI } from "@/services/api";
+import { CURRENCY, TOAST_MESSAGES } from "@/utils/constants";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
 import BottomNavigation from "@/components/BottomNavigation";
@@ -16,6 +17,7 @@ const ProviderProfileScreen = () => {
   const { userId } = useParams();
   const [provider, setProvider] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [selectedServices, setSelectedServices] = useState({});
 
   useEffect(() => {
     fetchProviderProfile();
@@ -24,7 +26,8 @@ const ProviderProfileScreen = () => {
   const fetchProviderProfile = async () => {
     setLoading(true);
     try {
-      const response = await stylistsAPI.getById(userId);
+      // Use the new provider full profile API
+      const response = await providersAPI.getFullProfile(userId);
       setProvider(response.data);
     } catch (error) {
       console.error("Failed to fetch provider:", error);
@@ -34,9 +37,26 @@ const ProviderProfileScreen = () => {
     }
   };
 
+  // Toggle service selection
+  const toggleServiceSelection = (serviceId) => {
+    setSelectedServices(prev => ({
+      ...prev,
+      [serviceId]: !prev[serviceId]
+    }));
+  };
+
+  // Calculate total price and duration
+  const selectedServicesList = provider?.services?.filter(s => selectedServices[s.id]) || [];
+  const totalPrice = selectedServicesList.reduce((sum, s) => sum + (s.price || 0), 0);
+  const totalDuration = selectedServicesList.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
+
   const handleBooking = () => {
+    if (selectedServicesList.length === 0) {
+      toast.error("Please select at least one service");
+      return;
+    }
     toast.info(TOAST_MESSAGES.BOOKING_PHASE_2, {
-      description: "We're working on adding booking functionality."
+      description: `Selected ${selectedServicesList.length} service(s) for ${CURRENCY}${totalPrice.toLocaleString()}`
     });
   };
 
@@ -68,6 +88,14 @@ const ProviderProfileScreen = () => {
     );
   }
 
+  // Get the starting price (minimum active service price)
+  const startingPrice = provider.services?.length > 0 
+    ? Math.min(...provider.services.map(s => s.price || 0))
+    : 0;
+
+  // Group services by category
+  const servicesByCategory = provider.services_by_category || {};
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -86,7 +114,7 @@ const ProviderProfileScreen = () => {
       </header>
 
       {/* Content */}
-      <div className="container mx-auto px-4 py-6 pb-24 sm:pb-6">
+      <div className="container mx-auto px-4 py-6 pb-32 sm:pb-6">
         <div className="max-w-3xl mx-auto space-y-4">
           {/* Profile Card */}
           <Card data-testid="provider-profile-card">
@@ -94,21 +122,26 @@ const ProviderProfileScreen = () => {
               {/* Avatar & Basic Info */}
               <div className="flex gap-4 mb-6">
                 <div className="w-24 h-24 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white text-3xl font-bold flex-shrink-0">
-                  {provider.user_name?.charAt(0) || "P"}
+                  {provider.name?.charAt(0) || "P"}
                 </div>
                 <div className="flex-1">
-                  <h2 className="text-2xl font-bold mb-2">{provider.user_name || "Provider"}</h2>
+                  <h2 className="text-2xl font-bold mb-2">{provider.name || "Provider"}</h2>
                   <div className="flex flex-wrap gap-2 mb-3">
                     {provider.is_verified && (
                       <Badge className="bg-green-50 text-green-700 border-green-200">
                         <CheckCircle2 className="h-3 w-3 mr-1" />
-                        Verified Provider
+                        Verified
                       </Badge>
                     )}
                     {provider.is_premium && (
                       <Badge className="bg-amber-50 text-amber-700 border-amber-200">
                         <Star className="h-3 w-3 mr-1 fill-amber-700" />
-                        Premium Member
+                        Premium
+                      </Badge>
+                    )}
+                    {provider.total_services > 0 && (
+                      <Badge variant="secondary">
+                        {provider.total_services} Services
                       </Badge>
                     )}
                   </div>
@@ -126,34 +159,35 @@ const ProviderProfileScreen = () => {
                           />
                         ))}
                       </div>
-                      <span className="text-sm font-medium">{provider.rating.toFixed(1)}</span>
+                      <span className="text-sm font-medium">{provider.rating?.toFixed(1)}</span>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Pricing */}
+              {/* Starting Price */}
               <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4 mb-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Hourly Rate</p>
+                    <p className="text-sm text-gray-600 mb-1">Starting From</p>
                     <p className="text-3xl font-bold text-purple-600">
-                      {CURRENCY}{provider.hourly_rate.toLocaleString()}
+                      {CURRENCY}{startingPrice.toLocaleString()}
                     </p>
+                    <p className="text-xs text-gray-500 mt-1">per session</p>
                   </div>
-                  <Button
-                    size="lg"
-                    onClick={handleBooking}
-                    className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                    data-testid="book-now-btn"
-                  >
-                    <Calendar className="mr-2 h-5 w-5" />
-                    Book Now
-                  </Button>
+                  {selectedServicesList.length > 0 && (
+                    <div className="text-right">
+                      <p className="text-sm text-gray-600">Selected Total</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        {CURRENCY}{totalPrice.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-gray-500">{totalDuration} min</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Details */}
+              {/* Details - No Email Shown */}
               <div className="space-y-4">
                 {provider.location && (
                   <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
@@ -161,16 +195,6 @@ const ProviderProfileScreen = () => {
                     <div>
                       <p className="text-sm text-gray-600">Location</p>
                       <p className="font-medium">{provider.location}</p>
-                    </div>
-                  </div>
-                )}
-
-                {provider.user_email && (
-                  <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                    <Mail className="h-5 w-5 text-gray-600 mt-0.5" />
-                    <div>
-                      <p className="text-sm text-gray-600">Email</p>
-                      <p className="font-medium">{provider.user_email}</p>
                     </div>
                   </div>
                 )}
@@ -185,24 +209,86 @@ const ProviderProfileScreen = () => {
             </CardContent>
           </Card>
 
-          {/* Services Card */}
+          {/* Active Services Card */}
           <Card>
-            <CardContent className="p-6">
-              <h3 className="font-semibold text-lg mb-4">Services Offered</h3>
-              <div className="grid grid-cols-2 gap-3">
-                {STYLIST_SERVICES.slice(0, 8).map((service) => (
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ShoppingCart className="h-5 w-5" />
+                Select Services
+              </CardTitle>
+              <p className="text-sm text-gray-500">
+                Choose one or more services to book
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {provider.services?.length > 0 ? (
+                provider.services.map((service) => (
                   <div
                     key={service.id}
-                    className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg"
+                    className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
+                      selectedServices[service.id]
+                        ? 'border-purple-500 bg-purple-50'
+                        : 'border-gray-200 hover:border-purple-300'
+                    }`}
+                    onClick={() => toggleServiceSelection(service.id)}
                   >
-                    <span className="text-2xl">{service.icon}</span>
-                    <span className="text-sm font-medium">{service.name}</span>
+                    <div className="flex items-start gap-3">
+                      <Checkbox 
+                        checked={selectedServices[service.id] || false}
+                        onCheckedChange={() => toggleServiceSelection(service.id)}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="font-semibold text-gray-900">
+                              {service.sub_service_name}
+                            </h4>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {service.service_id?.replace(/-/g, ' ')}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-bold text-purple-600">
+                              {CURRENCY}{(service.price || 0).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-gray-500 flex items-center gap-1 justify-end">
+                              <Clock className="h-3 w-3" />
+                              {service.duration_minutes || 60} min
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {/* Service Modes */}
+                        <div className="flex gap-2 mt-2">
+                          {service.in_store && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
+                              <Store className="h-3 w-3" />
+                              In-Store
+                            </span>
+                          )}
+                          {service.home_service && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-xs">
+                              <Home className="h-3 w-3" />
+                              Home Visit
+                            </span>
+                          )}
+                          {service.travel_service && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-600 rounded text-xs">
+                              <Car className="h-3 w-3" />
+                              Travel
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                ))}
-              </div>
-              <p className="text-xs text-gray-500 mt-3 text-center">
-                Full service list and booking coming in Phase 2
-              </p>
+                ))
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>This provider hasn't added any services yet.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -239,6 +325,41 @@ const ProviderProfileScreen = () => {
           )}
         </div>
       </div>
+
+      {/* Fixed Booking Bar */}
+      {provider.services?.length > 0 && (
+        <div className="fixed bottom-16 sm:bottom-0 left-0 right-0 bg-white border-t shadow-lg p-4 z-40">
+          <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
+            <div>
+              {selectedServicesList.length > 0 ? (
+                <>
+                  <p className="text-sm text-gray-600">
+                    {selectedServicesList.length} service{selectedServicesList.length !== 1 ? 's' : ''} selected
+                  </p>
+                  <p className="text-xl font-bold text-purple-600">
+                    {CURRENCY}{totalPrice.toLocaleString()}
+                    <span className="text-sm font-normal text-gray-500 ml-2">
+                      ({totalDuration} min)
+                    </span>
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-gray-500">Select services to book</p>
+              )}
+            </div>
+            <Button
+              size="lg"
+              onClick={handleBooking}
+              disabled={selectedServicesList.length === 0}
+              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50"
+              data-testid="book-now-btn"
+            >
+              <Calendar className="mr-2 h-5 w-5" />
+              Proceed to Booking
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Bottom Navigation */}
       <BottomNavigation />
