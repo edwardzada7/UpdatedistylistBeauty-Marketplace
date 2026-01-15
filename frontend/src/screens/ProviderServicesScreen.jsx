@@ -136,6 +136,18 @@ export default function ProviderServicesScreen() {
     setHasChanges(true);
   };
   
+  // Update description for a sub-service
+  const updateDescription = (subServiceId, description) => {
+    setProviderServices(prev => ({
+      ...prev,
+      [subServiceId]: {
+        ...(prev[subServiceId] || {}),
+        description: description
+      }
+    }));
+    setHasChanges(true);
+  };
+  
   // Save all changes
   const saveChanges = async () => {
     if (!providerId) return;
