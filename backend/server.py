@@ -351,7 +351,20 @@ async def update_user(user_id: int, user_update: UserUpdate):
         if not update_data:
             return existing.data[0]
         
-        response = supabase.table("users").update(update_data).eq("id", user_id).execute()
+        # Phase 1.9: Filter out fields that might not exist in DB yet
+        # This provides graceful fallback if migration hasn't been run
+        existing_fields = set(existing.data[0].keys())
+        safe_update_data = {k: v for k, v in update_data.items() if k in existing_fields or k in ['name', 'phone', 'phone_verified']}
+        
+        # Log if we're skipping any fields
+        skipped_fields = set(update_data.keys()) - set(safe_update_data.keys())
+        if skipped_fields:
+            logging.warning(f"Skipping fields not in DB: {skipped_fields}")
+        
+        if not safe_update_data:
+            return existing.data[0]
+        
+        response = supabase.table("users").update(safe_update_data).eq("id", user_id).execute()
         return response.data[0]
     except HTTPException:
         raise
