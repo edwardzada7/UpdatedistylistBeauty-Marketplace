@@ -384,6 +384,20 @@ export default function ProviderServicesScreen() {
                                     </div>
                                   </div>
                                   
+                                  {/* Service Description (optional) */}
+                                  <div>
+                                    <label className="text-xs text-gray-500 mb-1 block">
+                                      Service Description (optional)
+                                    </label>
+                                    <Textarea
+                                      value={serviceData.description || ""}
+                                      onChange={(e) => updateDescription(subService.id, e.target.value)}
+                                      placeholder="Describe what this service includes, e.g., 'Full wash, cut, and styling with premium products'"
+                                      className="h-16 text-sm resize-none"
+                                      data-testid={`description-${subService.id}`}
+                                    />
+                                  </div>
+                                  
                                   {/* Service Modes */}
                                   <div className="flex gap-2">
                                     <button
