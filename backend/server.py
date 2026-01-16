@@ -1907,16 +1907,16 @@ async def get_booking(booking_id: int):
 
 
 @api_router.put("/bookings/{booking_id}")
-async def update_booking(booking_id: int, status: str):
+async def update_booking(booking_id: int, new_status: str = Query(..., alias="status")):
     """Update booking status"""
     try:
-        if status not in ["pending", "confirmed", "cancelled", "completed"]:
+        if new_status not in ["pending", "confirmed", "cancelled", "completed"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid status. Must be: pending, confirmed, cancelled, or completed"
             )
         
-        result = supabase.table("bookings").update({"status": status}).eq("id", booking_id).execute()
+        result = supabase.table("bookings").update({"status": new_status}).eq("id", booking_id).execute()
         
         if not result.data:
             raise HTTPException(
