@@ -177,7 +177,7 @@ class BulkServiceToggleRequest(BaseModel):
 
 class WeeklyAvailability(BaseModel):
     day_of_week: int = Field(..., ge=0, le=6, description="0=Sunday, 6=Saturday")
-    is_available: bool = False
+    is_active: bool = True  # Column is named is_active in Supabase
     start_time: Optional[str] = None  # "HH:MM" format
     end_time: Optional[str] = None    # "HH:MM" format
     
