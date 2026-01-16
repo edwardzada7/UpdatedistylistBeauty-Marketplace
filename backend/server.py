@@ -1519,6 +1519,14 @@ async def set_provider_availability(provider_id: int, request: WeeklyAvailabilit
 async def set_provider_exceptions(provider_id: int, request: ExceptionsRequest):
     """Set provider's availability exceptions (upsert by date)"""
     try:
+        # Get the provider's auth_id (UUID)
+        provider_uuid = await get_provider_auth_id(provider_id)
+        if not provider_uuid:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Provider not found"
+            )
+        
         if not check_table_exists("provider_availability_exceptions"):
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1539,11 +1547,11 @@ async def set_provider_exceptions(provider_id: int, request: ExceptionsRequest):
         for exc in request.exceptions:
             # Try to find existing exception
             existing = supabase.table("provider_availability_exceptions").select("id").eq(
-                "provider_id", provider_id
+                "provider_id", provider_uuid
             ).eq("date", exc.date).execute()
             
             row_data = {
-                "provider_id": provider_id,
+                "provider_id": provider_uuid,
                 "date": exc.date,
                 "is_unavailable": exc.is_unavailable,
                 "start_time": exc.start_time if not exc.is_unavailable else None,
