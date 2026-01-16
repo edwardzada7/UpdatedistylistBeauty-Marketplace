@@ -1792,12 +1792,12 @@ async def _get_available_slots_internal(
 @api_router.get("/providers/{provider_id}/available-slots")
 async def get_available_slots(
     provider_id: int,
-    requested_date: str = Query(..., alias="date", description="Date in YYYY-MM-DD format"),
+    date: str = Query(..., description="Date in YYYY-MM-DD format"),
     service_duration: int = Query(..., ge=10, description="Service duration in minutes")
 ):
     """Get available booking slots for a provider on a specific date"""
     try:
-        return await _get_available_slots_internal(provider_id, requested_date, service_duration)
+        return await _get_available_slots_internal(provider_id, date, service_duration)
     except HTTPException:
         raise
     except Exception as e:
