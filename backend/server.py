@@ -1829,16 +1829,16 @@ async def create_booking(booking: BookingCreate):
                     detail="booking_time must be in HH:MM format"
                 )
             
-            # Get service duration (from request or calculate from provider_services)
+            # Get service duration (from request or calculate from services)
+            # Note: service_ids are actually services.id values (the services table used by providers)
             service_duration = booking.service_duration_minutes
             if not service_duration and booking.service_ids:
-                # Calculate total duration from selected provider_services
-                # Note: service_ids are actually provider_services.id values
-                services_response = supabase.table("provider_services").select("duration_minutes").in_(
+                # Calculate total duration from selected services
+                services_response = supabase.table("services").select("duration").in_(
                     "id", booking.service_ids
                 ).execute()
                 if services_response.data:
-                    service_duration = sum(s.get("duration_minutes", 60) for s in services_response.data)
+                    service_duration = sum(s.get("duration", 60) or 60 for s in services_response.data)
             
             service_duration = service_duration or 60  # Default to 60 minutes
             
