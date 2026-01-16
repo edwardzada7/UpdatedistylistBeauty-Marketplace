@@ -139,11 +139,13 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 - Descriptions displayed to users on booking page
 - No changes to pricing, duration, or toggle logic
 
-### Phase 1.9.2 - Gender Visibility Fix ✅
-- Gender field now included in provider full-profile API
-- Gender displayed on user-facing provider profile (when not null)
-- "prefer_not_to_say" option hidden from public view
-- Email and phone remain hidden (privacy preserved)
+### Phase 2.0 - Provider Availability & Booking System ✅
+- Weekly availability schedule per provider (7 days)
+- Exception dates (day off or custom hours)
+- Booking rules (max sessions, min notice, slot step)
+- Available slots generation with conflict checking
+- Booking validation against available slots
+- **Note**: Booking creation requires fixing foreign key constraint in Supabase
 
 ---
 
