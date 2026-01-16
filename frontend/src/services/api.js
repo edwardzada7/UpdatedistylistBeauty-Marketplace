@@ -130,6 +130,50 @@ export const providersAPI = {
   // Register as provider
   register: (userId, hourlyRate = 0, bio = null, location = null) => 
     api.post(`/providers/register?user_id=${userId}&hourly_rate=${hourlyRate}${bio ? `&bio=${encodeURIComponent(bio)}` : ''}${location ? `&location=${encodeURIComponent(location)}` : ''}`),
+  
+  // ==================== AVAILABILITY API (Phase 2.1) ====================
+  
+  // Get provider availability (weekly, exceptions, rules)
+  getAvailability: (providerId) => api.get(`/providers/${providerId}/availability`),
+  
+  // Set weekly availability
+  setWeeklyAvailability: (providerId, weekly) => 
+    api.post(`/providers/${providerId}/availability`, { weekly }),
+  
+  // Set exceptions
+  setExceptions: (providerId, exceptions) => 
+    api.post(`/providers/${providerId}/exceptions`, { exceptions }),
+  
+  // Set booking rules
+  setRules: (providerId, rules) => 
+    api.post(`/providers/${providerId}/rules`, rules),
+  
+  // Get available slots for a date
+  getAvailableSlots: (providerId, date, serviceDuration) => 
+    api.get(`/providers/${providerId}/available-slots?date=${date}&service_duration=${serviceDuration}`),
+};
+
+// ==================== BOOKINGS API (Phase 2.1) ====================
+
+export const bookingsAPI = {
+  // Create a booking
+  create: (data) => api.post("/bookings", data),
+  
+  // Get bookings (with optional filters)
+  getAll: (filters = {}) => {
+    const queryParams = new URLSearchParams();
+    if (filters.providerId) queryParams.append("provider_id", filters.providerId);
+    if (filters.customerId) queryParams.append("customer_id", filters.customerId);
+    if (filters.status) queryParams.append("status", filters.status);
+    if (filters.date) queryParams.append("date", filters.date);
+    return api.get(`/bookings${queryParams.toString() ? `?${queryParams}` : ""}`);
+  },
+  
+  // Get a single booking
+  getById: (bookingId) => api.get(`/bookings/${bookingId}`),
+  
+  // Update booking status
+  updateStatus: (bookingId, status) => api.put(`/bookings/${bookingId}?status=${status}`),
 };
 
 // ==================== WALLETS API ====================
