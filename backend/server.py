@@ -1886,49 +1886,41 @@ async def create_booking(booking: BookingCreate):
             )
         
         # Link services to booking if service_ids provided
-        # Note: service_ids from frontend are actually provider_services.id values
+        # Note: service_ids from frontend are actually services.id values
         if booking.service_ids and check_table_exists("booking_services"):
             booking_id = result.data[0]["id"]
             
-            # Fetch the provider_services to validate and get price/duration
-            provider_services_response = supabase.table("provider_services").select(
-                "id, service_id, price, duration_minutes, is_active"
+            # Fetch the services to validate and get price/duration
+            services_response = supabase.table("services").select(
+                "id, price, duration"
             ).in_("id", booking.service_ids).execute()
             
-            if not provider_services_response.data:
+            if not services_response.data:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Selected services not found"
                 )
             
             # Create a lookup map for validation
-            ps_lookup = {ps["id"]: ps for ps in provider_services_response.data}
+            service_lookup = {s["id"]: s for s in services_response.data}
             
-            # Validate all selected services exist and are active
+            # Validate all selected services exist
             service_links = []
             for sid in booking.service_ids:
-                ps = ps_lookup.get(sid)
-                if not ps:
+                service = service_lookup.get(sid)
+                if not service:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=f"Service with id {sid} not found for this provider"
                     )
-                if not ps.get("is_active", False):
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Selected service is not active for this provider"
-                    )
                 
-                # Build booking_services row with provider_service_id
+                # Build booking_services row with service_id
                 service_link = {
                     "booking_id": booking_id,
-                    "provider_service_id": sid,  # This is the provider_services.id
-                    "price": ps.get("price"),
-                    "duration_minutes": ps.get("duration_minutes")
+                    "service_id": sid,  # This is the services.id
+                    "price": service.get("price"),
+                    "duration_minutes": service.get("duration")
                 }
-                # Include service_id if available (might be null for some services)
-                if ps.get("service_id"):
-                    service_link["service_id"] = ps["service_id"]
                 
                 service_links.append(service_link)
             
