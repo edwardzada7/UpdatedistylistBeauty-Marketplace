@@ -19,6 +19,7 @@ import ServicesScreen from "@/screens/ServicesScreen";
 // Provider (Stylist) Screens
 import StylistDashboard from "@/screens/StylistDashboard";
 import ProviderServicesScreen from "@/screens/ProviderServicesScreen";
+import ProviderAvailabilityScreen from "@/screens/ProviderAvailabilityScreen";
 
 // Components
 import LoadingSpinner from "@/components/LoadingSpinner";
