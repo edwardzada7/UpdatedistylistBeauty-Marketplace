@@ -1615,7 +1615,7 @@ async def get_available_slots(
         # Check if availability table exists
         if not check_table_exists("provider_availability"):
             # No availability table - return empty (or could return all day available)
-            return {"date": date, "slots": [], "timezone": "UTC"}
+            return {"date": requested_date, "slots": [], "timezone": "UTC"}
         
         # Get weekly availability for this day
         weekly_response = supabase.table("provider_availability").select("*").eq(
@@ -1629,19 +1629,19 @@ async def get_available_slots(
             working_end = weekly.get("end_time")
         
         if not is_available:
-            return {"date": date, "slots": [], "timezone": "UTC"}
+            return {"date": requested_date, "slots": [], "timezone": "UTC"}
         
         # Check for exception on this date
         if check_table_exists("provider_availability_exceptions"):
             exc_response = supabase.table("provider_availability_exceptions").select("*").eq(
                 "provider_id", provider_id
-            ).eq("date", date).execute()
+            ).eq("date", requested_date).execute()
             
             if exc_response.data:
                 exception = exc_response.data[0]
                 if exception.get("is_unavailable", False):
                     # Full day off
-                    return {"date": date, "slots": [], "timezone": "UTC"}
+                    return {"date": requested_date, "slots": [], "timezone": "UTC"}
                 # Override working window if custom hours provided
                 if exception.get("start_time"):
                     working_start = exception["start_time"]
@@ -1649,7 +1649,7 @@ async def get_available_slots(
                     working_end = exception["end_time"]
         
         if not working_start or not working_end:
-            return {"date": date, "slots": [], "timezone": "UTC"}
+            return {"date": requested_date, "slots": [], "timezone": "UTC"}
         
         # Get booking rules
         slot_step = 30
@@ -1671,14 +1671,14 @@ async def get_available_slots(
         if check_table_exists("bookings"):
             bookings_response = supabase.table("bookings").select("*").eq(
                 "provider_id", provider_id
-            ).eq("booking_date", date).in_(
+            ).eq("booking_date", requested_date).in_(
                 "status", ["pending", "confirmed"]
             ).execute()
             existing_bookings = bookings_response.data or []
         
         # Check max sessions limit
         if len(existing_bookings) >= max_sessions:
-            return {"date": date, "slots": [], "timezone": "UTC"}
+            return {"date": requested_date, "slots": [], "timezone": "UTC"}
         
         # Build list of booked time ranges
         booked_ranges = []
