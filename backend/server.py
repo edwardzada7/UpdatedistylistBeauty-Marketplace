@@ -1914,10 +1914,12 @@ async def create_booking(booking: BookingCreate):
                         detail=f"Service with id {sid} not found for this provider"
                     )
                 
-                # Build booking_services row with service_id
+                # Build booking_services row with provider_service_id
+                # provider_service_id is the services.id (which acts as provider's service record)
                 service_link = {
                     "booking_id": booking_id,
-                    "service_id": sid,  # This is the services.id
+                    "provider_service_id": sid,  # This is the services.id (provider's service)
+                    "service_id": sid,  # Also include as service_id for compatibility
                     "price": service.get("price"),
                     "duration_minutes": service.get("duration")
                 }
