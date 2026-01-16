@@ -153,13 +153,27 @@ export const providersAPI = {
     api.get(`/providers/${providerId}/available-slots?date=${date}&service_duration=${serviceDuration}`),
 };
 
-// ==================== BOOKINGS API (Phase 2.1) ====================
+// ==================== BOOKINGS API (Phase 2.1 + 2.2) ====================
 
 export const bookingsAPI = {
   // Create a booking
   create: (data) => api.post("/bookings", data),
   
-  // Get bookings (with optional filters)
+  // Get bookings with filters (enhanced for Phase 2.2)
+  list: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.role) queryParams.append("role", params.role);
+    if (params.authId) queryParams.append("auth_id", params.authId);
+    if (params.providerId) queryParams.append("provider_id", params.providerId);
+    if (params.customerId) queryParams.append("customer_id", params.customerId);
+    if (params.status) queryParams.append("status", params.status);
+    if (params.date) queryParams.append("date", params.date);
+    if (params.dateFrom) queryParams.append("date_from", params.dateFrom);
+    if (params.dateTo) queryParams.append("date_to", params.dateTo);
+    return api.get(`/bookings${queryParams.toString() ? `?${queryParams}` : ""}`);
+  },
+  
+  // Legacy method for backward compatibility
   getAll: (filters = {}) => {
     const queryParams = new URLSearchParams();
     if (filters.providerId) queryParams.append("provider_id", filters.providerId);
@@ -169,11 +183,21 @@ export const bookingsAPI = {
     return api.get(`/bookings${queryParams.toString() ? `?${queryParams}` : ""}`);
   },
   
-  // Get a single booking
-  getById: (bookingId) => api.get(`/bookings/${bookingId}`),
+  // Get a single booking with full details
+  getById: (bookingId, role = null) => {
+    const queryParams = new URLSearchParams();
+    if (role) queryParams.append("role", role);
+    return api.get(`/bookings/${bookingId}${queryParams.toString() ? `?${queryParams}` : ""}`);
+  },
   
-  // Update booking status
-  updateStatus: (bookingId, status) => api.put(`/bookings/${bookingId}?status=${status}`),
+  // Update booking status with role validation
+  updateStatus: (bookingId, status, role = null, authId = null) => {
+    const queryParams = new URLSearchParams();
+    queryParams.append("status", status);
+    if (role) queryParams.append("role", role);
+    if (authId) queryParams.append("auth_id", authId);
+    return api.put(`/bookings/${bookingId}?${queryParams}`);
+  },
 };
 
 // ==================== WALLETS API ====================
