@@ -2096,13 +2096,13 @@ async def _enrich_booking(booking: dict, role: Optional[str] = None) -> dict:
                 # Get service name from services table using service_id
                 if bs.get("service_id"):
                     try:
-                        svc_response = supabase.table("services").select("name").eq(
+                        svc_response = supabase.table("services").select("*").eq(
                             "id", bs["service_id"]
                         ).execute()
                         if svc_response.data:
-                            # Parse service name
-                            raw_name = svc_response.data[0].get("name", "Service")
-                            service_name = parse_service_record(svc_response.data[0]).get("sub_service_name", raw_name)
+                            # Parse service name using the full record
+                            parsed = parse_service_record(svc_response.data[0])
+                            service_name = parsed.get("sub_service_name") or parsed.get("name") or svc_response.data[0].get("name", "Service")
                     except:
                         pass
                 
