@@ -1588,14 +1588,14 @@ async def set_provider_rules(provider_id: int, request: BookingRules):
 @api_router.get("/providers/{provider_id}/available-slots", response_model=AvailableSlotsResponse)
 async def get_available_slots(
     provider_id: int,
-    date: str = Query(..., description="Date in YYYY-MM-DD format"),
+    requested_date: str = Query(..., alias="date", description="Date in YYYY-MM-DD format"),
     service_duration: int = Query(..., ge=10, description="Service duration in minutes")
 ):
     """Get available booking slots for a provider on a specific date"""
     try:
         # Validate date format
         try:
-            target_date = datetime.strptime(date, '%Y-%m-%d').date()
+            target_date = datetime.strptime(requested_date, '%Y-%m-%d').date()
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
