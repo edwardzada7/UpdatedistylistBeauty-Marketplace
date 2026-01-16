@@ -284,7 +284,7 @@ If not authenticated → Redirect to /login
 ```env
 REACT_APP_SUPABASE_URL=https://gvmomyoeokauuixsydiu.supabase.co
 REACT_APP_SUPABASE_ANON_KEY=sb_publishable_lH31VwQm8hlT5ajeFgvkIw_91kg8P72
-REACT_APP_BACKEND_URL=https://pro-beauty-hub-10.preview.emergentagent.com
+REACT_APP_BACKEND_URL=https://appoint-beauty-1.preview.emergentagent.com
 ```
 
 ---

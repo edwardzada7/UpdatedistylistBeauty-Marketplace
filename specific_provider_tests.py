@@ -8,7 +8,7 @@ import requests
 import json
 
 # Backend URL from frontend .env
-BACKEND_URL = "https://pro-beauty-hub-10.preview.emergentagent.com/api"
+BACKEND_URL = "https://appoint-beauty-1.preview.emergentagent.com/api"
 
 def test_provider_services_with_specific_providers():
     """Test GET /api/provider-services/{provider_id} with providers 12, 13, 14"""
