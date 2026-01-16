@@ -1,6 +1,11 @@
 """
 Test Suite for Booking Services Integration
 Tests that booking_services rows are created with valid provider_service_id
+
+Database schema:
+- services table: id (bigint), stylist_id, name, price, duration, etc.
+  - This is the "provider_services" in concept - services offered by a provider
+- booking_services table: booking_id, provider_service_id (references services.id), price, duration_minutes
 """
 
 import pytest
