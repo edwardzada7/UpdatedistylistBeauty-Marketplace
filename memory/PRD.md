@@ -190,21 +190,26 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 ```
 /app/
 ├── backend/
-│   ├── server.py                 # Main FastAPI app
+│   ├── server.py                 # Main FastAPI app (with availability endpoints)
 │   ├── service_catalog.py        # Service definitions
+│   ├── tests/
+│   │   ├── test_availability.py
+│   │   └── test_availability_phase2.py  # Phase 2.1 tests
 │   └── migrations/
 │       └── phase19_privacy_identity.sql
 └── frontend/
     └── src/
         ├── screens/
-        │   ├── ProfileScreen.jsx           # User profile (with Phase 1.9 fields)
-        │   ├── ProviderProfileScreen.jsx   # Public provider profile (no email)
-        │   ├── ProvidersListScreen.jsx     # Provider list (no email)
-        │   └── StylistDashboard.jsx        # Provider dashboard
+        │   ├── ProfileScreen.jsx              # User profile (with Phase 1.9 fields)
+        │   ├── ProviderProfileScreen.jsx      # Public provider + date/time slot selection
+        │   ├── ProviderAvailabilityScreen.jsx # Provider schedule management (Phase 2.1)
+        │   ├── ProviderServicesScreen.jsx     # Service management
+        │   ├── ProvidersListScreen.jsx        # Provider list (no email)
+        │   └── StylistDashboard.jsx           # Provider dashboard (with Availability card)
         ├── services/
-        │   └── api.js                      # API client
+        │   └── api.js                         # API client (with availability methods)
         └── contexts/
-            └── AuthContext.jsx             # Auth state management
+            └── AuthContext.jsx                # Auth state management
 ```
 
 ---
