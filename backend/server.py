@@ -1812,20 +1812,12 @@ class BookingCreate(BaseModel):
 async def create_booking(booking: BookingCreate):
     """Create a new booking with optional slot validation"""
     try:
-        # Get the provider's auth_id (UUID)
+        # Get the provider's auth_id (UUID) for the bookings table
         provider_uuid = await get_provider_auth_id(booking.provider_id)
         if not provider_uuid:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Provider not found"
-            )
-        
-        # Get the customer's auth_id (UUID)
-        customer_uuid = await get_provider_auth_id(booking.customer_id)
-        if not customer_uuid:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Customer not found"
             )
         
         # If booking_date and booking_time are provided, validate availability
@@ -1869,20 +1861,20 @@ async def create_booking(booking: BookingCreate):
                 detail="bookings table does not exist. Please run migrations."
             )
         
-        # Build booking data with UUIDs
+        # Build booking data - provider_id as UUID, customer_id as integer
         booking_data = {
             "provider_id": provider_uuid,
-            "customer_id": customer_uuid,
-            "status": booking.status,
-            "notes": booking.notes
+            "customer_id": booking.customer_id,  # Keep as integer
+            "status": booking.status
         }
         
+        if booking.notes:
+            booking_data["notes"] = booking.notes
         if booking.booking_date:
             booking_data["booking_date"] = booking.booking_date
         if booking.booking_time:
             booking_data["booking_time"] = booking.booking_time
-        if booking.service_duration_minutes:
-            booking_data["service_duration_minutes"] = booking.service_duration_minutes
+        # Note: service_duration_minutes might not exist in the table
         
         # Insert booking
         result = supabase.table("bookings").insert(booking_data).execute()
