@@ -19,7 +19,7 @@ const BottomNavigation = () => {
   const providerNavItems = [
     { path: "/provider/dashboard", icon: LayoutDashboard, label: "Dashboard", legacyPaths: ["/dashboard"] },
     { path: "/provider/services", icon: Grid3X3, label: "Services", legacyPaths: ["/my-services"] },
-    { path: "/user/wallet", icon: Wallet, label: "Wallet", legacyPaths: ["/wallet"] },
+    { path: "/provider/bookings", icon: CalendarClock, label: "Bookings", legacyPaths: [] },
     { path: "/profile", icon: Settings, label: "Settings", legacyPaths: [] },
   ];
 
