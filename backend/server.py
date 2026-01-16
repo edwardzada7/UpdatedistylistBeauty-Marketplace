@@ -1400,6 +1400,14 @@ async def get_provider_auth_id(user_id: int) -> Optional[str]:
 async def get_provider_availability(provider_id: int):
     """Get provider's weekly availability, exceptions, and booking rules"""
     try:
+        # Get the provider's auth_id (UUID) from their user_id (integer)
+        provider_uuid = await get_provider_auth_id(provider_id)
+        if not provider_uuid:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Provider not found"
+            )
+        
         # Check if tables exist
         if not check_table_exists("provider_availability"):
             raise HTTPException(
@@ -1407,9 +1415,9 @@ async def get_provider_availability(provider_id: int):
                 detail="provider_availability table does not exist. Please run migrations."
             )
         
-        # Get weekly availability
+        # Get weekly availability using UUID
         weekly_response = supabase.table("provider_availability").select("*").eq(
-            "provider_id", provider_id
+            "provider_id", provider_uuid
         ).order("day_of_week").execute()
         weekly = weekly_response.data or []
         
@@ -1417,7 +1425,7 @@ async def get_provider_availability(provider_id: int):
         exceptions = []
         if check_table_exists("provider_availability_exceptions"):
             exc_response = supabase.table("provider_availability_exceptions").select("*").eq(
-                "provider_id", provider_id
+                "provider_id", provider_uuid
             ).order("date").execute()
             exceptions = exc_response.data or []
         
@@ -1429,7 +1437,7 @@ async def get_provider_availability(provider_id: int):
         }
         if check_table_exists("provider_booking_rules"):
             rules_response = supabase.table("provider_booking_rules").select("*").eq(
-                "provider_id", provider_id
+                "provider_id", provider_uuid
             ).execute()
             if rules_response.data:
                 rules = rules_response.data[0]
