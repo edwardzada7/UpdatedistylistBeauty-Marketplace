@@ -157,6 +157,23 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/user/bookings"
+        element={
+          <ProtectedRoute>
+            <CustomerBookingsScreen />
+          </ProtectedRoute>
+        }
+      />
+      {/* Legacy route for customer bookings */}
+      <Route
+        path="/bookings"
+        element={
+          <ProtectedRoute>
+            <CustomerBookingsScreen />
+          </ProtectedRoute>
+        }
+      />
 
       {/* ============================================= */}
       {/* PROVIDER (STYLIST) ROUTES - New /provider/* structure */}
@@ -185,10 +202,26 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/provider/bookings"
+        element={
+          <ProtectedRoute>
+            <ProviderBookingsScreen />
+          </ProtectedRoute>
+        }
+      />
 
       {/* ============================================= */}
       {/* SHARED ROUTES - Accessible by both roles */}
       {/* ============================================= */}
+      <Route
+        path="/bookings/:id"
+        element={
+          <ProtectedRoute>
+            <BookingDetailsScreen />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/profile"
         element={
