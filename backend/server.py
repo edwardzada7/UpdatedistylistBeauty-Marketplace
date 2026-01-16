@@ -1629,6 +1629,165 @@ async def set_provider_rules(provider_id: int, request: BookingRules):
 
 
 @api_router.get("/providers/{provider_id}/available-slots", response_model=AvailableSlotsResponse)
+async def _get_available_slots_internal(
+    provider_id: int,
+    requested_date: str,
+    service_duration: int
+) -> dict:
+    """Internal function to get available booking slots - no FastAPI dependencies"""
+    # Get the provider's auth_id (UUID)
+    provider_uuid = await get_provider_auth_id(provider_id)
+    if not provider_uuid:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Provider not found"
+        )
+    
+    # Validate date format
+    try:
+        target_date = datetime.strptime(requested_date, '%Y-%m-%d').date()
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Date must be in YYYY-MM-DD format"
+        )
+    
+    # Get day of week (0=Monday in Python, but we use 0=Sunday)
+    # Python: Monday=0, Sunday=6; We need: Sunday=0, Saturday=6
+    python_dow = target_date.weekday()  # Monday=0
+    day_of_week = (python_dow + 1) % 7  # Convert to Sunday=0
+    
+    # Initialize default working window
+    working_start = None
+    working_end = None
+    is_available = False
+    
+    # Check if availability table exists
+    if not check_table_exists("provider_availability"):
+        # No availability table - return empty (or could return all day available)
+        return {"date": requested_date, "slots": [], "timezone": "UTC"}
+    
+    # Get weekly availability for this day using UUID
+    weekly_response = supabase.table("provider_availability").select("*").eq(
+        "provider_id", provider_uuid
+    ).eq("day_of_week", day_of_week).execute()
+    
+    if weekly_response.data:
+        weekly = weekly_response.data[0]
+        is_available = weekly.get("is_active", False)
+        working_start = weekly.get("start_time")
+        working_end = weekly.get("end_time")
+        # Handle time format from DB (might be HH:MM:SS)
+        if working_start and len(working_start) > 5:
+            working_start = working_start[:5]
+        if working_end and len(working_end) > 5:
+            working_end = working_end[:5]
+    
+    if not is_available:
+        return {"date": requested_date, "slots": [], "timezone": "UTC"}
+    
+    # Check for exception on this date
+    if check_table_exists("provider_availability_exceptions"):
+        exc_response = supabase.table("provider_availability_exceptions").select("*").eq(
+            "provider_id", provider_uuid
+        ).eq("date", requested_date).execute()
+        
+        if exc_response.data:
+            exception = exc_response.data[0]
+            if exception.get("is_unavailable", False):
+                # Full day off
+                return {"date": requested_date, "slots": [], "timezone": "UTC"}
+            # Override working window if custom hours provided
+            if exception.get("start_time"):
+                working_start = exception["start_time"]
+            if exception.get("end_time"):
+                working_end = exception["end_time"]
+    
+    if not working_start or not working_end:
+        return {"date": requested_date, "slots": [], "timezone": "UTC"}
+    
+    # Get booking rules
+    slot_step = 30
+    min_notice = 0
+    max_sessions = 6
+    
+    if check_table_exists("provider_booking_rules"):
+        rules_response = supabase.table("provider_booking_rules").select("*").eq(
+            "provider_id", provider_uuid
+        ).execute()
+        if rules_response.data:
+            rules = rules_response.data[0]
+            slot_step = rules.get("slot_step_minutes", 30)
+            min_notice = rules.get("min_notice_minutes", 0)
+            max_sessions = rules.get("max_sessions_per_day", 6)
+    
+    # Get existing bookings for this provider and date
+    existing_bookings = []
+    if check_table_exists("bookings"):
+        # Bookings table uses UUID for provider_id
+        bookings_response = supabase.table("bookings").select("*").eq(
+            "provider_id", provider_uuid
+        ).eq("booking_date", requested_date).in_(
+            "status", ["pending", "confirmed"]
+        ).execute()
+        existing_bookings = bookings_response.data or []
+    
+    # Check max sessions limit
+    if len(existing_bookings) >= max_sessions:
+        return {"date": requested_date, "slots": [], "timezone": "UTC"}
+    
+    # Build list of booked time ranges
+    booked_ranges = []
+    for booking in existing_bookings:
+        booking_time = booking.get("booking_time")
+        if booking_time:
+            # Get duration from booking or use the requested service_duration as fallback
+            duration = booking.get("service_duration_minutes") or booking.get("duration_minutes") or service_duration
+            start_mins = time_to_minutes(booking_time)
+            end_mins = start_mins + duration
+            booked_ranges.append((start_mins, end_mins))
+    
+    # Generate slots
+    now = datetime.utcnow()
+    today = now.date()
+    current_time_mins = now.hour * 60 + now.minute
+    
+    window_start = time_to_minutes(working_start)
+    window_end = time_to_minutes(working_end)
+    
+    slots = []
+    slot_time = window_start
+    
+    while slot_time + service_duration <= window_end:
+        slot_end = slot_time + service_duration
+        
+        # Check min notice (only for today)
+        if target_date == today:
+            earliest_allowed = current_time_mins + min_notice
+            if slot_time < earliest_allowed:
+                slot_time += slot_step
+                continue
+        elif target_date < today:
+            # Date is in the past
+            return {"date": requested_date, "slots": [], "timezone": "UTC"}
+        
+        # Check for overlap with existing bookings
+        has_conflict = False
+        for booked_start, booked_end in booked_ranges:
+            # Overlap if: slot_start < booked_end AND slot_end > booked_start
+            if slot_time < booked_end and slot_end > booked_start:
+                has_conflict = True
+                break
+        
+        if not has_conflict:
+            slots.append(minutes_to_time(slot_time))
+        
+        slot_time += slot_step
+    
+    return {"date": requested_date, "slots": slots, "timezone": "UTC"}
+
+
+@api_router.get("/providers/{provider_id}/available-slots")
 async def get_available_slots(
     provider_id: int,
     requested_date: str = Query(..., alias="date", description="Date in YYYY-MM-DD format"),
@@ -1636,156 +1795,7 @@ async def get_available_slots(
 ):
     """Get available booking slots for a provider on a specific date"""
     try:
-        # Get the provider's auth_id (UUID)
-        provider_uuid = await get_provider_auth_id(provider_id)
-        if not provider_uuid:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Provider not found"
-            )
-        
-        # Validate date format
-        try:
-            target_date = datetime.strptime(requested_date, '%Y-%m-%d').date()
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Date must be in YYYY-MM-DD format"
-            )
-        
-        # Get day of week (0=Monday in Python, but we use 0=Sunday)
-        # Python: Monday=0, Sunday=6; We need: Sunday=0, Saturday=6
-        python_dow = target_date.weekday()  # Monday=0
-        day_of_week = (python_dow + 1) % 7  # Convert to Sunday=0
-        
-        # Initialize default working window
-        working_start = None
-        working_end = None
-        is_available = False
-        
-        # Check if availability table exists
-        if not check_table_exists("provider_availability"):
-            # No availability table - return empty (or could return all day available)
-            return {"date": requested_date, "slots": [], "timezone": "UTC"}
-        
-        # Get weekly availability for this day using UUID
-        weekly_response = supabase.table("provider_availability").select("*").eq(
-            "provider_id", provider_uuid
-        ).eq("day_of_week", day_of_week).execute()
-        
-        if weekly_response.data:
-            weekly = weekly_response.data[0]
-            is_available = weekly.get("is_active", False)
-            working_start = weekly.get("start_time")
-            working_end = weekly.get("end_time")
-            # Handle time format from DB (might be HH:MM:SS)
-            if working_start and len(working_start) > 5:
-                working_start = working_start[:5]
-            if working_end and len(working_end) > 5:
-                working_end = working_end[:5]
-        
-        if not is_available:
-            return {"date": requested_date, "slots": [], "timezone": "UTC"}
-        
-        # Check for exception on this date
-        if check_table_exists("provider_availability_exceptions"):
-            exc_response = supabase.table("provider_availability_exceptions").select("*").eq(
-                "provider_id", provider_uuid
-            ).eq("date", requested_date).execute()
-            
-            if exc_response.data:
-                exception = exc_response.data[0]
-                if exception.get("is_unavailable", False):
-                    # Full day off
-                    return {"date": requested_date, "slots": [], "timezone": "UTC"}
-                # Override working window if custom hours provided
-                if exception.get("start_time"):
-                    working_start = exception["start_time"]
-                if exception.get("end_time"):
-                    working_end = exception["end_time"]
-        
-        if not working_start or not working_end:
-            return {"date": requested_date, "slots": [], "timezone": "UTC"}
-        
-        # Get booking rules
-        slot_step = 30
-        min_notice = 0
-        max_sessions = 6
-        
-        if check_table_exists("provider_booking_rules"):
-            rules_response = supabase.table("provider_booking_rules").select("*").eq(
-                "provider_id", provider_uuid
-            ).execute()
-            if rules_response.data:
-                rules = rules_response.data[0]
-                slot_step = rules.get("slot_step_minutes", 30)
-                min_notice = rules.get("min_notice_minutes", 0)
-                max_sessions = rules.get("max_sessions_per_day", 6)
-        
-        # Get existing bookings for this provider and date
-        existing_bookings = []
-        if check_table_exists("bookings"):
-            # Bookings table uses UUID for provider_id
-            bookings_response = supabase.table("bookings").select("*").eq(
-                "provider_id", provider_uuid
-            ).eq("booking_date", requested_date).in_(
-                "status", ["pending", "confirmed"]
-            ).execute()
-            existing_bookings = bookings_response.data or []
-        
-        # Check max sessions limit
-        if len(existing_bookings) >= max_sessions:
-            return {"date": requested_date, "slots": [], "timezone": "UTC"}
-        
-        # Build list of booked time ranges
-        booked_ranges = []
-        for booking in existing_bookings:
-            booking_time = booking.get("booking_time")
-            if booking_time:
-                # Get duration from booking or use the requested service_duration as fallback
-                duration = booking.get("service_duration_minutes") or booking.get("duration_minutes") or service_duration
-                start_mins = time_to_minutes(booking_time)
-                end_mins = start_mins + duration
-                booked_ranges.append((start_mins, end_mins))
-        
-        # Generate slots
-        now = datetime.utcnow()
-        today = now.date()
-        current_time_mins = now.hour * 60 + now.minute
-        
-        window_start = time_to_minutes(working_start)
-        window_end = time_to_minutes(working_end)
-        
-        slots = []
-        slot_time = window_start
-        
-        while slot_time + service_duration <= window_end:
-            slot_end = slot_time + service_duration
-            
-            # Check min notice (only for today)
-            if target_date == today:
-                earliest_allowed = current_time_mins + min_notice
-                if slot_time < earliest_allowed:
-                    slot_time += slot_step
-                    continue
-            elif target_date < today:
-                # Date is in the past
-                return {"date": requested_date, "slots": [], "timezone": "UTC"}
-            
-            # Check for overlap with existing bookings
-            has_conflict = False
-            for booked_start, booked_end in booked_ranges:
-                # Overlap if: slot_start < booked_end AND slot_end > booked_start
-                if slot_time < booked_end and slot_end > booked_start:
-                    has_conflict = True
-                    break
-            
-            if not has_conflict:
-                slots.append(minutes_to_time(slot_time))
-            
-            slot_time += slot_step
-        
-        return {"date": requested_date, "slots": slots, "timezone": "UTC"}
+        return await _get_available_slots_internal(provider_id, requested_date, service_duration)
     except HTTPException:
         raise
     except Exception as e:
