@@ -139,7 +139,7 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 - Descriptions displayed to users on booking page
 - No changes to pricing, duration, or toggle logic
 
-### Phase 2.0 - Provider Availability & Booking System ✅
+### Phase 2.0 - Backend Availability System ✅
 - Weekly availability schedule per provider (7 days)
 - Exception dates (day off or custom hours)
 - Booking rules (max sessions, min notice, slot step)
@@ -147,14 +147,31 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 - Booking validation against available slots
 - **Note**: Booking creation requires fixing foreign key constraint in Supabase
 
+### Phase 2.1 - Frontend Availability & Booking UI ✅ (January 16, 2026)
+- **Provider Availability Screen** (`/provider/availability`):
+  - Weekly schedule toggles with time inputs for each day
+  - Exception date management (day off or custom hours)
+  - Booking rules configuration (slot step, min notice, max sessions)
+  - Single "Save All Settings" button wiring to backend APIs
+  - Back navigation to provider dashboard
+- **User Date/Time Slot Selection** (ProviderProfileScreen):
+  - Service selection step with checkboxes and total calculation
+  - Date picker for booking date (30-day window)
+  - Available time slots fetched from backend API
+  - Slot selection with visual feedback
+  - Booking notes (optional)
+  - Confirm booking button submits with date/time
+  - 409 conflict handling with user-friendly toast
+- **Navigation**: Dashboard "Availability" card links to availability screen
+- **Backend fix**: Updated rules endpoint to use `upsert` for DB compatibility
+
 ---
 
 ## Backlog / Future Tasks
 
 ### P0 (High Priority)
+- [ ] **FIX: Bookings FK Constraint** - `bookings.provider_id` (UUID) references `users.id` (INT) incorrectly. Fix in Supabase to reference `users.auth_id`
 - [ ] Run Phase 1.9 database migration
-- [ ] Booking system implementation
-- [ ] Provider dashboard completion
 
 ### P1 (Medium Priority)
 - [ ] Real-time chat/messaging
