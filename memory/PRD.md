@@ -178,6 +178,46 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 - **Tests Added**: `/app/backend/tests/test_booking_services.py` (7 tests)
 - **All 29 backend tests passing**
 
+### Phase 2.3 - Bookings Views & Status Management ✅ (January 16, 2026)
+**Complete Booking Loop Implementation:**
+
+- **Customer "My Bookings" Screen** (`/bookings`):
+  - Upcoming tab (pending/confirmed bookings with future dates)
+  - Past tab (completed/canceled/declined or past dates)
+  - Each card shows: provider name, date, time, services, status badge, total amount
+  - Click navigates to booking details
+  - Added to BottomNavigation for customers
+
+- **Provider "Bookings" Screen** (`/provider/bookings`):
+  - Tabs: Pending, Confirmed, Completed, Canceled/Declined
+  - Quick actions on pending cards: Confirm / Decline buttons
+  - Click navigates to booking details
+  - Dashboard booking cards now navigate here
+  - Added to BottomNavigation for providers
+
+- **Booking Details Screen** (`/bookings/:id`) - Shared:
+  - Shows: Status, person info (provider/customer), date/time
+  - Services list with names, prices, durations from booking_services
+  - Totals: total_amount + total_duration
+  - Actions based on role:
+    - Customer: Cancel (pending/confirmed), Rebook CTA (future)
+    - Provider: Confirm/Decline (pending), Complete (confirmed), Cancel
+
+- **Backend API Enhancements**:
+  - GET /api/bookings - New filters: role, auth_id, status, date_from, date_to
+  - GET /api/bookings/{id} - Returns full details with computed fields
+  - PUT /api/bookings/{id} - Status transitions with role-based validation
+  - Computed fields: services[], total_amount, total_duration, provider_display_name, customer_display_name
+
+- **Status Transition Rules**:
+  - Provider: pending→confirmed/declined/canceled, confirmed→completed/canceled
+  - Customer: pending→canceled, confirmed→canceled
+
+- **Tests Added**: 
+  - `/app/backend/tests/test_bookings_views.py` (13 tests)
+  - `/app/backend/tests/test_bookings_phase22.py` (32 tests)
+- **Backend Tests**: 97% pass rate (44/45 tests)
+
 ---
 
 ## Backlog / Future Tasks
