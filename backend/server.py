@@ -1,13 +1,14 @@
-from fastapi import FastAPI, APIRouter, HTTPException, status
+from fastapi import FastAPI, APIRouter, HTTPException, status, Query
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional
-from datetime import datetime
+from pydantic import BaseModel, Field, EmailStr, validator
+from typing import List, Optional, Dict, Any
+from datetime import datetime, date, time, timedelta
 from supabase import create_client, Client
+import re
 
 
 ROOT_DIR = Path(__file__).parent
