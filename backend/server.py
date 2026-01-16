@@ -2013,43 +2013,157 @@ async def create_booking(booking: BookingCreate):
 
 @api_router.get("/bookings")
 async def get_bookings(
+    role: Optional[str] = Query(None, description="Filter role: customer or provider"),
+    auth_id: Optional[str] = Query(None, description="User's auth_id (UUID)"),
     provider_id: Optional[int] = None,
     customer_id: Optional[int] = None,
     booking_status: Optional[str] = Query(None, alias="status"),
-    booking_date: Optional[str] = Query(None, alias="date")
+    booking_date: Optional[str] = Query(None, alias="date"),
+    date_from: Optional[str] = Query(None, description="Filter from date (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="Filter to date (YYYY-MM-DD)")
 ):
-    """Get bookings with optional filters"""
+    """Get bookings with optional filters and computed fields"""
     try:
         if not check_table_exists("bookings"):
             return []
         
         query = supabase.table("bookings").select("*")
         
+        # Role-based filtering using auth_id
+        if role and auth_id:
+            if role == "provider":
+                # For provider role, match provider_id (UUID) directly
+                query = query.eq("provider_id", auth_id)
+            elif role == "customer":
+                # For customer role, need to get user id from auth_id
+                user_response = supabase.table("users").select("id").eq("auth_id", auth_id).execute()
+                if user_response.data:
+                    query = query.eq("customer_id", user_response.data[0]["id"])
+                else:
+                    return []  # User not found
+        
+        # Legacy filters
         if provider_id:
-            # Convert provider_id to UUID
             provider_uuid = await get_provider_auth_id(provider_id)
             if provider_uuid:
                 query = query.eq("provider_id", provider_uuid)
         if customer_id:
-            # customer_id is kept as integer
             query = query.eq("customer_id", customer_id)
         if booking_status:
             query = query.eq("status", booking_status)
         if booking_date:
             query = query.eq("booking_date", booking_date)
+        if date_from:
+            query = query.gte("booking_date", date_from)
+        if date_to:
+            query = query.lte("booking_date", date_to)
         
-        result = query.order("created_at", desc=True).execute()
-        return result.data or []
+        result = query.order("booking_date", desc=True).order("booking_time", desc=True).execute()
+        bookings = result.data or []
+        
+        # Enrich bookings with computed fields
+        enriched_bookings = []
+        for booking in bookings:
+            enriched = await _enrich_booking(booking, role)
+            enriched_bookings.append(enriched)
+        
+        return enriched_bookings
     except Exception as e:
+        logging.error(f"Failed to fetch bookings: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch bookings: {str(e)}"
         )
 
 
+async def _enrich_booking(booking: dict, role: Optional[str] = None) -> dict:
+    """Enrich a booking with computed fields: services, totals, display names"""
+    enriched = {**booking}
+    
+    # Get booking services
+    services = []
+    total_amount = 0
+    total_duration = 0
+    
+    if check_table_exists("booking_services"):
+        try:
+            bs_response = supabase.table("booking_services").select("*").eq(
+                "booking_id", booking["id"]
+            ).execute()
+            
+            for bs in bs_response.data or []:
+                service_name = "Service"
+                # Get service name from services table using service_id
+                if bs.get("service_id"):
+                    try:
+                        svc_response = supabase.table("services").select("name").eq(
+                            "id", bs["service_id"]
+                        ).execute()
+                        if svc_response.data:
+                            # Parse service name
+                            raw_name = svc_response.data[0].get("name", "Service")
+                            service_name = parse_service_record(svc_response.data[0]).get("sub_service_name", raw_name)
+                    except:
+                        pass
+                
+                price = bs.get("price") or 0
+                duration = bs.get("duration_minutes") or 0
+                services.append({
+                    "service_id": bs.get("service_id"),
+                    "service_name": service_name,
+                    "price": price,
+                    "duration_minutes": duration
+                })
+                total_amount += price
+                total_duration += duration
+        except Exception as e:
+            logging.warning(f"Could not fetch booking_services: {e}")
+    
+    enriched["services"] = services
+    enriched["total_amount"] = total_amount
+    enriched["total_duration"] = total_duration
+    
+    # Get provider display name (hide email for customers)
+    provider_display_name = "Provider"
+    if booking.get("provider_id"):
+        try:
+            # provider_id is UUID (auth_id)
+            user_response = supabase.table("users").select("id, name, auth_id").eq(
+                "auth_id", booking["provider_id"]
+            ).execute()
+            if user_response.data:
+                user = user_response.data[0]
+                provider_display_name = user.get("name") or "Provider"
+                
+                # Try to get business name from stylists
+                stylist_response = supabase.table("stylists").select("business_name").eq(
+                    "user_id", user["id"]
+                ).execute()
+                if stylist_response.data and stylist_response.data[0].get("business_name"):
+                    provider_display_name = stylist_response.data[0]["business_name"]
+        except:
+            pass
+    enriched["provider_display_name"] = provider_display_name
+    
+    # Get customer display name
+    customer_display_name = "Customer"
+    if booking.get("customer_id"):
+        try:
+            user_response = supabase.table("users").select("name").eq(
+                "id", booking["customer_id"]
+            ).execute()
+            if user_response.data:
+                customer_display_name = user_response.data[0].get("name") or "Customer"
+        except:
+            pass
+    enriched["customer_display_name"] = customer_display_name
+    
+    return enriched
+
+
 @api_router.get("/bookings/{booking_id}")
-async def get_booking(booking_id: int):
-    """Get a specific booking by ID"""
+async def get_booking(booking_id: int, role: Optional[str] = Query(None)):
+    """Get a specific booking by ID with full details"""
     try:
         if not check_table_exists("bookings"):
             raise HTTPException(
@@ -2065,7 +2179,9 @@ async def get_booking(booking_id: int):
                 detail="Booking not found"
             )
         
-        return result.data[0]
+        booking = result.data[0]
+        enriched = await _enrich_booking(booking, role)
+        return enriched
     except HTTPException:
         raise
     except Exception as e:
@@ -2075,16 +2191,89 @@ async def get_booking(booking_id: int):
         )
 
 
+class BookingStatusUpdate(BaseModel):
+    status: str
+    role: str  # "customer" or "provider"
+    auth_id: str  # To verify the requester
+
+
 @api_router.put("/bookings/{booking_id}")
-async def update_booking(booking_id: int, new_status: str = Query(..., alias="status")):
-    """Update booking status"""
+async def update_booking(
+    booking_id: int, 
+    new_status: str = Query(..., alias="status"),
+    role: Optional[str] = Query(None),
+    auth_id: Optional[str] = Query(None)
+):
+    """Update booking status with validation rules"""
     try:
-        if new_status not in ["pending", "confirmed", "cancelled", "completed"]:
+        valid_statuses = ["pending", "confirmed", "completed", "canceled", "declined"]
+        # Support both 'cancelled' and 'canceled' spellings
+        if new_status == "cancelled":
+            new_status = "canceled"
+        
+        if new_status not in valid_statuses:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid status. Must be: pending, confirmed, cancelled, or completed"
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
             )
         
+        # Get current booking
+        current = supabase.table("bookings").select("*").eq("id", booking_id).execute()
+        if not current.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        booking = current.data[0]
+        current_status = booking.get("status", "pending")
+        
+        # Validate transition based on role
+        if role and auth_id:
+            is_provider = (role == "provider" and booking.get("provider_id") == auth_id)
+            is_customer = False
+            if role == "customer":
+                user_response = supabase.table("users").select("id").eq("auth_id", auth_id).execute()
+                if user_response.data:
+                    is_customer = (booking.get("customer_id") == user_response.data[0]["id"])
+            
+            # Provider transition rules
+            if is_provider:
+                allowed_transitions = {
+                    "pending": ["confirmed", "declined", "canceled"],
+                    "confirmed": ["completed", "canceled"],
+                    "completed": [],
+                    "canceled": [],
+                    "declined": []
+                }
+                if new_status not in allowed_transitions.get(current_status, []):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Provider cannot change status from '{current_status}' to '{new_status}'"
+                    )
+            
+            # Customer transition rules
+            elif is_customer:
+                allowed_transitions = {
+                    "pending": ["canceled"],
+                    "confirmed": ["canceled"],  # Allow cancel if confirmed (simplified rule)
+                    "completed": [],
+                    "canceled": [],
+                    "declined": []
+                }
+                if new_status not in allowed_transitions.get(current_status, []):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Customer cannot change status from '{current_status}' to '{new_status}'"
+                    )
+            else:
+                # Not authorized for this booking
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to update this booking"
+                )
+        
+        # Update the booking
         result = supabase.table("bookings").update({"status": new_status}).eq("id", booking_id).execute()
         
         if not result.data:
@@ -2093,7 +2282,9 @@ async def update_booking(booking_id: int, new_status: str = Query(..., alias="st
                 detail="Booking not found"
             )
         
-        return result.data[0]
+        # Return enriched booking
+        enriched = await _enrich_booking(result.data[0], role)
+        return enriched
     except HTTPException:
         raise
     except Exception as e:
