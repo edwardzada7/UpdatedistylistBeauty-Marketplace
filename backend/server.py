@@ -1713,7 +1713,7 @@ async def get_available_slots(
                     continue
             elif target_date < today:
                 # Date is in the past
-                return {"date": date, "slots": [], "timezone": "UTC"}
+                return {"date": requested_date, "slots": [], "timezone": "UTC"}
             
             # Check for overlap with existing bookings
             has_conflict = False
@@ -1728,7 +1728,7 @@ async def get_available_slots(
             
             slot_time += slot_step
         
-        return {"date": date, "slots": slots, "timezone": "UTC"}
+        return {"date": requested_date, "slots": slots, "timezone": "UTC"}
     except HTTPException:
         raise
     except Exception as e:
