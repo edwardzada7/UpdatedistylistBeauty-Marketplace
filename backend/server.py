@@ -1926,14 +1926,13 @@ async def get_bookings(
         query = supabase.table("bookings").select("*")
         
         if provider_id:
-            # Convert to UUID
+            # Convert provider_id to UUID
             provider_uuid = await get_provider_auth_id(provider_id)
             if provider_uuid:
                 query = query.eq("provider_id", provider_uuid)
         if customer_id:
-            customer_uuid = await get_provider_auth_id(customer_id)
-            if customer_uuid:
-                query = query.eq("customer_id", customer_uuid)
+            # customer_id is kept as integer
+            query = query.eq("customer_id", customer_id)
         if booking_status:
             query = query.eq("status", booking_status)
         if booking_date:
