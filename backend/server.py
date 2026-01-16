@@ -1853,7 +1853,7 @@ async def create_booking(booking: BookingCreate):
             service_duration = service_duration or 60  # Default to 60 minutes
             
             # Check if the slot is available
-            slots_response = await get_available_slots(
+            slots_response = await _get_available_slots_internal(
                 provider_id=booking.provider_id,
                 requested_date=booking.booking_date,
                 service_duration=service_duration
