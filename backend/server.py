@@ -1353,6 +1353,587 @@ async def register_provider(user_id: int, hourly_rate: float = 0.0, bio: str = N
         )
 
 
+# ==================== PROVIDER AVAILABILITY ENDPOINTS (Phase 2.0) ====================
+
+def validate_time_range(start_time: str, end_time: str) -> bool:
+    """Validate that start_time < end_time"""
+    if not start_time or not end_time:
+        return False
+    start = datetime.strptime(start_time, '%H:%M')
+    end = datetime.strptime(end_time, '%H:%M')
+    return start < end
+
+def time_to_minutes(time_str: str) -> int:
+    """Convert HH:MM to minutes since midnight"""
+    h, m = map(int, time_str.split(':'))
+    return h * 60 + m
+
+def minutes_to_time(minutes: int) -> str:
+    """Convert minutes since midnight to HH:MM"""
+    h = minutes // 60
+    m = minutes % 60
+    return f"{h:02d}:{m:02d}"
+
+def check_table_exists(table_name: str) -> bool:
+    """Check if a Supabase table exists by attempting a query"""
+    try:
+        supabase.table(table_name).select("*").limit(1).execute()
+        return True
+    except Exception as e:
+        if "does not exist" in str(e).lower() or "42P01" in str(e):
+            return False
+        # Table exists but might have other issues
+        return True
+
+
+@api_router.get("/providers/{provider_id}/availability", response_model=AvailabilityResponse)
+async def get_provider_availability(provider_id: int):
+    """Get provider's weekly availability, exceptions, and booking rules"""
+    try:
+        # Check if tables exist
+        if not check_table_exists("provider_availability"):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="provider_availability table does not exist. Please run migrations."
+            )
+        
+        # Get weekly availability
+        weekly_response = supabase.table("provider_availability").select("*").eq(
+            "provider_id", provider_id
+        ).order("day_of_week").execute()
+        weekly = weekly_response.data or []
+        
+        # Get exceptions
+        exceptions = []
+        if check_table_exists("provider_availability_exceptions"):
+            exc_response = supabase.table("provider_availability_exceptions").select("*").eq(
+                "provider_id", provider_id
+            ).order("date").execute()
+            exceptions = exc_response.data or []
+        
+        # Get booking rules
+        rules = {
+            "max_sessions_per_day": 6,
+            "min_notice_minutes": 0,
+            "slot_step_minutes": 30
+        }
+        if check_table_exists("provider_booking_rules"):
+            rules_response = supabase.table("provider_booking_rules").select("*").eq(
+                "provider_id", provider_id
+            ).execute()
+            if rules_response.data:
+                rules = rules_response.data[0]
+        
+        return {
+            "weekly": weekly,
+            "exceptions": exceptions,
+            "rules": rules
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch availability: {str(e)}"
+        )
+
+
+@api_router.post("/providers/{provider_id}/availability")
+async def set_provider_availability(provider_id: int, request: WeeklyAvailabilityRequest):
+    """Set provider's weekly availability (upsert)"""
+    try:
+        if not check_table_exists("provider_availability"):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="provider_availability table does not exist. Please run migrations."
+            )
+        
+        # Validate time ranges for available days
+        for avail in request.weekly:
+            if avail.is_available:
+                if not avail.start_time or not avail.end_time:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Day {avail.day_of_week}: start_time and end_time required when is_available=true"
+                    )
+                if not validate_time_range(avail.start_time, avail.end_time):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Day {avail.day_of_week}: start_time must be before end_time"
+                    )
+        
+        # Delete existing availability for this provider
+        supabase.table("provider_availability").delete().eq("provider_id", provider_id).execute()
+        
+        # Insert new availability rows
+        rows_to_insert = []
+        for avail in request.weekly:
+            rows_to_insert.append({
+                "provider_id": provider_id,
+                "day_of_week": avail.day_of_week,
+                "is_available": avail.is_available,
+                "start_time": avail.start_time,
+                "end_time": avail.end_time
+            })
+        
+        if rows_to_insert:
+            supabase.table("provider_availability").insert(rows_to_insert).execute()
+        
+        return {"message": "Availability updated successfully", "count": len(rows_to_insert)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update availability: {str(e)}"
+        )
+
+
+@api_router.post("/providers/{provider_id}/exceptions")
+async def set_provider_exceptions(provider_id: int, request: ExceptionsRequest):
+    """Set provider's availability exceptions (upsert by date)"""
+    try:
+        if not check_table_exists("provider_availability_exceptions"):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="provider_availability_exceptions table does not exist. Please run migrations."
+            )
+        
+        # Validate time ranges when not marking full day unavailable
+        for exc in request.exceptions:
+            if not exc.is_unavailable:
+                if exc.start_time and exc.end_time:
+                    if not validate_time_range(exc.start_time, exc.end_time):
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Date {exc.date}: start_time must be before end_time"
+                        )
+        
+        # Process each exception (upsert by provider_id + date)
+        for exc in request.exceptions:
+            # Try to find existing exception
+            existing = supabase.table("provider_availability_exceptions").select("id").eq(
+                "provider_id", provider_id
+            ).eq("date", exc.date).execute()
+            
+            row_data = {
+                "provider_id": provider_id,
+                "date": exc.date,
+                "is_unavailable": exc.is_unavailable,
+                "start_time": exc.start_time if not exc.is_unavailable else None,
+                "end_time": exc.end_time if not exc.is_unavailable else None,
+                "note": exc.note
+            }
+            
+            if existing.data:
+                # Update existing
+                supabase.table("provider_availability_exceptions").update(row_data).eq(
+                    "id", existing.data[0]["id"]
+                ).execute()
+            else:
+                # Insert new
+                supabase.table("provider_availability_exceptions").insert(row_data).execute()
+        
+        return {"message": "Exceptions updated successfully", "count": len(request.exceptions)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update exceptions: {str(e)}"
+        )
+
+
+@api_router.post("/providers/{provider_id}/rules")
+async def set_provider_rules(provider_id: int, request: BookingRules):
+    """Set provider's booking rules (upsert)"""
+    try:
+        if not check_table_exists("provider_booking_rules"):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="provider_booking_rules table does not exist. Please run migrations."
+            )
+        
+        row_data = {
+            "provider_id": provider_id,
+            "max_sessions_per_day": request.max_sessions_per_day,
+            "min_notice_minutes": request.min_notice_minutes,
+            "slot_step_minutes": request.slot_step_minutes
+        }
+        
+        # Check if rules exist for this provider
+        existing = supabase.table("provider_booking_rules").select("id").eq(
+            "provider_id", provider_id
+        ).execute()
+        
+        if existing.data:
+            # Update existing
+            supabase.table("provider_booking_rules").update(row_data).eq(
+                "provider_id", provider_id
+            ).execute()
+        else:
+            # Insert new
+            supabase.table("provider_booking_rules").insert(row_data).execute()
+        
+        return {"message": "Booking rules updated successfully", "rules": row_data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update booking rules: {str(e)}"
+        )
+
+
+@api_router.get("/providers/{provider_id}/available-slots", response_model=AvailableSlotsResponse)
+async def get_available_slots(
+    provider_id: int,
+    date: str = Query(..., description="Date in YYYY-MM-DD format"),
+    service_duration: int = Query(..., ge=10, description="Service duration in minutes")
+):
+    """Get available booking slots for a provider on a specific date"""
+    try:
+        # Validate date format
+        try:
+            target_date = datetime.strptime(date, '%Y-%m-%d').date()
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Date must be in YYYY-MM-DD format"
+            )
+        
+        # Get day of week (0=Monday in Python, but we use 0=Sunday)
+        # Python: Monday=0, Sunday=6; We need: Sunday=0, Saturday=6
+        python_dow = target_date.weekday()  # Monday=0
+        day_of_week = (python_dow + 1) % 7  # Convert to Sunday=0
+        
+        # Initialize default working window
+        working_start = None
+        working_end = None
+        is_available = False
+        
+        # Check if availability table exists
+        if not check_table_exists("provider_availability"):
+            # No availability table - return empty (or could return all day available)
+            return {"date": date, "slots": [], "timezone": "UTC"}
+        
+        # Get weekly availability for this day
+        weekly_response = supabase.table("provider_availability").select("*").eq(
+            "provider_id", provider_id
+        ).eq("day_of_week", day_of_week).execute()
+        
+        if weekly_response.data:
+            weekly = weekly_response.data[0]
+            is_available = weekly.get("is_available", False)
+            working_start = weekly.get("start_time")
+            working_end = weekly.get("end_time")
+        
+        if not is_available:
+            return {"date": date, "slots": [], "timezone": "UTC"}
+        
+        # Check for exception on this date
+        if check_table_exists("provider_availability_exceptions"):
+            exc_response = supabase.table("provider_availability_exceptions").select("*").eq(
+                "provider_id", provider_id
+            ).eq("date", date).execute()
+            
+            if exc_response.data:
+                exception = exc_response.data[0]
+                if exception.get("is_unavailable", False):
+                    # Full day off
+                    return {"date": date, "slots": [], "timezone": "UTC"}
+                # Override working window if custom hours provided
+                if exception.get("start_time"):
+                    working_start = exception["start_time"]
+                if exception.get("end_time"):
+                    working_end = exception["end_time"]
+        
+        if not working_start or not working_end:
+            return {"date": date, "slots": [], "timezone": "UTC"}
+        
+        # Get booking rules
+        slot_step = 30
+        min_notice = 0
+        max_sessions = 6
+        
+        if check_table_exists("provider_booking_rules"):
+            rules_response = supabase.table("provider_booking_rules").select("*").eq(
+                "provider_id", provider_id
+            ).execute()
+            if rules_response.data:
+                rules = rules_response.data[0]
+                slot_step = rules.get("slot_step_minutes", 30)
+                min_notice = rules.get("min_notice_minutes", 0)
+                max_sessions = rules.get("max_sessions_per_day", 6)
+        
+        # Get existing bookings for this provider and date
+        existing_bookings = []
+        if check_table_exists("bookings"):
+            bookings_response = supabase.table("bookings").select("*").eq(
+                "provider_id", provider_id
+            ).eq("booking_date", date).in_(
+                "status", ["pending", "confirmed"]
+            ).execute()
+            existing_bookings = bookings_response.data or []
+        
+        # Check max sessions limit
+        if len(existing_bookings) >= max_sessions:
+            return {"date": date, "slots": [], "timezone": "UTC"}
+        
+        # Build list of booked time ranges
+        booked_ranges = []
+        for booking in existing_bookings:
+            booking_time = booking.get("booking_time")
+            if booking_time:
+                # Get duration from booking or use the requested service_duration as fallback
+                duration = booking.get("service_duration_minutes") or booking.get("duration_minutes") or service_duration
+                start_mins = time_to_minutes(booking_time)
+                end_mins = start_mins + duration
+                booked_ranges.append((start_mins, end_mins))
+        
+        # Generate slots
+        now = datetime.utcnow()
+        today = now.date()
+        current_time_mins = now.hour * 60 + now.minute
+        
+        window_start = time_to_minutes(working_start)
+        window_end = time_to_minutes(working_end)
+        
+        slots = []
+        slot_time = window_start
+        
+        while slot_time + service_duration <= window_end:
+            slot_end = slot_time + service_duration
+            
+            # Check min notice (only for today)
+            if target_date == today:
+                earliest_allowed = current_time_mins + min_notice
+                if slot_time < earliest_allowed:
+                    slot_time += slot_step
+                    continue
+            elif target_date < today:
+                # Date is in the past
+                return {"date": date, "slots": [], "timezone": "UTC"}
+            
+            # Check for overlap with existing bookings
+            has_conflict = False
+            for booked_start, booked_end in booked_ranges:
+                # Overlap if: slot_start < booked_end AND slot_end > booked_start
+                if slot_time < booked_end and slot_end > booked_start:
+                    has_conflict = True
+                    break
+            
+            if not has_conflict:
+                slots.append(minutes_to_time(slot_time))
+            
+            slot_time += slot_step
+        
+        return {"date": date, "slots": slots, "timezone": "UTC"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to get available slots: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get available slots: {str(e)}"
+        )
+
+
+# ==================== BOOKING VALIDATION ENDPOINT ====================
+
+class BookingCreate(BaseModel):
+    provider_id: int
+    customer_id: int
+    service_ids: List[int] = Field(default_factory=list)
+    booking_date: Optional[str] = None  # YYYY-MM-DD
+    booking_time: Optional[str] = None  # HH:MM
+    service_duration_minutes: Optional[int] = None
+    notes: Optional[str] = None
+    status: str = "pending"
+
+@api_router.post("/bookings", status_code=status.HTTP_201_CREATED)
+async def create_booking(booking: BookingCreate):
+    """Create a new booking with optional slot validation"""
+    try:
+        # If booking_date and booking_time are provided, validate availability
+        if booking.booking_date and booking.booking_time:
+            # Validate time format
+            if not re.match(r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$', booking.booking_time):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="booking_time must be in HH:MM format"
+                )
+            
+            # Get service duration (from request or calculate from services)
+            service_duration = booking.service_duration_minutes
+            if not service_duration and booking.service_ids:
+                # Calculate total duration from selected services
+                services_response = supabase.table("services").select("duration_minutes").in_(
+                    "id", booking.service_ids
+                ).execute()
+                if services_response.data:
+                    service_duration = sum(s.get("duration_minutes", 60) for s in services_response.data)
+            
+            service_duration = service_duration or 60  # Default to 60 minutes
+            
+            # Check if the slot is available
+            slots_response = await get_available_slots(
+                provider_id=booking.provider_id,
+                date=booking.booking_date,
+                service_duration=service_duration
+            )
+            
+            if booking.booking_time not in slots_response.slots:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Selected time is no longer available. Please choose another slot."
+                )
+        
+        # Check if bookings table exists
+        if not check_table_exists("bookings"):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="bookings table does not exist. Please run migrations."
+            )
+        
+        # Build booking data
+        booking_data = {
+            "provider_id": booking.provider_id,
+            "customer_id": booking.customer_id,
+            "status": booking.status,
+            "notes": booking.notes
+        }
+        
+        if booking.booking_date:
+            booking_data["booking_date"] = booking.booking_date
+        if booking.booking_time:
+            booking_data["booking_time"] = booking.booking_time
+        if booking.service_duration_minutes:
+            booking_data["service_duration_minutes"] = booking.service_duration_minutes
+        
+        # Insert booking
+        result = supabase.table("bookings").insert(booking_data).execute()
+        
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create booking"
+            )
+        
+        # Link services to booking if service_ids provided
+        if booking.service_ids and check_table_exists("booking_services"):
+            booking_id = result.data[0]["id"]
+            service_links = [
+                {"booking_id": booking_id, "service_id": sid}
+                for sid in booking.service_ids
+            ]
+            supabase.table("booking_services").insert(service_links).execute()
+        
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Check for unique constraint violation (double booking)
+        if "uniq_bookings_provider_date_time" in str(e) or "duplicate key" in str(e).lower():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Selected time is no longer available. Please choose another slot."
+            )
+        logging.error(f"Failed to create booking: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create booking: {str(e)}"
+        )
+
+
+@api_router.get("/bookings")
+async def get_bookings(
+    provider_id: Optional[int] = None,
+    customer_id: Optional[int] = None,
+    status: Optional[str] = None,
+    date: Optional[str] = None
+):
+    """Get bookings with optional filters"""
+    try:
+        if not check_table_exists("bookings"):
+            return []
+        
+        query = supabase.table("bookings").select("*")
+        
+        if provider_id:
+            query = query.eq("provider_id", provider_id)
+        if customer_id:
+            query = query.eq("customer_id", customer_id)
+        if status:
+            query = query.eq("status", status)
+        if date:
+            query = query.eq("booking_date", date)
+        
+        result = query.order("created_at", desc=True).execute()
+        return result.data or []
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch bookings: {str(e)}"
+        )
+
+
+@api_router.get("/bookings/{booking_id}")
+async def get_booking(booking_id: int):
+    """Get a specific booking by ID"""
+    try:
+        if not check_table_exists("bookings"):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="bookings table does not exist"
+            )
+        
+        result = supabase.table("bookings").select("*").eq("id", booking_id).execute()
+        
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch booking: {str(e)}"
+        )
+
+
+@api_router.put("/bookings/{booking_id}")
+async def update_booking(booking_id: int, status: str):
+    """Update booking status"""
+    try:
+        if status not in ["pending", "confirmed", "cancelled", "completed"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid status. Must be: pending, confirmed, cancelled, or completed"
+            )
+        
+        result = supabase.table("bookings").update({"status": status}).eq("id", booking_id).execute()
+        
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update booking: {str(e)}"
+        )
+
+
 # ==================== ROOT ENDPOINT ====================
 
 @api_router.get("/")
