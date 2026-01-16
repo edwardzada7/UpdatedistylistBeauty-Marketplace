@@ -1630,7 +1630,6 @@ async def set_provider_rules(provider_id: int, request: BookingRules):
         )
 
 
-@api_router.get("/providers/{provider_id}/available-slots", response_model=AvailableSlotsResponse)
 async def _get_available_slots_internal(
     provider_id: int,
     requested_date: str,
