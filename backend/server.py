@@ -1812,6 +1812,22 @@ class BookingCreate(BaseModel):
 async def create_booking(booking: BookingCreate):
     """Create a new booking with optional slot validation"""
     try:
+        # Get the provider's auth_id (UUID)
+        provider_uuid = await get_provider_auth_id(booking.provider_id)
+        if not provider_uuid:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Provider not found"
+            )
+        
+        # Get the customer's auth_id (UUID)
+        customer_uuid = await get_provider_auth_id(booking.customer_id)
+        if not customer_uuid:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Customer not found"
+            )
+        
         # If booking_date and booking_time are provided, validate availability
         if booking.booking_date and booking.booking_time:
             # Validate time format
@@ -1836,11 +1852,11 @@ async def create_booking(booking: BookingCreate):
             # Check if the slot is available
             slots_response = await get_available_slots(
                 provider_id=booking.provider_id,
-                date=booking.booking_date,
+                requested_date=booking.booking_date,
                 service_duration=service_duration
             )
             
-            if booking.booking_time not in slots_response.slots:
+            if booking.booking_time not in slots_response["slots"]:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Selected time is no longer available. Please choose another slot."
@@ -1853,10 +1869,10 @@ async def create_booking(booking: BookingCreate):
                 detail="bookings table does not exist. Please run migrations."
             )
         
-        # Build booking data
+        # Build booking data with UUIDs
         booking_data = {
-            "provider_id": booking.provider_id,
-            "customer_id": booking.customer_id,
+            "provider_id": provider_uuid,
+            "customer_id": customer_uuid,
             "status": booking.status,
             "notes": booking.notes
         }
