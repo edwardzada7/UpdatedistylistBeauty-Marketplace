@@ -1886,7 +1886,7 @@ async def create_booking(booking: BookingCreate):
             )
         
         # Link services to booking if service_ids provided
-        # Note: service_ids from frontend are actually services.id values
+        # Note: service_ids from frontend are services.id values from the 'services' table
         if booking.service_ids and check_table_exists("booking_services"):
             booking_id = result.data[0]["id"]
             
@@ -1904,6 +1904,25 @@ async def create_booking(booking: BookingCreate):
             # Create a lookup map for validation
             service_lookup = {s["id"]: s for s in services_response.data}
             
+            # Check if provider_services table exists and has a FK constraint
+            # If provider_services table exists, try to look up matching provider_service_ids
+            provider_service_lookup = {}
+            if check_table_exists("provider_services"):
+                # Try to find matching entries in provider_services
+                # provider_services may have provider_id (int or uuid) and service_id (varchar or int)
+                try:
+                    ps_response = supabase.table("provider_services").select(
+                        "id, provider_id, service_id"
+                    ).execute()
+                    
+                    # Build lookup by provider_id + service_id combo
+                    for ps in ps_response.data or []:
+                        # Create keys for both string and int service_id matching
+                        key1 = f"{ps.get('provider_id')}:{ps.get('service_id')}"
+                        provider_service_lookup[key1] = ps["id"]
+                except Exception as e:
+                    logging.warning(f"Could not query provider_services: {e}")
+            
             # Validate all selected services exist
             service_links = []
             for sid in booking.service_ids:
@@ -1914,19 +1933,46 @@ async def create_booking(booking: BookingCreate):
                         detail=f"Service with id {sid} not found for this provider"
                     )
                 
-                # Build booking_services row with provider_service_id
-                # provider_service_id is the services.id (which acts as provider's service record)
+                # Build booking_services row
                 service_link = {
                     "booking_id": booking_id,
-                    "provider_service_id": sid,  # This is the services.id (provider's service)
-                    "service_id": sid,  # Also include as service_id for compatibility
+                    "service_id": sid,  # This is the services.id
                     "price": service.get("price"),
                     "duration_minutes": service.get("duration")
                 }
                 
+                # Try to find matching provider_service_id if available
+                # Check multiple key formats for compatibility
+                ps_id = None
+                key_candidates = [
+                    f"{booking.provider_id}:{sid}",  # provider_id:service_id (int:int)
+                    f"{provider_uuid}:{sid}",  # provider_uuid:service_id (uuid:int)
+                    f"{booking.provider_id}:{str(sid)}",  # int:string
+                    f"{provider_uuid}:{str(sid)}",  # uuid:string
+                ]
+                for key in key_candidates:
+                    if key in provider_service_lookup:
+                        ps_id = provider_service_lookup[key]
+                        break
+                
+                if ps_id:
+                    service_link["provider_service_id"] = ps_id
+                
                 service_links.append(service_link)
             
-            supabase.table("booking_services").insert(service_links).execute()
+            try:
+                supabase.table("booking_services").insert(service_links).execute()
+            except Exception as insert_error:
+                error_str = str(insert_error)
+                # If FK constraint fails, try without provider_service_id
+                if "foreign key constraint" in error_str.lower() and "provider_service_id" in error_str.lower():
+                    logging.warning("FK constraint on provider_service_id failed, retrying without it")
+                    # Remove provider_service_id and retry
+                    for link in service_links:
+                        link.pop("provider_service_id", None)
+                    supabase.table("booking_services").insert(service_links).execute()
+                else:
+                    raise
         
         return result.data[0]
     except HTTPException:
