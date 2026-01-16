@@ -173,6 +173,73 @@ class BulkServiceToggleRequest(BaseModel):
     services: List[ServiceToggleRequest]
 
 
+# ==================== AVAILABILITY MODELS (Phase 2.0) ====================
+
+class WeeklyAvailability(BaseModel):
+    day_of_week: int = Field(..., ge=0, le=6, description="0=Sunday, 6=Saturday")
+    is_available: bool = False
+    start_time: Optional[str] = None  # "HH:MM" format
+    end_time: Optional[str] = None    # "HH:MM" format
+    
+    @validator('start_time', 'end_time', pre=True)
+    def validate_time_format(cls, v):
+        if v is None:
+            return v
+        if not re.match(r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$', v):
+            raise ValueError('Time must be in HH:MM format')
+        return v
+
+class WeeklyAvailabilityRequest(BaseModel):
+    weekly: List[WeeklyAvailability]
+
+class AvailabilityException(BaseModel):
+    date: str  # "YYYY-MM-DD" format
+    is_unavailable: bool = True  # If true, whole day off; if false, custom hours
+    start_time: Optional[str] = None  # Override start time
+    end_time: Optional[str] = None    # Override end time
+    note: Optional[str] = None
+    
+    @validator('date', pre=True)
+    def validate_date_format(cls, v):
+        try:
+            datetime.strptime(v, '%Y-%m-%d')
+        except ValueError:
+            raise ValueError('Date must be in YYYY-MM-DD format')
+        return v
+    
+    @validator('start_time', 'end_time', pre=True)
+    def validate_time_format(cls, v):
+        if v is None:
+            return v
+        if not re.match(r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$', v):
+            raise ValueError('Time must be in HH:MM format')
+        return v
+
+class ExceptionsRequest(BaseModel):
+    exceptions: List[AvailabilityException]
+
+class BookingRules(BaseModel):
+    max_sessions_per_day: int = Field(default=6, ge=1, le=20)
+    min_notice_minutes: int = Field(default=0, ge=0)
+    slot_step_minutes: int = Field(default=30)
+    
+    @validator('slot_step_minutes')
+    def validate_slot_step(cls, v):
+        if v not in [10, 15, 20, 30, 60]:
+            raise ValueError('slot_step_minutes must be one of: 10, 15, 20, 30, 60')
+        return v
+
+class AvailabilityResponse(BaseModel):
+    weekly: List[Dict[str, Any]]
+    exceptions: List[Dict[str, Any]]
+    rules: Dict[str, Any]
+
+class AvailableSlotsResponse(BaseModel):
+    date: str
+    slots: List[str]
+    timezone: str = "UTC"
+
+
 # ==================== DATABASE CONNECTION TEST ====================
 
 @api_router.get("/test-connection")
