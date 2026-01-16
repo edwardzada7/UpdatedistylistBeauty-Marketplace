@@ -1675,9 +1675,14 @@ async def get_available_slots(
         
         if weekly_response.data:
             weekly = weekly_response.data[0]
-            is_available = weekly.get("is_available", False)
+            is_available = weekly.get("is_active", False)
             working_start = weekly.get("start_time")
             working_end = weekly.get("end_time")
+            # Handle time format from DB (might be HH:MM:SS)
+            if working_start and len(working_start) > 5:
+                working_start = working_start[:5]
+            if working_end and len(working_end) > 5:
+                working_end = working_end[:5]
         
         if not is_available:
             return {"date": requested_date, "slots": [], "timezone": "UTC"}
