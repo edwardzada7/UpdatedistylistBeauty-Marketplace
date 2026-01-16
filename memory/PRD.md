@@ -165,6 +165,19 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 - **Navigation**: Dashboard "Availability" card links to availability screen
 - **Backend fix**: Updated rules endpoint to use `upsert` for DB compatibility
 
+### Phase 2.2 - Booking Services Fix ✅ (January 16, 2026)
+- **Bug Fixed**: POST /api/bookings now properly inserts into `booking_services` table
+- **Changes**:
+  - Validates selected `service_ids` against the `services` table
+  - Fetches price and duration from provider's services
+  - Inserts `booking_services` rows with: `booking_id`, `service_id`, `price`, `duration_minutes`
+  - Attempts to populate `provider_service_id` if `provider_services` table exists with matching data
+  - Gracefully handles FK constraint failures by retrying without `provider_service_id`
+  - Fixed `time_to_minutes()` to handle HH:MM:SS format
+  - Fixed duplicate route registration for available-slots endpoint
+- **Tests Added**: `/app/backend/tests/test_booking_services.py` (7 tests)
+- **All 29 backend tests passing**
+
 ---
 
 ## Backlog / Future Tasks
