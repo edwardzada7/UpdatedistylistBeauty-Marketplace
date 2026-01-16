@@ -376,7 +376,8 @@ const StylistDashboard = () => {
             {/* Upcoming Bookings */}
             <div 
               className="flex items-center justify-between p-3 bg-green-50 rounded-lg cursor-pointer hover:bg-green-100 transition"
-              onClick={() => toast.info("Bookings feature coming in Phase 2!")}
+              onClick={() => navigate("/provider/bookings")}
+              data-testid="upcoming-bookings-card"
             >
               <div className="flex items-center gap-3">
                 <Clock className="h-5 w-5 text-green-600" />
@@ -396,7 +397,8 @@ const StylistDashboard = () => {
             {/* Pending Confirmations */}
             <div 
               className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg cursor-pointer hover:bg-yellow-100 transition"
-              onClick={() => toast.info("Bookings feature coming in Phase 2!")}
+              onClick={() => navigate("/provider/bookings")}
+              data-testid="pending-bookings-card"
             >
               <div className="flex items-center gap-3">
                 <AlertCircle className="h-5 w-5 text-yellow-600" />
@@ -416,7 +418,8 @@ const StylistDashboard = () => {
             {/* Completed Bookings */}
             <div 
               className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition"
-              onClick={() => toast.info("Bookings feature coming in Phase 2!")}
+              onClick={() => navigate("/provider/bookings")}
+              data-testid="completed-bookings-card"
             >
               <div className="flex items-center gap-3">
                 <CheckCircle2 className="h-5 w-5 text-gray-600" />
