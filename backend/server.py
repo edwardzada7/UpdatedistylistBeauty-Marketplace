@@ -1604,15 +1604,15 @@ async def set_provider_rules(provider_id: int, request: BookingRules):
             "slot_step_minutes": request.slot_step_minutes
         }
         
-        # Check if rules exist for this provider
-        existing = supabase.table("provider_booking_rules").select("id").eq(
+        # Check if rules exist for this provider (select provider_id since table may not have id column)
+        existing = supabase.table("provider_booking_rules").select("provider_id").eq(
             "provider_id", provider_uuid
         ).execute()
         
         if existing.data:
-            # Update existing
-            supabase.table("provider_booking_rules").update(row_data).eq(
-                "provider_id", provider_uuid
+            # Update existing - use upsert to handle update gracefully
+            supabase.table("provider_booking_rules").upsert(
+                row_data, on_conflict="provider_id"
             ).execute()
         else:
             # Insert new
