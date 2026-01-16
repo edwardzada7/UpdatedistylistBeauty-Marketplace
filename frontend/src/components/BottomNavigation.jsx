@@ -12,7 +12,7 @@ const BottomNavigation = () => {
     { path: "/user/home", icon: Home, label: "Home", legacyPaths: ["/home"] },
     { path: "/user/services", icon: Grid3X3, label: "Services", legacyPaths: ["/services"] },
     { path: "/user/providers", icon: Users, label: "Providers", legacyPaths: ["/providers", "/stylists"] },
-    { path: "/user/wallet", icon: Wallet, label: "Wallet", legacyPaths: ["/wallet"] },
+    { path: "/bookings", icon: CalendarClock, label: "Bookings", legacyPaths: [] },
     { path: "/profile", icon: UserIcon, label: "Profile", legacyPaths: [] },
   ];
 
