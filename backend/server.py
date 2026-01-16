@@ -1864,7 +1864,7 @@ async def create_booking(booking: BookingCreate):
         # Build booking data - provider_id as UUID, customer_id as integer
         booking_data = {
             "provider_id": provider_uuid,
-            "customer_id": booking.customer_id,  # Keep as integer
+            "customer_id": booking.customer_id,
             "status": booking.status
         }
         
@@ -1874,7 +1874,6 @@ async def create_booking(booking: BookingCreate):
             booking_data["booking_date"] = booking.booking_date
         if booking.booking_time:
             booking_data["booking_time"] = booking.booking_time
-        # Note: service_duration_minutes might not exist in the table
         
         # Insert booking
         result = supabase.table("bookings").insert(booking_data).execute()
@@ -1898,16 +1897,25 @@ async def create_booking(booking: BookingCreate):
     except HTTPException:
         raise
     except Exception as e:
+        error_str = str(e)
         # Check for unique constraint violation (double booking)
-        if "uniq_bookings_provider_date_time" in str(e) or "duplicate key" in str(e).lower():
+        if "uniq_bookings_provider_date_time" in error_str or "duplicate key" in error_str.lower():
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Selected time is no longer available. Please choose another slot."
             )
-        logging.error(f"Failed to create booking: {str(e)}")
+        # Check for foreign key violation - provide helpful message
+        if "foreign key constraint" in error_str.lower() and "provider_id" in error_str.lower():
+            logging.error(f"Foreign key error in bookings: {error_str}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database schema error: bookings.provider_id foreign key constraint failed. "
+                       "Please ensure the bookings table correctly references the users table."
+            )
+        logging.error(f"Failed to create booking: {error_str}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create booking: {str(e)}"
+            detail=f"Failed to create booking: {error_str}"
         )
 
 
