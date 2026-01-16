@@ -15,11 +15,16 @@ import ProvidersListScreen from "@/screens/ProvidersListScreen";
 import ProviderProfileScreen from "@/screens/ProviderProfileScreen";
 import WalletScreen from "@/screens/WalletScreen";
 import ServicesScreen from "@/screens/ServicesScreen";
+import CustomerBookingsScreen from "@/screens/CustomerBookingsScreen";
 
 // Provider (Stylist) Screens
 import StylistDashboard from "@/screens/StylistDashboard";
 import ProviderServicesScreen from "@/screens/ProviderServicesScreen";
 import ProviderAvailabilityScreen from "@/screens/ProviderAvailabilityScreen";
+import ProviderBookingsScreen from "@/screens/ProviderBookingsScreen";
+
+// Shared Screens
+import BookingDetailsScreen from "@/screens/BookingDetailsScreen";
 
 // Components
 import LoadingSpinner from "@/components/LoadingSpinner";
