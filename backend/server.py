@@ -1582,6 +1582,14 @@ async def set_provider_exceptions(provider_id: int, request: ExceptionsRequest):
 async def set_provider_rules(provider_id: int, request: BookingRules):
     """Set provider's booking rules (upsert)"""
     try:
+        # Get the provider's auth_id (UUID)
+        provider_uuid = await get_provider_auth_id(provider_id)
+        if not provider_uuid:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Provider not found"
+            )
+        
         if not check_table_exists("provider_booking_rules"):
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1589,7 +1597,7 @@ async def set_provider_rules(provider_id: int, request: BookingRules):
             )
         
         row_data = {
-            "provider_id": provider_id,
+            "provider_id": provider_uuid,
             "max_sessions_per_day": request.max_sessions_per_day,
             "min_notice_minutes": request.min_notice_minutes,
             "slot_step_minutes": request.slot_step_minutes
@@ -1597,13 +1605,13 @@ async def set_provider_rules(provider_id: int, request: BookingRules):
         
         # Check if rules exist for this provider
         existing = supabase.table("provider_booking_rules").select("id").eq(
-            "provider_id", provider_id
+            "provider_id", provider_uuid
         ).execute()
         
         if existing.data:
             # Update existing
             supabase.table("provider_booking_rules").update(row_data).eq(
-                "provider_id", provider_id
+                "provider_id", provider_uuid
             ).execute()
         else:
             # Insert new
