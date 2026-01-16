@@ -243,11 +243,14 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 ```
 /app/
 ├── backend/
-│   ├── server.py                 # Main FastAPI app (with availability endpoints)
+│   ├── server.py                 # Main FastAPI app (with booking APIs)
 │   ├── service_catalog.py        # Service definitions
 │   ├── tests/
 │   │   ├── test_availability.py
-│   │   └── test_availability_phase2.py  # Phase 2.1 tests
+│   │   ├── test_availability_phase2.py  # Phase 2.1 tests
+│   │   ├── test_booking_services.py     # Phase 2.2 tests
+│   │   ├── test_bookings_views.py       # Phase 2.3 tests
+│   │   └── test_bookings_phase22.py     # Phase 2.3 extended tests
 │   └── migrations/
 │       └── phase19_privacy_identity.sql
 └── frontend/
@@ -258,6 +261,17 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
         │   ├── ProviderAvailabilityScreen.jsx # Provider schedule management (Phase 2.1)
         │   ├── ProviderServicesScreen.jsx     # Service management
         │   ├── ProvidersListScreen.jsx        # Provider list (no email)
+        │   ├── StylistDashboard.jsx           # Provider dashboard (booking links)
+        │   ├── CustomerBookingsScreen.jsx     # Customer bookings list (Phase 2.3)
+        │   ├── ProviderBookingsScreen.jsx     # Provider bookings list (Phase 2.3)
+        │   └── BookingDetailsScreen.jsx       # Shared booking details (Phase 2.3)
+        ├── services/
+        │   └── api.js                         # API client (with bookingsAPI)
+        ├── components/
+        │   └── BottomNavigation.jsx           # Updated with Bookings tab
+        └── contexts/
+            └── AuthContext.jsx                # Auth state management
+```
         │   └── StylistDashboard.jsx           # Provider dashboard (with Availability card)
         ├── services/
         │   └── api.js                         # API client (with availability methods)
