@@ -1460,6 +1460,14 @@ async def get_provider_availability(provider_id: int):
 async def set_provider_availability(provider_id: int, request: WeeklyAvailabilityRequest):
     """Set provider's weekly availability (upsert)"""
     try:
+        # Get the provider's auth_id (UUID)
+        provider_uuid = await get_provider_auth_id(provider_id)
+        if not provider_uuid:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Provider not found"
+            )
+        
         if not check_table_exists("provider_availability"):
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1481,13 +1489,13 @@ async def set_provider_availability(provider_id: int, request: WeeklyAvailabilit
                     )
         
         # Delete existing availability for this provider
-        supabase.table("provider_availability").delete().eq("provider_id", provider_id).execute()
+        supabase.table("provider_availability").delete().eq("provider_id", provider_uuid).execute()
         
         # Insert new availability rows
         rows_to_insert = []
         for avail in request.weekly:
             rows_to_insert.append({
-                "provider_id": provider_id,
+                "provider_id": provider_uuid,
                 "day_of_week": avail.day_of_week,
                 "is_available": avail.is_available,
                 "start_time": avail.start_time,
