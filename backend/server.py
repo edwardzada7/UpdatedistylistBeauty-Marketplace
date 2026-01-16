@@ -1635,6 +1635,14 @@ async def get_available_slots(
 ):
     """Get available booking slots for a provider on a specific date"""
     try:
+        # Get the provider's auth_id (UUID)
+        provider_uuid = await get_provider_auth_id(provider_id)
+        if not provider_uuid:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Provider not found"
+            )
+        
         # Validate date format
         try:
             target_date = datetime.strptime(requested_date, '%Y-%m-%d').date()
@@ -1659,9 +1667,9 @@ async def get_available_slots(
             # No availability table - return empty (or could return all day available)
             return {"date": requested_date, "slots": [], "timezone": "UTC"}
         
-        # Get weekly availability for this day
+        # Get weekly availability for this day using UUID
         weekly_response = supabase.table("provider_availability").select("*").eq(
-            "provider_id", provider_id
+            "provider_id", provider_uuid
         ).eq("day_of_week", day_of_week).execute()
         
         if weekly_response.data:
@@ -1676,7 +1684,7 @@ async def get_available_slots(
         # Check for exception on this date
         if check_table_exists("provider_availability_exceptions"):
             exc_response = supabase.table("provider_availability_exceptions").select("*").eq(
-                "provider_id", provider_id
+                "provider_id", provider_uuid
             ).eq("date", requested_date).execute()
             
             if exc_response.data:
