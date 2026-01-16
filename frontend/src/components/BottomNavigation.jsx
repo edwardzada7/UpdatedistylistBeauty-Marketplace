@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Home, Grid3X3, Users, Wallet, User as UserIcon, LayoutDashboard, Settings } from "lucide-react";
+import { Home, Grid3X3, Users, Wallet, User as UserIcon, LayoutDashboard, Settings, CalendarClock } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const BottomNavigation = () => {
