@@ -243,7 +243,7 @@ const HomeScreen = () => {
                     </div>
                     <p className="text-2xl font-bold text-purple-600">
                       {CURRENCY}{provider.hourly_rate?.toLocaleString() || "0"}
-                      <span className="text-sm text-gray-600">/hr</span>
+                      <span className="text-sm text-gray-600">/session</span>
                     </p>
                     {provider.location && (
                       <p className="text-xs text-gray-500 mt-2">
