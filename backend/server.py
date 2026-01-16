@@ -1364,8 +1364,10 @@ def validate_time_range(start_time: str, end_time: str) -> bool:
     return start < end
 
 def time_to_minutes(time_str: str) -> int:
-    """Convert HH:MM to minutes since midnight"""
-    h, m = map(int, time_str.split(':'))
+    """Convert HH:MM or HH:MM:SS to minutes since midnight"""
+    parts = time_str.split(':')
+    h = int(parts[0])
+    m = int(parts[1]) if len(parts) > 1 else 0
     return h * 60 + m
 
 def minutes_to_time(minutes: int) -> str:
