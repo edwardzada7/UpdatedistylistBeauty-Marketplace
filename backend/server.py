@@ -1474,13 +1474,13 @@ async def set_provider_availability(provider_id: int, request: WeeklyAvailabilit
                 detail="provider_availability table does not exist. Please run migrations."
             )
         
-        # Validate time ranges for available days
+        # Validate time ranges for active days
         for avail in request.weekly:
-            if avail.is_available:
+            if avail.is_active:
                 if not avail.start_time or not avail.end_time:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Day {avail.day_of_week}: start_time and end_time required when is_available=true"
+                        detail=f"Day {avail.day_of_week}: start_time and end_time required when is_active=true"
                     )
                 if not validate_time_range(avail.start_time, avail.end_time):
                     raise HTTPException(
@@ -1491,16 +1491,17 @@ async def set_provider_availability(provider_id: int, request: WeeklyAvailabilit
         # Delete existing availability for this provider
         supabase.table("provider_availability").delete().eq("provider_id", provider_uuid).execute()
         
-        # Insert new availability rows
+        # Insert new availability rows (only for active days with times)
         rows_to_insert = []
         for avail in request.weekly:
-            rows_to_insert.append({
-                "provider_id": provider_uuid,
-                "day_of_week": avail.day_of_week,
-                "is_available": avail.is_available,
-                "start_time": avail.start_time,
-                "end_time": avail.end_time
-            })
+            if avail.is_active and avail.start_time and avail.end_time:
+                rows_to_insert.append({
+                    "provider_id": provider_uuid,
+                    "day_of_week": avail.day_of_week,
+                    "start_time": avail.start_time,
+                    "end_time": avail.end_time,
+                    "is_active": True
+                })
         
         if rows_to_insert:
             supabase.table("provider_availability").insert(rows_to_insert).execute()
