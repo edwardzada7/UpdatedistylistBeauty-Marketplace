@@ -1385,6 +1385,16 @@ def check_table_exists(table_name: str) -> bool:
         # Table exists but might have other issues
         return True
 
+async def get_provider_auth_id(user_id: int) -> Optional[str]:
+    """Get the auth_id (UUID) for a provider from their user_id (integer)"""
+    try:
+        response = supabase.table("users").select("auth_id").eq("id", user_id).execute()
+        if response.data:
+            return response.data[0].get("auth_id")
+        return None
+    except Exception:
+        return None
+
 
 @api_router.get("/providers/{provider_id}/availability", response_model=AvailabilityResponse)
 async def get_provider_availability(provider_id: int):
