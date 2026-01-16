@@ -206,16 +206,24 @@ const ProviderProfileScreen = () => {
                   </div>
                 )}
 
-                {/* Gender - only shown if not null */}
-                {provider.gender && provider.gender !== "prefer_not_to_say" && (
-                  <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg" data-testid="provider-gender">
-                    <User className="h-5 w-5 text-gray-600 mt-0.5" />
-                    <div>
-                      <p className="text-sm text-gray-600">Gender</p>
-                      <p className="font-medium capitalize">{provider.gender}</p>
+                {/* Gender - safe resolver for multiple possible keys */}
+                {(() => {
+                  const providerGender = 
+                    provider?.gender || 
+                    provider?.profile?.gender || 
+                    provider?.provider_gender || 
+                    provider?.gender_identity || 
+                    "";
+                  return providerGender && providerGender !== "prefer_not_to_say" ? (
+                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg" data-testid="provider-gender">
+                      <User className="h-5 w-5 text-gray-600 mt-0.5" />
+                      <div>
+                        <p className="text-sm text-gray-600">Gender</p>
+                        <p className="font-medium capitalize">{providerGender}</p>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  ) : null;
+                })()}
 
                 {provider.bio && (
                   <div className="p-3 bg-gray-50 rounded-lg">
