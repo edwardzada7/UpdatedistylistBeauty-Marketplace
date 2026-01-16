@@ -1723,12 +1723,11 @@ async def get_available_slots(
                 max_sessions = rules.get("max_sessions_per_day", 6)
         
         # Get existing bookings for this provider and date
-        # Note: bookings table might use integer provider_id, so try both
         existing_bookings = []
         if check_table_exists("bookings"):
-            # Try with integer provider_id first (existing bookings table)
+            # Bookings table uses UUID for provider_id
             bookings_response = supabase.table("bookings").select("*").eq(
-                "provider_id", provider_id
+                "provider_id", provider_uuid
             ).eq("booking_date", requested_date).in_(
                 "status", ["pending", "confirmed"]
             ).execute()
