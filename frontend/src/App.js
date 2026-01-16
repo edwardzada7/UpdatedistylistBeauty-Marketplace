@@ -172,6 +172,14 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/provider/availability"
+        element={
+          <ProtectedRoute>
+            <ProviderAvailabilityScreen />
+          </ProtectedRoute>
+        }
+      />
 
       {/* ============================================= */}
       {/* SHARED ROUTES - Accessible by both roles */}
