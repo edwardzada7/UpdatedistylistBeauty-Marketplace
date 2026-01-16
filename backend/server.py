@@ -1850,8 +1850,8 @@ async def create_booking(booking: BookingCreate):
 async def get_bookings(
     provider_id: Optional[int] = None,
     customer_id: Optional[int] = None,
-    status: Optional[str] = None,
-    date: Optional[str] = None
+    booking_status: Optional[str] = Query(None, alias="status"),
+    booking_date: Optional[str] = Query(None, alias="date")
 ):
     """Get bookings with optional filters"""
     try:
@@ -1864,10 +1864,10 @@ async def get_bookings(
             query = query.eq("provider_id", provider_id)
         if customer_id:
             query = query.eq("customer_id", customer_id)
-        if status:
-            query = query.eq("status", status)
-        if date:
-            query = query.eq("booking_date", date)
+        if booking_status:
+            query = query.eq("status", booking_status)
+        if booking_date:
+            query = query.eq("booking_date", booking_date)
         
         result = query.order("created_at", desc=True).execute()
         return result.data or []
