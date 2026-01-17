@@ -50,6 +50,7 @@ const BottomNavigation = () => {
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
+              data-testid={`nav-${item.label.toLowerCase()}`}
               className={`flex flex-col items-center justify-center gap-1 py-2 px-3 rounded-lg transition-colors ${
                 active
                   ? "text-purple-600"
