@@ -572,7 +572,19 @@ const ProfileScreen = () => {
 
           {/* Logout Button at Bottom */}
           <Card className="bg-red-50 border-red-200">
-            <CardContent className="p-4">
+            <CardContent className="p-4 space-y-3">
+              {/* My Bookings - Desktop only for customers (BottomNav hidden on desktop) */}
+              {!isProvider && (
+                <Button
+                  onClick={() => navigate("/bookings")}
+                  variant="outline"
+                  className="w-full hidden md:flex items-center justify-center"
+                  data-testid="my-bookings-btn"
+                >
+                  <CalendarClock className="h-4 w-4 mr-2" />
+                  My Bookings
+                </Button>
+              )}
               <Button
                 onClick={handleSignOut}
                 variant="outline"
