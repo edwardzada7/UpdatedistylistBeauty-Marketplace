@@ -1,0 +1,78 @@
+{
+  "summary": "Booking Visibility Fix Testing Complete - All 13 backend tests passed. Customer bookings correctly filtered by customer_auth_id (UUID), Provider bookings correctly filtered by provider_id (UUID), Provider metrics endpoint returns accurate booking counts.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_booking_visibility_fix.py",
+    "/app/test_reports/pytest/booking_visibility_fix_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GET /api/bookings?role=customer&auth_id=UUID correctly filters by customer_auth_id field",
+    "GET /api/bookings?role=provider&auth_id=UUID correctly filters by provider_id field",
+    "GET /api/providers/metrics?auth_id=UUID returns accurate booking counts by status",
+    "POST /api/bookings correctly sets customer_auth_id from request or falls back to lookup from customer_id",
+    "Backfill migration endpoint exists and works for existing bookings",
+    "StylistDashboard.jsx correctly calls bookingsAPI.getProviderMetrics(authId) for real metrics",
+    "CustomerBookingsScreen.jsx correctly calls bookingsAPI.list with role=customer and authId",
+    "ProviderProfileScreen.jsx correctly passes customer_auth_id in booking creation payload"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_booking_visibility_fix.py"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 tests passed)",
+    "frontend": "Not tested - backend-only testing requested"
+  },
+  "seed_data_creation": "Used existing test customer (user 21, auth_id 7d7c188d-ab15-4dc3-8b98-f985f5e02d16) and test provider (user 13, auth_id 15fcb394-64cb-41d7-bdb4-90678e4f4fcc)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Booking visibility fix verified. Customer has 10 bookings visible via auth_id filter. Provider has 5 bookings visible via auth_id filter. Provider metrics show: pending=2, confirmed=0, completed=1, canceled=2, total=5. All booking creation correctly sets customer_auth_id.",
+  "api_verification_results": {
+    "GET /api/bookings?role=customer&auth_id=UUID": {
+      "status": "PASS",
+      "returns": "10 bookings for test customer (user 21)",
+      "filter_field": "customer_auth_id"
+    },
+    "GET /api/bookings?role=provider&auth_id=UUID": {
+      "status": "PASS",
+      "returns": "5 bookings for test provider (user 13)",
+      "filter_field": "provider_id"
+    },
+    "GET /api/providers/metrics?auth_id=UUID": {
+      "status": "PASS",
+      "returns": "{pending_count: 2, confirmed_count: 0, completed_count: 1, canceled_count: 2, total_count: 5}",
+      "matches_bookings_list": true
+    },
+    "POST /api/bookings with customer_auth_id": {
+      "status": "PASS",
+      "behavior": "Sets customer_auth_id from request payload"
+    },
+    "POST /api/bookings without customer_auth_id": {
+      "status": "PASS",
+      "behavior": "Falls back to lookup customer_auth_id from customer_id"
+    },
+    "POST /api/migrate/backfill-customer-auth-ids": {
+      "status": "PASS",
+      "behavior": "Backfills customer_auth_id for existing bookings"
+    }
+  },
+  "fix_verification": {
+    "root_cause": "Filtering by wrong ID fields (bigint IDs instead of auth UUIDs)",
+    "fix_applied": [
+      "Added customer_auth_id to booking creation",
+      "Fixed GET /api/bookings to filter by customer_auth_id for customers",
+      "Added GET /api/providers/metrics endpoint",
+      "Updated dashboard to fetch real metrics",
+      "Backfilled existing bookings with customer_auth_id"
+    ],
+    "verification_status": "All fixes verified working correctly"
+  }
+}
