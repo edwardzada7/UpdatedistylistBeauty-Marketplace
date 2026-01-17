@@ -463,6 +463,7 @@ export default function ProviderServicesScreen() {
         </div>
       )}
       
+      <BottomNavSpacer />
       <BottomNavigation />
     </div>
   );
