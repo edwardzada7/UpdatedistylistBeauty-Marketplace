@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { bookingsAPI } from "@/services/api";
+import { bookingsAPI, paymentsAPI } from "@/services/api";
 import { CURRENCY } from "@/utils/constants";
 import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -23,10 +23,13 @@ import {
   Store,
   Home,
   Car,
-  RefreshCcw
+  RefreshCcw,
+  CreditCard,
+  Wallet
 } from "lucide-react";
 
 const STATUS_CONFIG = {
+  pending_payment: { label: "Awaiting Payment", className: "bg-orange-100 text-orange-700 border-orange-200", icon: CreditCard },
   pending: { label: "Pending", className: "bg-yellow-100 text-yellow-700 border-yellow-200", icon: Clock },
   confirmed: { label: "Confirmed", className: "bg-blue-100 text-blue-700 border-blue-200", icon: CheckCircle },
   completed: { label: "Completed", className: "bg-green-100 text-green-700 border-green-200", icon: CheckCircle },
