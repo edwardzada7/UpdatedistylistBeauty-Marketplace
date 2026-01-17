@@ -238,6 +238,12 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 - **Tests Added**: `/app/backend/tests/test_booking_visibility_fix.py` (13 tests)
 - **Backend Tests**: 100% pass rate (13/13)
 
+- **UI Accessibility Fix** (January 17, 2026):
+  - Removed `sm:hidden` from BottomNavigation to show on all screen sizes
+  - Added `data-testid` attributes to navigation buttons for testability
+  - Verified CustomerBookingsScreen route `/bookings` is reachable
+  - Verified Bookings tab appears in bottom navigation for customers
+
 ---
 
 ## Backlog / Future Tasks
