@@ -5,9 +5,9 @@ import { useAuth } from "@/contexts/AuthContext";
 // Navigation height constant (h-16 = 64px, plus safe area)
 export const NAV_HEIGHT = 64;
 
-// Spacer component to prevent content from being hidden behind fixed bottom nav
+// Spacer component to prevent content from being hidden behind fixed bottom nav (mobile only)
 export const BottomNavSpacer = () => {
-  return <div className="h-20" aria-hidden="true" />;
+  return <div className="h-20 md:h-0" aria-hidden="true" />;
 };
 
 const BottomNavigation = () => {
