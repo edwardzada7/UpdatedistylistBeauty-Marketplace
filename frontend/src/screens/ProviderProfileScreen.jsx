@@ -629,7 +629,7 @@ const ProviderProfileScreen = () => {
 
       {/* Fixed Booking Bar */}
       {provider.services?.length > 0 && (
-        <div className="fixed bottom-20 left-0 right-0 bg-white border-t shadow-lg p-4 z-40">
+        <div className="fixed bottom-20 md:bottom-4 left-0 right-0 bg-white border-t shadow-lg p-4 z-40">
           <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
             <div>
               {selectedServicesList.length > 0 ? (
