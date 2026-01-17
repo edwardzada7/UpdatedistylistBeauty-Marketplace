@@ -529,6 +529,7 @@ const StylistDashboard = () => {
         </Card>
       </div>
 
+      <BottomNavSpacer />
       <BottomNavigation />
     </div>
   );
