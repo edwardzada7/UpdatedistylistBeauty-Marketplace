@@ -2027,6 +2027,46 @@ async def create_booking(booking: BookingCreate):
         )
 
 
+# ==================== PROVIDER METRICS ENDPOINT ====================
+
+@api_router.get("/providers/metrics")
+async def get_provider_metrics(auth_id: str = Query(..., description="Provider's auth_id (UUID)")):
+    """Get booking metrics for a provider dashboard"""
+    try:
+        if not check_table_exists("bookings"):
+            return {
+                "pending_count": 0,
+                "confirmed_count": 0,
+                "completed_count": 0,
+                "canceled_count": 0,
+                "total_count": 0
+            }
+        
+        # Get all bookings for this provider
+        result = supabase.table("bookings").select("status").eq("provider_id", auth_id).execute()
+        bookings = result.data or []
+        
+        # Count by status
+        pending_count = sum(1 for b in bookings if b.get("status") == "pending")
+        confirmed_count = sum(1 for b in bookings if b.get("status") == "confirmed")
+        completed_count = sum(1 for b in bookings if b.get("status") == "completed")
+        canceled_count = sum(1 for b in bookings if b.get("status") in ["canceled", "declined"])
+        
+        return {
+            "pending_count": pending_count,
+            "confirmed_count": confirmed_count,
+            "completed_count": completed_count,
+            "canceled_count": canceled_count,
+            "total_count": len(bookings)
+        }
+    except Exception as e:
+        logging.error(f"Failed to fetch provider metrics: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch metrics: {str(e)}"
+        )
+
+
 @api_router.get("/bookings")
 async def get_bookings(
     role: Optional[str] = Query(None, description="Filter role: customer or provider"),
