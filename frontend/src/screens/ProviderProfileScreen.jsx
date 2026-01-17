@@ -329,7 +329,7 @@ const ProviderProfileScreen = () => {
         </div>
 
         {/* Fixed Booking Bar */}
-        <div className="fixed bottom-16 sm:bottom-0 left-0 right-0 bg-white border-t shadow-lg p-4 z-40">
+        <div className="fixed bottom-20 left-0 right-0 bg-white border-t shadow-lg p-4 z-40">
           <div className="max-w-lg mx-auto flex items-center justify-between gap-4">
             <div>
               <p className="text-sm text-gray-600">
