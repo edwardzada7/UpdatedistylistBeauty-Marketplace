@@ -2896,6 +2896,21 @@ async def update_booking(
                 detail="Booking not found"
             )
         
+        # Handle escrow release/refund based on status change
+        if new_status == "completed" and current_status in ["pending", "confirmed"]:
+            # Release escrow to provider
+            provider_id = booking.get("provider_id")
+            customer_auth_id = booking.get("customer_auth_id")
+            if provider_id and customer_auth_id:
+                await _release_escrow_to_provider(booking_id, provider_id, customer_auth_id)
+        
+        elif new_status == "canceled" and current_status in ["pending", "confirmed", "pending_payment"]:
+            # Refund escrow to customer (only if payment was made)
+            customer_auth_id = booking.get("customer_auth_id")
+            payment_status = booking.get("payment_status")
+            if customer_auth_id and payment_status == "paid":
+                await _refund_escrow_to_customer(booking_id, customer_auth_id)
+        
         # Return enriched booking
         enriched = await _enrich_booking(result.data[0], role)
         return enriched
