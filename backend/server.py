@@ -2045,25 +2045,23 @@ async def get_bookings(
         
         query = supabase.table("bookings").select("*")
         
-        # Role-based filtering using auth_id
+        # Role-based filtering using auth_id (UUID)
         if role and auth_id:
             if role == "provider":
                 # For provider role, match provider_id (UUID) directly
                 query = query.eq("provider_id", auth_id)
             elif role == "customer":
-                # For customer role, need to get user id from auth_id
-                user_response = supabase.table("users").select("id").eq("auth_id", auth_id).execute()
-                if user_response.data:
-                    query = query.eq("customer_id", user_response.data[0]["id"])
-                else:
-                    return []  # User not found
+                # For customer role, match customer_auth_id (UUID) directly
+                # This avoids the integer ID lookup and works with UUID auth
+                query = query.eq("customer_auth_id", auth_id)
         
-        # Legacy filters
+        # Legacy filters (for backward compatibility)
         if provider_id:
             provider_uuid = await get_provider_auth_id(provider_id)
             if provider_uuid:
                 query = query.eq("provider_id", provider_uuid)
         if customer_id:
+            # Legacy: look up by integer customer_id
             query = query.eq("customer_id", customer_id)
         if booking_status:
             query = query.eq("status", booking_status)
