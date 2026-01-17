@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { 
   ArrowLeft, Wallet, Plus, ArrowUpRight, ArrowDownLeft, 
-  Clock, CheckCircle, AlertCircle, Loader2, RefreshCcw,
+  Clock, CheckCircle, Loader2, RefreshCcw,
   Lock, TrendingUp, CreditCard
 } from "lucide-react";
 import { toast } from "sonner";
@@ -34,37 +34,7 @@ export default function WalletScreen() {
   const [processingPayment, setProcessingPayment] = useState(false);
   const [verifyingPayment, setVerifyingPayment] = useState(false);
 
-  // Check for payment callback
-  useEffect(() => {
-    const reference = searchParams.get("reference");
-    const trxref = searchParams.get("trxref");
-    
-    if (reference || trxref) {
-      verifyPayment(reference || trxref);
-    }
-  }, [searchParams, verifyPayment]);
-
-  const verifyPayment = useCallback(async (reference) => {
-    setVerifyingPayment(true);
-    try {
-      const response = await paymentsAPI.verify(reference);
-      if (response.data.status === "success") {
-        toast.success(`Payment successful! ${CURRENCY}${response.data.amount?.toLocaleString()} added to your wallet.`);
-        // Refresh wallet data
-        await fetchWalletData();
-      } else {
-        toast.error(`Payment ${response.data.status}: ${response.data.message}`);
-      }
-      // Clear URL params
-      navigate("/wallet", { replace: true });
-    } catch (error) {
-      console.error("Payment verification failed:", error);
-      toast.error("Failed to verify payment. Please contact support if funds were deducted.");
-    } finally {
-      setVerifyingPayment(false);
-    }
-  }, [navigate, fetchWalletData]);
-
+  // Fetch wallet data function
   const fetchWalletData = useCallback(async () => {
     if (!user?.id) return;
     
@@ -91,6 +61,36 @@ export default function WalletScreen() {
     }
   }, [user?.id]);
 
+  // Check for payment callback on mount
+  useEffect(() => {
+    const reference = searchParams.get("reference");
+    const trxref = searchParams.get("trxref");
+    
+    const verifyPayment = async (ref) => {
+      setVerifyingPayment(true);
+      try {
+        const response = await paymentsAPI.verify(ref);
+        if (response.data.status === "success") {
+          toast.success(`Payment successful! ${CURRENCY}${response.data.amount?.toLocaleString()} added to your wallet.`);
+        } else {
+          toast.error(`Payment ${response.data.status}: ${response.data.message}`);
+        }
+        // Clear URL params and refresh
+        navigate("/wallet", { replace: true });
+      } catch (error) {
+        console.error("Payment verification failed:", error);
+        toast.error("Failed to verify payment. Please contact support if funds were deducted.");
+      } finally {
+        setVerifyingPayment(false);
+      }
+    };
+    
+    if (reference || trxref) {
+      verifyPayment(reference || trxref);
+    }
+  }, [searchParams, navigate]);
+
+  // Fetch wallet data on user change
   useEffect(() => {
     if (user) {
       fetchWalletData();
