@@ -244,23 +244,56 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
   - Verified CustomerBookingsScreen route `/bookings` is reachable
   - Verified Bookings tab appears in bottom navigation for customers
 
+- **Phase 2.2 - Paystack Payment Integration** (January 17, 2026):
+  - ✅ Backend: `POST /api/payments/paystack/initialize` - Initialize payment for wallet top-up or booking escrow
+  - ✅ Backend: `GET /api/payments/paystack/verify` - Verify transaction & update wallet balances (idempotent)
+  - ✅ Backend: `POST /api/webhooks/paystack` - Handle `charge.success` events with signature verification
+  - ✅ Backend: `GET /api/wallet/me` - Get wallet balances (available_balance, escrow_balance)
+  - ✅ Backend: `GET /api/wallet/transactions` - Get transaction history
+  - ✅ Backend: Escrow release on booking `completed`, refund on `canceled`
+  - ✅ Backend: Added `pending_payment` status to valid booking statuses
+  - ✅ Frontend: WalletScreen with real balances, top-up flow, transactions
+  - ✅ Frontend: CustomerBookingsScreen shows `pending_payment` status with Pay Now button
+  - ✅ Frontend: BookingDetailsScreen shows Pay Now button for pending_payment bookings
+  - ✅ Frontend: ProviderProfileScreen creates booking with `pending_payment` status and initiates payment
+  - ⚠️ **REQUIRES**: Run SQL migration `/app/backend/migrations/phase22_paystack_integration.sql`
+  - ⚠️ **REQUIRES**: Configure real Paystack TEST keys in `.env` files
+
 ---
 
 ## Backlog / Future Tasks
 
 ### P0 (High Priority)
-- [ ] **FIX: Bookings FK Constraint** - `bookings.provider_id` (UUID) references `users.id` (INT) incorrectly. Fix in Supabase to reference `users.auth_id`
-- [ ] Run Phase 1.9 database migration
+- [x] ~~Payment gateway integration (Paystack)~~ - **DONE** (Phase 2.2)
+- [ ] **REQUIRED**: Run Phase 2.2 database migration for wallet_transactions table
+- [ ] **REQUIRED**: Configure real Paystack TEST keys:
+  - Backend: `PAYSTACK_SECRET_KEY` in `/app/backend/.env`
+  - Frontend: `REACT_APP_PAYSTACK_PUBLIC_KEY` in `/app/frontend/.env`
 
 ### P1 (Medium Priority)
-- [ ] Real-time chat/messaging
-- [ ] Payment gateway integration (Stripe)
+- [ ] Full Wallet/Earnings section UI on Stylist Dashboard
+- [ ] Notifications for booking status changes
 - [ ] Reviews & ratings system
 
 ### P2 (Low Priority)
+- [ ] Real-time chat/messaging
 - [ ] Push notifications
 - [ ] Calendar integration
 - [ ] Advanced analytics dashboard
+
+---
+
+## Database Migrations Required
+
+### Phase 2.2 - Paystack Integration (PENDING)
+Run `/app/backend/migrations/phase22_paystack_integration.sql` in Supabase SQL Editor.
+
+This creates/updates:
+- `wallet_transactions` table with `user_auth_id` column
+- `payments` table for tracking payment records
+- `webhook_logs` table for audit trail
+- Adds `escrow_balance` to `wallets` table
+- Adds `payment_reference`, `payment_status` to `bookings` table
 
 ---
 
@@ -269,38 +302,35 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 ```
 /app/
 ├── backend/
-│   ├── server.py                 # Main FastAPI app (with booking APIs)
+│   ├── server.py                 # Main FastAPI app (with Paystack payment APIs)
 │   ├── service_catalog.py        # Service definitions
 │   ├── tests/
 │   │   ├── test_availability.py
 │   │   ├── test_availability_phase2.py  # Phase 2.1 tests
 │   │   ├── test_booking_services.py     # Phase 2.2 tests
 │   │   ├── test_bookings_views.py       # Phase 2.3 tests
-│   │   └── test_bookings_phase22.py     # Phase 2.3 extended tests
+│   │   ├── test_bookings_phase22.py     # Phase 2.3 extended tests
+│   │   └── test_paystack_payments.py    # Phase 2.2 Paystack tests (23 tests)
 │   └── migrations/
-│       └── phase19_privacy_identity.sql
+│       ├── phase19_privacy_identity.sql
+│       └── phase22_paystack_integration.sql  # NEW
 └── frontend/
     └── src/
         ├── screens/
-        │   ├── ProfileScreen.jsx              # User profile (with Phase 1.9 fields)
-        │   ├── ProviderProfileScreen.jsx      # Public provider + date/time slot selection
-        │   ├── ProviderAvailabilityScreen.jsx # Provider schedule management (Phase 2.1)
+        │   ├── ProfileScreen.jsx              # User profile
+        │   ├── ProviderProfileScreen.jsx      # Public provider + booking with payment
+        │   ├── ProviderAvailabilityScreen.jsx # Provider schedule management
         │   ├── ProviderServicesScreen.jsx     # Service management
-        │   ├── ProvidersListScreen.jsx        # Provider list (no email)
-        │   ├── StylistDashboard.jsx           # Provider dashboard (booking links)
-        │   ├── CustomerBookingsScreen.jsx     # Customer bookings list (Phase 2.3)
-        │   ├── ProviderBookingsScreen.jsx     # Provider bookings list (Phase 2.3)
-        │   └── BookingDetailsScreen.jsx       # Shared booking details (Phase 2.3)
+        │   ├── ProvidersListScreen.jsx        # Provider list
+        │   ├── StylistDashboard.jsx           # Provider dashboard
+        │   ├── CustomerBookingsScreen.jsx     # Customer bookings with Pay Now
+        │   ├── ProviderBookingsScreen.jsx     # Provider bookings list
+        │   ├── BookingDetailsScreen.jsx       # Booking details with Pay Now
+        │   └── WalletScreen.jsx               # Wallet with top-up flow (Phase 2.2)
         ├── services/
-        │   └── api.js                         # API client (with bookingsAPI)
+        │   └── api.js                         # API client (with paymentsAPI, walletsAPI)
         ├── components/
         │   └── BottomNavigation.jsx           # Updated with Bookings tab
-        └── contexts/
-            └── AuthContext.jsx                # Auth state management
-```
-        │   └── StylistDashboard.jsx           # Provider dashboard (with Availability card)
-        ├── services/
-        │   └── api.js                         # API client (with availability methods)
         └── contexts/
             └── AuthContext.jsx                # Auth state management
 ```
@@ -309,5 +339,6 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 
 ## Last Updated
 - **Date**: January 17, 2026
-- **Phase**: 2.4 - Booking Visibility Fix (Complete)
-- **Status**: Complete - Backend 100% (12/12), Frontend code verified, Customer bookings accessible via bottom nav
+- **Phase**: 2.2 - Paystack Payment Integration (Complete)
+- **Status**: Backend 100% (23/23 tests passed), Frontend code verified
+- **Next Steps**: Run DB migration, configure Paystack keys
