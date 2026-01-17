@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,9 +7,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Star, CheckCircle2, MapPin, Calendar, Clock, Store, Home, Car, ShoppingCart, User, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, Star, CheckCircle2, MapPin, Calendar, Clock, Store, Home, Car, ShoppingCart, User, Loader2, ChevronLeft, ChevronRight, CreditCard } from "lucide-react";
 import { toast } from "sonner";
-import { providersAPI, bookingsAPI } from "@/services/api";
+import { providersAPI, bookingsAPI, paymentsAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { CURRENCY } from "@/utils/constants";
 import LoadingSpinner from "@/components/LoadingSpinner";
