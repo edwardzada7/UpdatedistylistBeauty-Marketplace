@@ -842,6 +842,413 @@ async def delete_wallet(wallet_id: int):
         )
 
 
+# ==================== PAYSTACK PAYMENT ENDPOINTS (Phase 2.2) ====================
+
+def get_paystack_headers():
+    """Get Paystack API headers with secret key"""
+    secret_key = os.environ.get('PAYSTACK_SECRET_KEY')
+    if not secret_key:
+        return None
+    return {
+        "Authorization": f"Bearer {secret_key}",
+        "Content-Type": "application/json",
+    }
+
+
+@api_router.post("/payments/paystack/initialize")
+async def initialize_paystack_payment(request: PaymentInitRequest):
+    """Initialize a Paystack transaction for wallet top-up or booking escrow"""
+    try:
+        headers = get_paystack_headers()
+        if not headers:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Payment gateway not configured. PAYSTACK_SECRET_KEY is missing."
+            )
+        
+        # Validate amount
+        if request.amount <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Amount must be greater than 0"
+            )
+        
+        # Validate purpose
+        if request.purpose not in ["wallet_topup", "booking_escrow"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Purpose must be 'wallet_topup' or 'booking_escrow'"
+            )
+        
+        # For booking_escrow, validate booking_id
+        if request.purpose == "booking_escrow" and not request.booking_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="booking_id is required for booking_escrow payments"
+            )
+        
+        # Generate unique reference
+        reference = f"istylist_{request.purpose}_{uuid.uuid4().hex[:12]}"
+        
+        # Convert amount to kobo (Paystack uses smallest currency unit)
+        amount_kobo = int(request.amount * 100)
+        
+        # Prepare Paystack payload
+        callback_url = os.environ.get('PAYSTACK_CALLBACK_URL', '')
+        payload = {
+            "email": request.email,
+            "amount": amount_kobo,
+            "reference": reference,
+            "metadata": {
+                "purpose": request.purpose,
+                "booking_id": request.booking_id,
+                "custom_fields": [
+                    {"display_name": "Purpose", "variable_name": "purpose", "value": request.purpose}
+                ]
+            }
+        }
+        if callback_url:
+            payload["callback_url"] = callback_url
+        
+        # Call Paystack API
+        response = requests.post(
+            "https://api.paystack.co/transaction/initialize",
+            json=payload,
+            headers=headers,
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            logging.error(f"Paystack initialize failed: {response.text}")
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to initialize payment with Paystack"
+            )
+        
+        paystack_data = response.json()
+        
+        if not paystack_data.get("status"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=paystack_data.get("message", "Paystack initialization failed")
+            )
+        
+        # Save payment record
+        payment_record = {
+            "reference": reference,
+            "email": request.email,
+            "amount": request.amount,
+            "purpose": request.purpose,
+            "booking_id": request.booking_id,
+            "status": "pending",
+            "paystack_access_code": paystack_data["data"].get("access_code"),
+            "created_at": datetime.utcnow().isoformat()
+        }
+        
+        if check_table_exists("payments"):
+            supabase.table("payments").insert(payment_record).execute()
+        
+        return {
+            "status": True,
+            "message": "Authorization URL created",
+            "authorization_url": paystack_data["data"]["authorization_url"],
+            "access_code": paystack_data["data"]["access_code"],
+            "reference": reference
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Payment initialization error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to initialize payment: {str(e)}"
+        )
+
+
+@api_router.get("/payments/paystack/verify")
+async def verify_paystack_payment(reference: str = Query(..., description="Payment reference")):
+    """Verify a Paystack transaction and process wallet/escrow credit"""
+    try:
+        headers = get_paystack_headers()
+        if not headers:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Payment gateway not configured"
+            )
+        
+        # Check if already processed (idempotent)
+        if check_table_exists("payments"):
+            existing = supabase.table("payments").select("*").eq("reference", reference).execute()
+            if existing.data:
+                payment = existing.data[0]
+                if payment.get("status") == "success" and payment.get("processed"):
+                    return {
+                        "status": "success",
+                        "message": "Payment already verified and processed",
+                        "reference": reference,
+                        "amount": payment.get("amount")
+                    }
+        
+        # Verify with Paystack
+        response = requests.get(
+            f"https://api.paystack.co/transaction/verify/{reference}",
+            headers=headers,
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to verify payment with Paystack"
+            )
+        
+        paystack_data = response.json()
+        
+        if not paystack_data.get("status"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Payment verification failed"
+            )
+        
+        transaction = paystack_data["data"]
+        tx_status = transaction.get("status")
+        
+        # Update payment status
+        if check_table_exists("payments"):
+            supabase.table("payments").update({
+                "status": tx_status,
+                "paystack_response": transaction,
+                "verified_at": datetime.utcnow().isoformat()
+            }).eq("reference", reference).execute()
+        
+        # If successful, process the payment
+        if tx_status == "success":
+            metadata = transaction.get("metadata", {})
+            purpose = metadata.get("purpose", "wallet_topup")
+            booking_id = metadata.get("booking_id")
+            email = transaction.get("customer", {}).get("email")
+            amount_naira = transaction.get("amount", 0) / 100  # Convert from kobo
+            
+            # Get user by email
+            user_response = supabase.table("users").select("auth_id").eq("email", email).execute()
+            if not user_response.data:
+                logging.warning(f"User not found for email: {email}")
+                return {
+                    "status": "success",
+                    "message": "Payment verified but user not found for wallet credit",
+                    "reference": reference,
+                    "amount": amount_naira
+                }
+            
+            user_auth_id = user_response.data[0]["auth_id"]
+            
+            if purpose == "wallet_topup":
+                # Credit wallet available_balance
+                await _credit_wallet(user_auth_id, amount_naira, "TOPUP", reference)
+            elif purpose == "booking_escrow" and booking_id:
+                # Move to escrow_balance
+                await _credit_escrow(user_auth_id, amount_naira, booking_id, reference)
+                # Update booking status from pending_payment to pending
+                if check_table_exists("bookings"):
+                    supabase.table("bookings").update({
+                        "status": "pending",
+                        "payment_reference": reference,
+                        "payment_status": "paid"
+                    }).eq("id", booking_id).execute()
+            
+            # Mark as processed
+            if check_table_exists("payments"):
+                supabase.table("payments").update({
+                    "processed": True,
+                    "processed_at": datetime.utcnow().isoformat()
+                }).eq("reference", reference).execute()
+        
+        return {
+            "status": tx_status,
+            "message": f"Payment {tx_status}",
+            "reference": reference,
+            "amount": transaction.get("amount", 0) / 100
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Payment verification error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to verify payment: {str(e)}"
+        )
+
+
+async def _credit_wallet(user_auth_id: str, amount: float, tx_type: str, reference: str):
+    """Credit user's available wallet balance"""
+    try:
+        # Get or create wallet
+        wallet_response = supabase.table("wallets").select("*").eq("user_auth_id", user_auth_id).execute()
+        
+        if wallet_response.data:
+            wallet = wallet_response.data[0]
+            new_balance = (wallet.get("balance") or 0) + amount
+            supabase.table("wallets").update({"balance": new_balance}).eq("id", wallet["id"]).execute()
+        else:
+            # Create wallet with balance
+            supabase.table("wallets").insert({
+                "user_auth_id": user_auth_id,
+                "balance": amount
+            }).execute()
+        
+        # Record transaction
+        if check_table_exists("wallet_transactions"):
+            supabase.table("wallet_transactions").insert({
+                "user_auth_id": user_auth_id,
+                "type": tx_type,
+                "direction": "CREDIT",
+                "amount": amount,
+                "reference": reference,
+                "description": f"Wallet {tx_type.lower().replace('_', ' ')}",
+                "created_at": datetime.utcnow().isoformat()
+            }).execute()
+    except Exception as e:
+        logging.error(f"Failed to credit wallet: {str(e)}")
+
+
+async def _credit_escrow(user_auth_id: str, amount: float, booking_id: int, reference: str):
+    """Hold funds in escrow for a booking"""
+    try:
+        # Get or create wallet
+        wallet_response = supabase.table("wallets").select("*").eq("user_auth_id", user_auth_id).execute()
+        
+        if wallet_response.data:
+            wallet = wallet_response.data[0]
+            new_escrow = (wallet.get("escrow_balance") or 0) + amount
+            supabase.table("wallets").update({"escrow_balance": new_escrow}).eq("id", wallet["id"]).execute()
+        else:
+            supabase.table("wallets").insert({
+                "user_auth_id": user_auth_id,
+                "balance": 0,
+                "escrow_balance": amount
+            }).execute()
+        
+        # Record transaction
+        if check_table_exists("wallet_transactions"):
+            supabase.table("wallet_transactions").insert({
+                "user_auth_id": user_auth_id,
+                "type": "ESCROW_HOLD",
+                "direction": "CREDIT",
+                "amount": amount,
+                "reference": reference,
+                "booking_id": booking_id,
+                "description": f"Escrow hold for booking #{booking_id}",
+                "created_at": datetime.utcnow().isoformat()
+            }).execute()
+    except Exception as e:
+        logging.error(f"Failed to credit escrow: {str(e)}")
+
+
+@api_router.post("/webhooks/paystack")
+async def paystack_webhook(request: Request, x_paystack_signature: str = Header(None)):
+    """Handle Paystack webhook events"""
+    try:
+        # Verify signature
+        secret_key = os.environ.get('PAYSTACK_SECRET_KEY')
+        if not secret_key:
+            raise HTTPException(status_code=503, detail="Payment gateway not configured")
+        
+        body = await request.body()
+        
+        if x_paystack_signature:
+            expected_signature = hmac.new(
+                secret_key.encode(),
+                body,
+                hashlib.sha512
+            ).hexdigest()
+            
+            if x_paystack_signature != expected_signature:
+                logging.warning("Invalid Paystack webhook signature")
+                raise HTTPException(status_code=400, detail="Invalid signature")
+        
+        # Parse event
+        try:
+            event_data = await request.json()
+        except:
+            raise HTTPException(status_code=400, detail="Invalid JSON")
+        
+        event = event_data.get("event")
+        data = event_data.get("data", {})
+        
+        logging.info(f"Paystack webhook: {event}")
+        
+        # Handle charge.success
+        if event == "charge.success":
+            reference = data.get("reference")
+            if reference:
+                # Reuse verification logic
+                await verify_paystack_payment(reference)
+        
+        # Log webhook for audit
+        if check_table_exists("webhook_logs"):
+            supabase.table("webhook_logs").insert({
+                "provider": "paystack",
+                "event": event,
+                "data": data,
+                "created_at": datetime.utcnow().isoformat()
+            }).execute()
+        
+        return {"status": "ok"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Webhook error: {str(e)}")
+        return {"status": "ok"}  # Always return 200 to Paystack
+
+
+@api_router.get("/wallet/me")
+async def get_my_wallet(auth_id: str = Query(..., description="User's auth_id")):
+    """Get current user's wallet with balances"""
+    try:
+        wallet_response = supabase.table("wallets").select("*").eq("user_auth_id", auth_id).execute()
+        
+        if wallet_response.data:
+            wallet = wallet_response.data[0]
+            return {
+                "available_balance": wallet.get("balance", 0),
+                "escrow_balance": wallet.get("escrow_balance", 0),
+                "total_balance": (wallet.get("balance", 0) or 0) + (wallet.get("escrow_balance", 0) or 0)
+            }
+        else:
+            return {
+                "available_balance": 0,
+                "escrow_balance": 0,
+                "total_balance": 0
+            }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch wallet: {str(e)}"
+        )
+
+
+@api_router.get("/wallet/transactions")
+async def get_wallet_transactions(
+    auth_id: str = Query(..., description="User's auth_id"),
+    limit: int = Query(50, ge=1, le=100)
+):
+    """Get user's wallet transaction history"""
+    try:
+        if not check_table_exists("wallet_transactions"):
+            return []
+        
+        response = supabase.table("wallet_transactions").select("*").eq(
+            "user_auth_id", auth_id
+        ).order("created_at", desc=True).limit(limit).execute()
+        
+        return response.data or []
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch transactions: {str(e)}"
+        )
+
+
 # ==================== PROVIDER SERVICES ENDPOINTS ====================
 # Using the existing 'services' table in Supabase with enhanced schema
 # Table mapping: stylist_id -> provider_id, category -> sub_service_id (composite), name -> sub_service_name
