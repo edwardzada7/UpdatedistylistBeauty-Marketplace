@@ -95,7 +95,7 @@ CORS_ORIGINS="*"
 
 ### Frontend Environment Variables (`/app/frontend/.env`)
 ```env
-REACT_APP_BACKEND_URL=https://appoint-beauty-1.preview.emergentagent.com
+REACT_APP_BACKEND_URL=https://istylist-pay.preview.emergentagent.com
 ```
 
 ## Setup Instructions

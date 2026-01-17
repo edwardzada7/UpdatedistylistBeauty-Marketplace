@@ -1,156 +1,151 @@
 <analysis>**original_problem_statement:**
-The user is building a Beauty Stylist Marketplace App named iStylist. The project has evolved from initial setup and authentication fixes to implementing advanced features.
-
-The most recent set of tasks revolves around building a complete provider availability and booking system. This involved a backend-only phase to create API endpoints for managing availability (weekly schedules, exceptions, booking rules) and generating available time slots. The current phase is to build the corresponding frontend UI for providers to manage their schedules and for users to select a date and time slot before booking.
+The user is building a Beauty Stylist Marketplace App named iStylist. The current phase of development (Phase 2.2) is to implement Paystack payments to support wallet top-up and an escrow system for bookings.
 
 **PRODUCT REQUIREMENTS (from last user message):**
-1.  **Provider-Side UI**:
-    *   Add an Availability card to the Stylist Dashboard.
-    *   Create a new  for managing:
-        *   Weekly availability (toggles and time inputs for each day).
-        *   Date-specific exceptions (unavailable days or custom hours).
-        *   Booking rules (slot step, notice period, max sessions).
-    *   This screen must fetch existing settings and save all changes via a single Save button.
-2.  **User-Side UI**:
-    *   On the provider's public profile, insert a new step for the user to select a date and time **before** checkout.
-    *   When a date is selected, fetch available slots from the backend ().
-    *   Display these slots for selection.
-    *   The final booking request () must include  and .
-    *   Handle potential booking conflicts (HTTP 409) with a user-friendly toast message.
+1.  **Backend (FastAPI)**:
+    *   Implement  to start a payment for wallet top-up or booking escrow.
+    *   Implement  to verify a transaction with Paystack and update wallet balances (available or escrow) and create transaction records. This must be idempotent.
+    *   Implement a webhook  to handle  events.
+    *   Integrate escrow logic with booking status changes: release funds to the provider on COMPLETED, and refund to the customer on CANCELED.
+    *   Create read APIs:  and .
+2.  **Frontend (React)**:
+    *   Enhance the **Wallet Screen** to show available/escrow balances, transactions, and a Top Up button.
+    *   Create a **Wallet Top-Up Flow** that uses the Paystack initialization endpoint and redirects the user.
+    *   Integrate a **Booking Payment Flow**: after service/time selection, create a booking with  and initiate the Paystack escrow flow. On success, update the booking status to .
+    *   Add a Pay Now button to the **Booking Details Screen** for bookings with  status.
+3.  **Environment Variables**:
+    *   Backend: 
+    *   Frontend: 
 
 **User's preferred language**: en
 
 **what currently exists?**
-*   A full-stack application with a React frontend, FastAPI backend, and Supabase (PostgreSQL) database.
-*   Stable authentication and role-based access.
-*   A complete backend implementation for provider availability. All API endpoints (, , , ) are created, tested, and functional, with workarounds for database inconsistencies.
-*   The frontend work for the availability feature has just begun. The agent has:
-    *   Added the necessary API call functions to .
-    *   Created a new file .
-    *   Added a button to the  to navigate to the new availability screen.
-    *   Added the new route to .
-    *   Overwritten  with new logic to handle date/time selection for users.
+A full-stack application with a React frontend, FastAPI backend, and Supabase (PostgreSQL) database. The application has a complete authentication system, provider profiles, service management, and a robust provider availability and booking system. The customer and provider booking list/details screens are fully implemented. Several critical bugs related to ID mismatches (UUID vs. bigint) and UI layout have been fixed. The agent has just received the integration playbook for Paystack and has started the backend implementation by adding Pydantic models and endpoint stubs to .
 
 **Last working item**:
-*   **Last item agent was working**: Implementing the frontend UI for the provider availability and user booking flow (Phase 2.1). The agent had just finished a major update by overwriting  to incorporate the date and time slot selection components for the user booking journey.
-*   **Status**: IN PROGRESS
-*   **Agent Testing Done**: N
-*   **Which testing method agent to use?**: both
-*   **User Testing Done**: N
+- **Last item agent was working**: Began the backend implementation for Paystack integration. The agent added the necessary Pydantic models (, , ) and placeholders for the new payment endpoints (, , ) in .
+- **Status**: IN PROGRESS
+- **Agent Testing Done**: N
+- **Which testing method agent to use?**: both
+- **User Testing Done**: N
 
 **All Pending/In progress Issue list**:
-*   **Issue 1**: The booking creation flow is blocked by a database schema issue. (P0 - BLOCKER)
-*   **Issue 2**: The frontend UI for provider availability management is incomplete. (P0)
-*   **Issue 3**: The user-side date/time slot selection UI is newly implemented and needs to be verified and tested. (P0)
-
-**Issues Detail**:
-*   **Issue 1**: Booking Creation Blocked by DB Schema
-    *   **Attempted fixes**: The agent identified that the  table has a foreign key constraint on  (UUID) which references the  table. However, this constraint fails because the  table's primary key is an integer uid=0(root) gid=0(root) groups=0(root), not the  (UUID). The agent implemented a backend workaround to catch this specific database error and return a clean HTTP 409 error, but this does not solve the underlying problem. New bookings cannot be saved to the database.
-    *   **Next debug checklist**: This is a database schema issue that must be fixed in the Supabase console. The foreign key constraint on  needs to be correctly configured to reference  (and ensure  is a unique key) or changed to reference  (requiring a column type change from UUID to integer). The agent cannot fix this directly.
-    *   **Why fix this issue and what will be achieved with the fix?**: This is a critical blocker. Without this fix, the entire booking functionality is non-operational.
-    *   **Status**: BLOCKED
-    *   **Is recurring issue?**: Y
-    *   **Should Test frontend/backend/both after fix?**: backend
-    *   **Blocked on other issue**: External database modification.
+There are no outstanding bugs. The only pending item is the in-progress task.
 
 **In progress Task List**:
-*   **Task 1**: Complete Frontend for Provider Availability & User Slot Selection
-    *   **Where to resume**:
-        1.  Flesh out the  component with UI elements for weekly hours, exceptions, and rules, and wire it to the backend APIs.
-        2.  Thoroughly test the heavily modified  to ensure the new date/time selection flow works correctly for users.
-    *   **What will be achieved with this?**: A complete, end-to-end provider availability and booking experience, as requested by the user.
-    *   **Status**: IN PROGRESS
-    *   **Should Test frontend/backend/both after fix?**: both
-    *   **Blocked on something**: The final step of testing (creating a booking) is blocked by **Issue 1**.
+- **Task 1**: Implement Paystack Payment Gateway (P0)
+    - **Where to resume**:
+        1.  In , implement the logic inside the newly created Paystack endpoints (, , ) following the integration playbook and user requirements.
+        2.  Integrate the escrow release/refund logic into the existing booking status update endpoint ().
+        3.  Implement the frontend wallet screen UI, top-up flow, and booking payment flow.
+    - **What will be achieved with this?**: A complete, end-to-end payment system enabling wallet top-ups and booking escrow functionality.
+    - **Status**: IN PROGRESS
+    - **Should Test frontend/backend/both after fix?**: both
+    - **Blocked on something**: No.
 
 **Upcoming and Future Tasks**
-*   **Upcoming Tasks**:
-    *   **P1**: Implement the Wallet / Earnings section on the Stylist Dashboard.
-    *   **P1**: Implement full checkout flow for bookings.
-*   **Future Tasks**:
-    *   **P2**: Implement a real-time Chat/Messaging feature.
-    *   **P2**: Add a Payment Gateway (e.g., Stripe).
-    *   **P2**: Implement a Reviews & Ratings system.
+- **Upcoming Tasks**:
+    - **P1**: Implement the full Wallet / Earnings section UI on the Stylist Dashboard.
+    - **P1**: Add notifications for booking status changes (e.g., confirmed, canceled).
+- **Future Tasks**:
+    - **P2**: Implement a real-time Chat/Messaging feature.
+    - **P2**: Implement a Reviews & Ratings system.
 
 **Completed work in this session**
-- **Backend Availability System**: Implemented all backend logic and API endpoints for providers to set their availability, define exceptions/rules, and for the system to generate available time slots. This included significant debugging around UUID vs. integer ID mismatches.
-- **Provider Profile Bug Fix**: Fixed a critical bug where provider profiles would fail to load due to an overly strict database query. The query was made more robust to handle potentially missing columns.
-- **UI Text Fix**: Changed pricing label on the home screen from /hr to /session.
-- **Gender Visibility Fix**: Updated the backend and frontend to ensure a provider's gender is fetched and displayed on their public profile page.
-- **Service Description Feature**: Implemented UI for providers to add a description to their services and for users to see it on the profile page. Added a Back button for better navigation on the .
-- **Provider Identity & Privacy (Phase 1.9)**: Implemented major backend and frontend changes to enhance privacy (hiding email), and add new profile fields (location, gender, provider type).
+- **Phase 2.2 Booking Views**: Implemented customer My Bookings and provider Bookings screens, including backend endpoints with role-based filtering and status updates.
+- **Booking Visibility & Metrics Fix**: Resolved a critical bug where bookings and provider dashboard metrics were not showing. This involved:
+    - Modifying booking creation to save  (UUID).
+    - Updating all booking-related endpoints to filter by UUIDs (, ) instead of integer IDs.
+    - Creating a provider metrics endpoint ().
+    - Creating a one-time migration endpoint to backfill  for existing bookings.
+- **Booking Creation Bug Fix**: Fixed a bug where inserting into the  table failed. This involved refactoring the availability check () and fixing a bug in the  helper function.
+- **Phase 2.1 Availability Feature**: Completed the frontend UI for the provider availability management screen () and the user-facing date/time slot selection flow ().
+- **UI/Layout Fixes**:
+    - Fixed a major layout issue where the  component was obstructing content.
+    - Iteratively refined the fix by making the  mobile-only () and adjusting page/component paddings and fixed CTA positions to be fully responsive, ensuring no overlap on mobile or desktop.
+    - Added a My Bookings button to the  for customers on desktop to compensate for the hidden .
 
 **Earlier issues found/mentioned but not fixed**
-*   **Issue 1**:  table Foreign Key Constraint Violation.
-    *   **Debug checklist**: The  table  (UUID) has an invalid foreign key reference to the  table. This needs to be corrected directly in the Supabase database schema.
-    *   **Why to solve this issue and what will be achieved with this?**: This is a P0 blocker preventing any bookings from being created.
-    *   **Should Test frontend/backend/both after fix**: backend
-    *   **Is recurring issue?**: Y
+The initial handoff mentioned a blocking issue with a foreign key constraint on . The agent successfully implemented workarounds, and the booking system is now fully functional. While the underlying schema issue might still exist in the database, it is no longer a blocker for development.
+
+**Known issue recurrence from previous fork**
+- **Issue recurrence in previous fork**: None.
+- **Recurrence count**: 0
+- **Status**: RESOLVED
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
-*   **Backend**: FastAPI, Python, Pydantic, Supabase ().
-*   **Frontend**: React, React Router, TailwindCSS.
+*   **Backend**: FastAPI, Python, Supabase (), Pydantic.
+*   **Frontend**: React, React Router, TailwindCSS, .
 *   **Database**: Supabase (PostgreSQL).
-*   **Architecture**: Backend-for-Frontend (BFF). The frontend communicates exclusively with the FastAPI backend. A key pattern discovered is the mismatch between integer IDs (used in older tables like ) and UUIDs ( from the  table, used in new tables). The backend now consistently looks up the  to interact with new features.
+*   **Payments**: Paystack (in progress).
+*   **Core Logic**: UUID-based identifiers () are now the standard for user/provider identification in new features, resolving previous bugs caused by mixing integer and UUID IDs.
 
 **key DB schema**
 *   **users**: 
-*   **stylists**: 
-*   **services**: 
+*   **bookings**:  (Note:  was added and backfilled).
+*   **booking_services**: 
 *   **provider_availability**: 
-*   **provider_availability_exceptions**: 
-*   **provider_booking_rules**: 
-*   **bookings**:  **(Note: This table has a broken foreign key constraint on  that is blocking inserts).**
+*   **wallets**:  (Exists, to be used by payment logic).
+*   **wallet_transactions**:  (Exists, to be used).
+*   **payments**:  (Exists, to be used).
 
 **All files of reference**
-*   **/app/frontend/src/screens/ProviderAvailabilityScreen.jsx**: New screen for providers to manage their schedule. (NEEDS IMPLEMENTATION)
-*   **/app/frontend/src/screens/ProviderProfileScreen.jsx**: Recently overwritten to include the user-facing date and time slot selection UI. (NEEDS VERIFICATION)
-*   **/app/frontend/src/screens/StylistDashboard.jsx**: Updated with a button linking to the new availability screen.
-*   **/app/backend/server.py**: Contains all new backend logic for the availability system.
-*   **/app/frontend/src/services/api.js**: Updated with new functions to call the availability endpoints.
-*   **/app/frontend/src/App.js**: Updated with the route for the availability screen.
+*   **/app/backend/server.py**: Main file containing all backend logic. Recently updated with booking views, metrics, auth_id fixes, and stubs for Paystack integration.
+*   **/app/frontend/src/services/api.js**: Contains all frontend-to-backend API call definitions.
+*   **/app/frontend/src/screens/CustomerBookingsScreen.jsx**: New screen for customers to view their bookings.
+*   **/app/frontend/src/screens/ProviderBookingsScreen.jsx**: New screen for providers to manage their bookings.
+*   **/app/frontend/src/screens/BookingDetailsScreen.jsx**: New shared screen to show details of a single booking.
+*   **/app/frontend/src/screens/ProviderProfileScreen.jsx**: File was heavily modified to fix multiple responsive layout and padding issues.
+*   **/app/frontend/src/components/BottomNavigation.jsx**: Updated to be mobile-only () and export a spacer component.
+*   **/app/frontend/src/screens/ProfileScreen.jsx**: Updated to add a My Bookings button for customers on desktop.
 
 **Critical Info for New Agent**
-*   **Booking is Blocked**: The most critical issue is that new bookings cannot be created due to a database foreign key constraint error. The agent has identified the cause but cannot fix the schema itself. You must complete the UI implementation but be aware that the final end-to-end test will fail until the user fixes the  table schema in Supabase.
-*   **Resume Frontend Implementation**: Your primary task is to continue building the frontend for the availability feature. This means completing the  and then thoroughly testing the user-facing slot selection flow in the modified .
-*   **ID vs. UUID Pattern**: Be aware of the established pattern for handling provider IDs. The backend now expects an integer  in API paths, looks up the corresponding  (UUID) from the  table, and then uses that UUID to query the newer availability-related tables. Follow this pattern for any new interactions.
+*   **Paystack Integration is the Current Task**: You are in the middle of implementing Paystack. The backend models and endpoint stubs are in . Your immediate task is to implement the logic for these endpoints by following the user's detailed requirements and the playbook provided by the  tool.
+*   **UUIDs are Standard**: The application has been standardized to use UUIDs ( from the  table) for identifying customers and providers in all new features. All booking-related logic now relies on  and  (which is a UUID). Avoid using integer IDs from older tables for filtering or ownership checks.
+*   **Responsive UI Fixes**: A significant amount of work went into fixing responsive layout issues, particularly with the  component and fixed-position CTA bars. Be mindful of these changes (, , ) to avoid reintroducing layout bugs.
 
 **documents and test reports created in this job**
 *   
 *   
-*    (created and updated multiple times)
+*   
+*   
+*    (updated multiple times)
+*   
 *   
 
 **Last 10 User Messages and any pending HUMAN messages**
-*   **User Message 345:** Requested the full frontend implementation for the availability system, including a provider-facing management screen and a user-facing date/time slot selector. (IN PROGRESS)
-*   **User Message 193:** Requested the backend-only implementation of the availability and booking validation system. (DONE)
-*   **User Message 169:** Requested two UI fixes: show provider gender and change /hr to /session on the home screen. (DONE)
-*   **User Message 151:** Reported a bug where provider profiles were not loading. (DONE)
-*   **User Message 123:** Requested that the provider's gender be made visible on their profile. (DONE)
-*   **User Message 87:** Requested a feature to add descriptions to services and a back button on the services screen. (DONE)
-*   **User Message 5:** Provided a detailed spec for Phase 1.9 to fix provider identity, privacy, and trust signals (email privacy, location, gender, business type). (DONE)
-*   **User Message (Handoff):** The initial request was to build out the Stylist Dashboard and fix login redirection. This was superseded by the more detailed Phase 1.9 prompt.
+*   **User Message (LATEST)**: Requested the implementation of Paystack for wallet top-up and booking escrow (Phase 2.2). (IN PROGRESS)
+*   **User Message**: Requested a fix for  on desktop where content was still overlapping the booking CTA. (DONE)
+*   **User Message**: Requested a fix to make  mobile-only and restore desktop layout, including adding a My Bookings button to the desktop profile screen. (DONE)
+*   **User Message**: Reported that the  component was still obstructing buttons and content. (DONE)
+*   **User Message**: Requested a fix for the  component obstructing buttons on various screens by adding a spacer. (DONE)
+*   **User Message**: Reported that the customer's My Bookings screen was not accessible from the UI. (DONE)
+*   **User Message**: Reported that the customer My Bookings screen showed no bookings and provider dashboard counts were all zero, due to incorrect ID filtering. (DONE)
+*   **User Message**: Requested the implementation of customer and provider booking list/details screens (Phase 2.2). (DONE)
+*   **User Message**: Reported that booking creation was failing because  was being incorrectly handled. (DONE)
+*   **User Message**: Confirmed plan to complete the provider availability and user booking flow UI. (DONE)
 
 **Project Health Check:**
 *   **Broken**:
-    *   Booking Creation: The  flow is blocked by a database foreign key constraint error.
-    *   Provider Availability UI: The  is an empty placeholder.
-    *   User Slot Selection UI: The UI in  is brand new and completely untested.
+    *   Payment System: The Paystack integration is not yet implemented. Bookings cannot be paid for, and wallets cannot be topped up.
 *   **Mocked**:
-    *   Wallet/Earnings sections are still placeholders.
+    *   The Wallet screen () currently displays static data and lacks functionality.
 
 **3rd Party Integrations**
-*   Supabase (Database & Auth) — requires User API Key.
+*   **Supabase**: Database (PostgreSQL) and Authentication.
+*   **Paystack**: Payment Gateway (In Progress).
 
 **Testing status**
-*   **Testing agent used after significant changes**: YES (for service description feature)
-*   **Troubleshoot agent used after agent stuck in loop**: NO
-*   **Test files created**:
-    *   
-*   **Known regressions**: None.
+- **Testing agent used after significant changes**: YES (used for every major feature and bug fix phase)
+- **Troubleshoot agent used after agent stuck in loop**: NO
+- **Test files created**:
+    - 
+    - 
+    - 
+- **Known regressions**: None.
 
 **What agent forgot to execute**
-The agent has been diligent in following the user's requests. It correctly identified the database schema issue with the  table as something it cannot fix and implemented a graceful failure instead of getting stuck. The current task is a direct continuation of the last user request.</analysis>
+The agent has been diligent and has not forgotten to execute any requested tasks. All user requests have been addressed sequentially.</analysis>
