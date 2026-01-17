@@ -662,6 +662,7 @@ const ProviderProfileScreen = () => {
         </div>
       )}
 
+      <BottomNavSpacer />
       <BottomNavigation />
     </div>
   );
