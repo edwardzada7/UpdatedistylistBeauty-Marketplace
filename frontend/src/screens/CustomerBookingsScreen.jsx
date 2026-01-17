@@ -38,6 +38,7 @@ const CustomerBookingsScreen = () => {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("upcoming");
+  const [payingBookingId, setPayingBookingId] = useState(null);
 
   const authId = userData?.auth_id;
 
