@@ -2,6 +2,14 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Home, Grid3X3, Users, Wallet, User as UserIcon, LayoutDashboard, Settings, CalendarClock } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
+// Navigation height constant (h-16 = 64px, plus safe area)
+export const NAV_HEIGHT = 64;
+
+// Spacer component to prevent content from being hidden behind fixed bottom nav
+export const BottomNavSpacer = () => {
+  return <div className="h-20" aria-hidden="true" />;
+};
+
 const BottomNavigation = () => {
   const navigate = useNavigate();
   const location = useLocation();
