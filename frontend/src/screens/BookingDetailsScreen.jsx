@@ -438,7 +438,7 @@ const BookingDetailsScreen = () => {
               )}
               
               {/* No actions available */}
-              {!canCustomerCancel && !canProviderConfirm && !canProviderDecline && !canProviderComplete && !canProviderCancel && !["completed", "canceled", "declined"].includes(booking.status) && (
+              {!canCustomerCancel && !canCustomerPay && !canProviderConfirm && !canProviderDecline && !canProviderComplete && !canProviderCancel && !["completed", "canceled", "declined"].includes(booking.status) && (
                 <p className="text-center text-gray-500 py-2">No actions available</p>
               )}
             </div>
