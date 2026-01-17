@@ -44,6 +44,7 @@ const BookingDetailsScreen = () => {
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [processingPayment, setProcessingPayment] = useState(false);
 
   const authId = userData?.auth_id;
   const role = isProvider ? "provider" : "customer";
