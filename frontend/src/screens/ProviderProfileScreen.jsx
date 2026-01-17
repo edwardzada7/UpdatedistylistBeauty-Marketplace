@@ -147,10 +147,16 @@ const ProviderProfileScreen = () => {
       toast.error("Please select a time slot");
       return;
     }
+
+    if (!userData?.email) {
+      toast.error("User email not found. Please complete your profile.");
+      return;
+    }
     
     setSubmittingBooking(true);
     
     try {
+      // Create booking with pending_payment status
       const bookingData = {
         provider_id: parseInt(userId),
         customer_id: userData?.id,  // Legacy integer ID for backward compatibility
@@ -160,21 +166,37 @@ const ProviderProfileScreen = () => {
         service_ids: selectedServicesList.map(s => s.id),
         service_duration_minutes: totalDuration,
         notes: bookingNotes || null,
-        status: "pending"
+        status: "pending_payment"  // Start with pending_payment status
       };
       
-      await bookingsAPI.create(bookingData);
+      const bookingResponse = await bookingsAPI.create(bookingData);
+      const newBookingId = bookingResponse.data?.id;
       
-      toast.success("Booking request submitted!", {
-        description: `${selectedDate} at ${selectedSlot}`
+      if (!newBookingId) {
+        throw new Error("Booking created but no ID returned");
+      }
+
+      // Initialize payment for booking escrow
+      const paymentResponse = await paymentsAPI.initialize({
+        amount: totalPrice,
+        email: userData.email,
+        purpose: "booking_escrow",
+        booking_id: newBookingId
       });
-      
-      // Reset and go back to services
-      setSelectedServices({});
-      setBookingStep('services');
-      setSelectedDate('');
-      setSelectedSlot('');
-      setBookingNotes('');
+
+      if (paymentResponse.data.status && paymentResponse.data.authorization_url) {
+        toast.info("Redirecting to payment page...", {
+          description: "Complete payment to confirm your booking"
+        });
+        // Redirect to Paystack checkout
+        window.location.href = paymentResponse.data.authorization_url;
+      } else {
+        // Payment initialization failed - booking still created as pending_payment
+        toast.warning("Booking created but payment failed to initialize", {
+          description: "You can pay later from your bookings page"
+        });
+        navigate("/bookings");
+      }
       
     } catch (error) {
       console.error("Booking failed:", error);
