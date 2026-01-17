@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { providerServicesAPI, walletsAPI } from "@/services/api";
+import { providerServicesAPI, walletsAPI, bookingsAPI } from "@/services/api";
 import { CURRENCY } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -44,10 +44,11 @@ const StylistDashboard = () => {
   });
 
   const providerId = userData?.id;
+  const authId = userData?.auth_id;
 
   // Load dashboard data
   useEffect(() => {
-    if (!providerId) return;
+    if (!providerId || !authId) return;
 
     const loadDashboardData = async () => {
       try {
