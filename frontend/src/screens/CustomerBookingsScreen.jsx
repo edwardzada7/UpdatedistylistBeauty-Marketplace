@@ -134,6 +134,8 @@ const CustomerBookingsScreen = () => {
 
   const BookingCard = ({ booking }) => {
     const statusConfig = STATUS_CONFIG[booking.status] || STATUS_CONFIG.pending;
+    const isPaying = payingBookingId === booking.id;
+    const needsPayment = booking.status === "pending_payment";
     
     return (
       <Card 
@@ -168,7 +170,7 @@ const CustomerBookingsScreen = () => {
                 </p>
               )}
               
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <Badge variant="outline" className={statusConfig.className}>
                   {statusConfig.label}
                 </Badge>
@@ -181,6 +183,29 @@ const CustomerBookingsScreen = () => {
                   </span>
                 )}
               </div>
+              
+              {/* Pay Now button for pending_payment bookings */}
+              {needsPayment && (
+                <Button 
+                  className="mt-3 w-full bg-green-600 hover:bg-green-700"
+                  size="sm"
+                  onClick={(e) => handlePayNow(e, booking)}
+                  disabled={isPaying}
+                  data-testid={`pay-now-btn-${booking.id}`}
+                >
+                  {isPaying ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="h-4 w-4 mr-2" />
+                      Pay Now
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
             
             <ChevronRight className="h-5 w-5 text-gray-400 mt-2" />
