@@ -451,7 +451,7 @@ export default function ProviderServicesScreen() {
       
       {/* Fixed Save Button at Bottom */}
       {hasChanges && (
-        <div className="fixed bottom-20 left-0 right-0 p-4 bg-gradient-to-t from-gray-50 to-transparent">
+        <div className="fixed bottom-20 md:bottom-4 left-0 right-0 p-4 bg-gradient-to-t from-gray-50 to-transparent">
           <Button 
             onClick={saveChanges} 
             disabled={saving}
