@@ -19,6 +19,7 @@ import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation
 const ProviderProfileScreen = () => {
   const navigate = useNavigate();
   const { userId } = useParams();
+  const [searchParams] = useSearchParams();
   const { userData } = useAuth();
   const [provider, setProvider] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -32,6 +33,38 @@ const ProviderProfileScreen = () => {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [bookingNotes, setBookingNotes] = useState('');
   const [submittingBooking, setSubmittingBooking] = useState(false);
+  const [verifyingPayment, setVerifyingPayment] = useState(false);
+
+  // Check for payment callback
+  useEffect(() => {
+    const reference = searchParams.get("reference");
+    const trxref = searchParams.get("trxref");
+    
+    if (reference || trxref) {
+      verifyPayment(reference || trxref);
+    }
+  }, [searchParams]);
+
+  const verifyPayment = async (reference) => {
+    setVerifyingPayment(true);
+    try {
+      const response = await paymentsAPI.verify(reference);
+      if (response.data.status === "success") {
+        toast.success("Payment successful! Your booking is confirmed.", {
+          description: "The provider will be notified shortly."
+        });
+        // Navigate to bookings
+        navigate("/bookings", { replace: true });
+      } else {
+        toast.error(`Payment ${response.data.status}: ${response.data.message}`);
+      }
+    } catch (error) {
+      console.error("Payment verification failed:", error);
+      toast.error("Failed to verify payment. Please check your bookings.");
+    } finally {
+      setVerifyingPayment(false);
+    }
+  };
 
   useEffect(() => {
     fetchProviderProfile();
