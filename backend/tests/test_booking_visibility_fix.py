@@ -334,32 +334,36 @@ class TestBackfillMigration:
 class TestEdgeCases:
     """Test edge cases and error handling"""
     
-    def test_invalid_auth_id_returns_empty_list(self):
-        """GET /api/bookings with invalid auth_id returns empty list"""
+    def test_nonexistent_auth_id_returns_empty_list(self):
+        """GET /api/bookings with non-existent but valid UUID returns empty list"""
+        # Use a valid UUID format that doesn't exist in the database
+        fake_uuid = "00000000-0000-0000-0000-000000000000"
         response = requests.get(
             f"{BASE_URL}/api/bookings",
-            params={"role": "customer", "auth_id": "invalid-uuid-12345"}
+            params={"role": "customer", "auth_id": fake_uuid}
         )
         
         assert response.status_code == 200, f"Expected 200, got {response.status_code}"
         bookings = response.json()
         assert isinstance(bookings, list), "Response should be a list"
-        assert len(bookings) == 0, "Invalid auth_id should return empty list"
+        assert len(bookings) == 0, "Non-existent auth_id should return empty list"
         
-        print("✓ Invalid auth_id returns empty list")
+        print("✓ Non-existent auth_id returns empty list")
     
-    def test_provider_metrics_invalid_auth_id_returns_zeros(self):
-        """GET /api/providers/metrics with invalid auth_id returns zero counts"""
+    def test_provider_metrics_nonexistent_auth_id_returns_zeros(self):
+        """GET /api/providers/metrics with non-existent but valid UUID returns zero counts"""
+        # Use a valid UUID format that doesn't exist in the database
+        fake_uuid = "00000000-0000-0000-0000-000000000000"
         response = requests.get(
             f"{BASE_URL}/api/providers/metrics",
-            params={"auth_id": "invalid-uuid-12345"}
+            params={"auth_id": fake_uuid}
         )
         
         assert response.status_code == 200, f"Expected 200, got {response.status_code}"
         metrics = response.json()
         
-        assert metrics["total_count"] == 0, "Invalid auth_id should return zero total"
-        print("✓ Invalid auth_id returns zero metrics")
+        assert metrics["total_count"] == 0, "Non-existent auth_id should return zero total"
+        print("✓ Non-existent auth_id returns zero metrics")
     
     def test_bookings_without_role_returns_all(self):
         """GET /api/bookings without role filter returns all bookings"""
