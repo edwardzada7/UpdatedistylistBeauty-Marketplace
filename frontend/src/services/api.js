@@ -213,6 +213,19 @@ export const walletsAPI = {
   update: (id, data) => api.put(`/wallets/${id}`, data),
   topUp: (id, amount) => api.post(`/wallets/${id}/topup?amount=${amount}`),
   delete: (id) => api.delete(`/wallets/${id}`),
+  // Phase 2.2 - Enhanced wallet endpoints
+  getMyWallet: (authId) => api.get(`/wallet/me?auth_id=${authId}`),
+  getTransactions: (authId, limit = 50) => api.get(`/wallet/transactions?auth_id=${authId}&limit=${limit}`),
+};
+
+// ==================== PAYMENTS API (Phase 2.2 - Paystack) ====================
+
+export const paymentsAPI = {
+  // Initialize a Paystack payment
+  initialize: (data) => api.post("/payments/paystack/initialize", data),
+  
+  // Verify a payment by reference
+  verify: (reference) => api.get(`/payments/paystack/verify?reference=${reference}`),
 };
 
 // ==================== UTILITY API ====================
