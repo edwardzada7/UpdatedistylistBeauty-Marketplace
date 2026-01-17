@@ -322,6 +322,23 @@ const BookingDetailsScreen = () => {
           <CardContent className="p-4">
             <p className="text-sm font-medium text-gray-500 mb-3">Actions</p>
             <div className="space-y-2">
+              {/* Pay Now button for pending_payment */}
+              {canCustomerPay && (
+                <Button
+                  className="w-full bg-green-600 hover:bg-green-700"
+                  onClick={handlePayNow}
+                  disabled={processingPayment}
+                  data-testid="pay-now-btn"
+                >
+                  {processingPayment ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <CreditCard className="h-4 w-4 mr-2" />
+                  )}
+                  Pay Now - {CURRENCY}{(booking.total_amount || 0).toLocaleString()}
+                </Button>
+              )}
+              
               {/* Customer Actions */}
               {canCustomerCancel && (
                 <Button
