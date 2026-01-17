@@ -211,7 +211,7 @@ const ProviderAvailabilityScreen = () => {
 
   if (!isProvider) {
     return (
-      <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="min-h-screen bg-gray-50 pb-20 md:pb-4">
         <div className="p-6 text-center">
           <h2 className="text-xl font-semibold text-gray-800 mb-2">Provider Access Only</h2>
           <p className="text-gray-600">You need to be registered as a provider to access this page.</p>
@@ -226,7 +226,7 @@ const ProviderAvailabilityScreen = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="min-h-screen bg-gray-50 pb-20 md:pb-4">
         <LoadingSpinner fullScreen message="Loading availability settings..." />
         <BottomNavigation />
       </div>
@@ -234,7 +234,7 @@ const ProviderAvailabilityScreen = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="min-h-screen bg-gray-50 pb-24 md:pb-4">
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-4">
         <div className="flex items-center gap-3">

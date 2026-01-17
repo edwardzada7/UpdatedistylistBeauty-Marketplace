@@ -216,7 +216,7 @@ export default function ProviderServicesScreen() {
   }
   
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="min-h-screen bg-gray-50 pb-24 md:pb-4">
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6">
         {/* Back Button Row */}

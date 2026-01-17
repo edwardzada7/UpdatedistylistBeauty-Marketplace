@@ -115,7 +115,7 @@ const BookingDetailsScreen = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="min-h-screen bg-gray-50 pb-20 md:pb-4">
         <LoadingSpinner fullScreen message="Loading booking details..." />
         <BottomNavigation />
       </div>
@@ -124,7 +124,7 @@ const BookingDetailsScreen = () => {
 
   if (!booking) {
     return (
-      <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="min-h-screen bg-gray-50 pb-20 md:pb-4">
         <div className="p-6 text-center">
           <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-800 mb-2">Booking Not Found</h2>
@@ -147,7 +147,7 @@ const BookingDetailsScreen = () => {
   const canProviderCancel = isProvider && ["pending", "confirmed"].includes(booking.status);
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="min-h-screen bg-gray-50 pb-24 md:pb-4">
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-4">
         <div className="flex items-center gap-3">

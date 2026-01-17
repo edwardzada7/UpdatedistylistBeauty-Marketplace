@@ -156,7 +156,7 @@ const CustomerBookingsScreen = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="min-h-screen bg-gray-50 pb-20 md:pb-4">
         <LoadingSpinner fullScreen message="Loading your bookings..." />
         <BottomNavSpacer />
       <BottomNavigation />
@@ -165,7 +165,7 @@ const CustomerBookingsScreen = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="min-h-screen bg-gray-50 pb-24 md:pb-4">
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-4">
         <div className="flex items-center gap-3">
