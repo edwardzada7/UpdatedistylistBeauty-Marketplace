@@ -387,7 +387,7 @@ const ProviderProfileScreen = () => {
       </header>
 
       {/* Content */}
-      <div className="container mx-auto px-4 py-6 pb-32 sm:pb-6">
+      <div className="container mx-auto px-4 py-6 pb-40 md:pb-32">
         <div className="max-w-3xl mx-auto space-y-4">
           {/* Profile Card */}
           <Card data-testid="provider-profile-card">
