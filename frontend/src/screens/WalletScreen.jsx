@@ -42,7 +42,7 @@ export default function WalletScreen() {
     if (reference || trxref) {
       verifyPayment(reference || trxref);
     }
-  }, [searchParams]);
+  }, [searchParams, verifyPayment]);
 
   const verifyPayment = useCallback(async (reference) => {
     setVerifyingPayment(true);
