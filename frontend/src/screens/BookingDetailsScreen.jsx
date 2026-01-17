@@ -163,7 +163,7 @@ const BookingDetailsScreen = () => {
         <div className="p-6 text-center">
           <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-800 mb-2">Booking Not Found</h2>
-          <p className="text-gray-600 mb-4">This booking doesn't exist or you don't have access to it.</p>
+          <p className="text-gray-600 mb-4">This booking does not exist or you do not have access to it.</p>
           <Button onClick={handleBack}>Go Back</Button>
         </div>
         <BottomNavigation />
