@@ -325,6 +325,7 @@ const ProviderBookingsScreen = () => {
         </Tabs>
       </div>
 
+      <BottomNavSpacer />
       <BottomNavigation />
     </div>
   );
