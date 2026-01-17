@@ -393,6 +393,7 @@ const BookingDetailsScreen = () => {
         </Card>
       </div>
 
+      <BottomNavSpacer />
       <BottomNavigation />
     </div>
   );
