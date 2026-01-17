@@ -1370,16 +1370,22 @@ async def get_wallet_transactions(
         if not check_table_exists("wallet_transactions"):
             return []
         
-        response = supabase.table("wallet_transactions").select("*").eq(
-            "user_auth_id", auth_id
-        ).order("created_at", desc=True).limit(limit).execute()
-        
-        return response.data or []
+        # Try to query with user_auth_id column, fallback gracefully if column doesn't exist
+        try:
+            response = supabase.table("wallet_transactions").select("*").eq(
+                "user_auth_id", auth_id
+            ).order("created_at", desc=True).limit(limit).execute()
+            return response.data or []
+        except Exception as col_error:
+            # If column doesn't exist, return empty list with warning
+            if "user_auth_id" in str(col_error):
+                logging.warning("wallet_transactions table missing user_auth_id column. Run migration.")
+                return []
+            raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch transactions: {str(e)}"
-        )
+        logging.error(f"Failed to fetch transactions: {str(e)}")
+        # Return empty list instead of error for better UX
+        return []
 
 
 # ==================== PROVIDER SERVICES ENDPOINTS ====================
