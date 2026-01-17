@@ -455,7 +455,7 @@ const ProviderDashboard = () => {
       
       {/* Fixed Save Button at Bottom */}
       {hasChanges && (
-        <div className="fixed bottom-20 left-0 right-0 p-4 bg-gradient-to-t from-gray-100 to-transparent pointer-events-none">
+        <div className="fixed bottom-20 md:bottom-4 left-0 right-0 p-4 bg-gradient-to-t from-gray-100 to-transparent pointer-events-none">
           <div className="max-w-4xl mx-auto pointer-events-auto">
             <Button 
               onClick={saveChanges} 
