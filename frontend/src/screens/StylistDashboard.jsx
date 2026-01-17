@@ -64,11 +64,28 @@ const StylistDashboard = () => {
           .filter(s => s.is_active)
           .reduce((sum, s) => sum + (s.price || 0), 0);
 
-        setStats(prev => ({
-          ...prev,
+        // Load booking metrics using auth_id (UUID)
+        let bookingMetrics = {
+          pending_count: 0,
+          confirmed_count: 0,
+          completed_count: 0,
+          canceled_count: 0
+        };
+        
+        try {
+          const metricsResponse = await bookingsAPI.getProviderMetrics(authId);
+          bookingMetrics = metricsResponse.data || bookingMetrics;
+        } catch (e) {
+          console.error("Failed to load booking metrics:", e);
+        }
+
+        setStats({
           totalServices: services.filter(s => s.is_active).length,
-          totalEarnings: totalPrice
-        }));
+          totalEarnings: totalPrice,
+          pendingBookings: bookingMetrics.pending_count || 0,
+          upcomingBookings: (bookingMetrics.pending_count || 0) + (bookingMetrics.confirmed_count || 0),
+          completedBookings: bookingMetrics.completed_count || 0
+        });
 
         // Load wallet balance
         try {
@@ -87,7 +104,7 @@ const StylistDashboard = () => {
     };
 
     loadDashboardData();
-  }, [providerId, userData?.auth_id]);
+  }, [providerId, authId, userData?.auth_id]);
 
   const handleSignOut = async () => {
     try {
