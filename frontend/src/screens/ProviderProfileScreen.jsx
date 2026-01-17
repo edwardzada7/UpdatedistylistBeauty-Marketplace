@@ -221,7 +221,7 @@ const ProviderProfileScreen = () => {
           </div>
         </header>
 
-        <div className="container mx-auto px-4 py-6 pb-32 sm:pb-6">
+        <div className="container mx-auto px-4 py-6 pb-40 md:pb-24">
           <div className="max-w-lg mx-auto space-y-4">
             {/* Selected Services Summary */}
             <Card className="bg-purple-50 border-purple-200">
