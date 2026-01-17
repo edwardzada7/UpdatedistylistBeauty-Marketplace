@@ -2367,6 +2367,37 @@ async def root():
     }
 
 
+@api_router.post("/migrate/backfill-customer-auth-ids")
+async def backfill_customer_auth_ids():
+    """Backfill customer_auth_id for existing bookings that only have customer_id (integer)"""
+    try:
+        if not check_table_exists("bookings"):
+            return {"message": "No bookings table", "updated": 0}
+        
+        # Get all bookings without customer_auth_id but with customer_id
+        bookings_response = supabase.table("bookings").select("id, customer_id").is_("customer_auth_id", "null").execute()
+        bookings = bookings_response.data or []
+        
+        updated_count = 0
+        for booking in bookings:
+            customer_id = booking.get("customer_id")
+            if customer_id:
+                # Look up auth_id from users table
+                user_response = supabase.table("users").select("auth_id").eq("id", customer_id).execute()
+                if user_response.data and user_response.data[0].get("auth_id"):
+                    auth_id = user_response.data[0]["auth_id"]
+                    # Update the booking
+                    supabase.table("bookings").update({"customer_auth_id": auth_id}).eq("id", booking["id"]).execute()
+                    updated_count += 1
+        
+        return {"message": f"Backfill complete", "updated": updated_count, "total_checked": len(bookings)}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to backfill: {str(e)}"
+        )
+
+
 # Include the router in the main app
 app.include_router(api_router)
 
