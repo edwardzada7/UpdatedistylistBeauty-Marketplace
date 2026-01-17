@@ -63,7 +63,7 @@ export default function WalletScreen() {
     } finally {
       setVerifyingPayment(false);
     }
-  };
+  }, [navigate, fetchWalletData]);
 
   const fetchWalletData = useCallback(async () => {
     if (!user?.id) return;
