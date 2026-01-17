@@ -44,7 +44,7 @@ export default function WalletScreen() {
     }
   }, [searchParams]);
 
-  const verifyPayment = async (reference) => {
+  const verifyPayment = useCallback(async (reference) => {
     setVerifyingPayment(true);
     try {
       const response = await paymentsAPI.verify(reference);
