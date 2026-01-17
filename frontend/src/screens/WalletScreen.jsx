@@ -433,7 +433,7 @@ export default function WalletScreen() {
               </div>
               
               <p className="text-xs text-center text-gray-500">
-                You'll be redirected to Paystack for secure payment
+                You will be redirected to Paystack for secure payment
               </p>
             </CardContent>
           </Card>
