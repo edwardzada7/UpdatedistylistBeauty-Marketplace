@@ -120,6 +120,20 @@ class WalletResponse(BaseModel):
     balance: float
 
 
+# Payment Models (Phase 2.2 - Paystack Integration)
+class PaymentInitRequest(BaseModel):
+    amount: float  # Amount in Naira
+    email: EmailStr
+    purpose: str  # "wallet_topup" or "booking_escrow"
+    booking_id: Optional[int] = None
+
+class PaymentVerifyResponse(BaseModel):
+    status: str
+    message: str
+    reference: Optional[str] = None
+    amount: Optional[float] = None
+
+
 # Provider Services Models (Phase 1.3 - Enhanced)
 class ProviderServiceCreate(BaseModel):
     provider_id: int  # user_id from stylists table
