@@ -175,7 +175,8 @@ const BookingDetailsScreen = () => {
   const StatusIcon = statusConfig.icon;
 
   // Determine what actions are available
-  const canCustomerCancel = !isProvider && ["pending", "confirmed"].includes(booking.status);
+  const canCustomerCancel = !isProvider && ["pending", "confirmed", "pending_payment"].includes(booking.status);
+  const canCustomerPay = !isProvider && booking.status === "pending_payment";
   const canProviderConfirm = isProvider && booking.status === "pending";
   const canProviderDecline = isProvider && booking.status === "pending";
   const canProviderComplete = isProvider && booking.status === "confirmed";
