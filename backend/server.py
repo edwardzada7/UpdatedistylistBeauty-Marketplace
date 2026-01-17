@@ -1811,7 +1811,8 @@ async def get_available_slots(
 
 class BookingCreate(BaseModel):
     provider_id: int
-    customer_id: int
+    customer_id: Optional[int] = None  # Legacy - now optional
+    customer_auth_id: Optional[str] = None  # New - customer's auth UUID
     service_ids: List[int] = Field(default_factory=list)
     booking_date: Optional[str] = None  # YYYY-MM-DD
     booking_time: Optional[str] = None  # HH:MM
@@ -1830,6 +1831,14 @@ async def create_booking(booking: BookingCreate):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Provider not found"
             )
+        
+        # Determine customer_auth_id - prefer direct UUID, fallback to lookup
+        customer_auth_id = booking.customer_auth_id
+        if not customer_auth_id and booking.customer_id:
+            # Lookup auth_id from user's integer ID
+            user_response = supabase.table("users").select("auth_id").eq("id", booking.customer_id).execute()
+            if user_response.data:
+                customer_auth_id = user_response.data[0].get("auth_id")
         
         # If booking_date and booking_time are provided, validate availability
         if booking.booking_date and booking.booking_time:
@@ -1873,12 +1882,19 @@ async def create_booking(booking: BookingCreate):
                 detail="bookings table does not exist. Please run migrations."
             )
         
-        # Build booking data - provider_id as UUID, customer_id as integer
+        # Build booking data - use UUIDs for both provider and customer
         booking_data = {
             "provider_id": provider_uuid,
-            "customer_id": booking.customer_id,
             "status": booking.status
         }
+        
+        # Set customer_auth_id (UUID) - primary identifier
+        if customer_auth_id:
+            booking_data["customer_auth_id"] = customer_auth_id
+        
+        # Also set customer_id (integer) for backward compatibility
+        if booking.customer_id:
+            booking_data["customer_id"] = booking.customer_id
         
         if booking.notes:
             booking_data["notes"] = booking.notes
