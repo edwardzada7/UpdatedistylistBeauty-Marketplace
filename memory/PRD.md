@@ -218,6 +218,26 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
   - `/app/backend/tests/test_bookings_phase22.py` (32 tests)
 - **Backend Tests**: 97% pass rate (44/45 tests)
 
+### Phase 2.4 - Booking Visibility Fix ✅ (January 16, 2026)
+**Fixed: Customer "My Bookings" showing no bookings, Provider dashboard showing zero counts**
+
+- **Root Cause**: Filtering by wrong ID fields (bigint customer_id instead of UUID customer_auth_id)
+
+- **Backend Fixes**:
+  - POST /api/bookings now sets `customer_auth_id` (UUID) in addition to `customer_id` (integer)
+  - GET /api/bookings filters by `customer_auth_id` when role=customer
+  - GET /api/bookings filters by `provider_id` (UUID) when role=provider
+  - Added GET /api/providers/metrics?auth_id=UUID endpoint for dashboard counts
+  - Added POST /api/migrate/backfill-customer-auth-ids for existing data
+
+- **Frontend Fixes**:
+  - ProviderProfileScreen.jsx passes `customer_auth_id` when creating bookings
+  - StylistDashboard.jsx fetches real metrics via bookingsAPI.getProviderMetrics(authId)
+  - CustomerBookingsScreen.jsx correctly uses auth_id for filtering
+
+- **Tests Added**: `/app/backend/tests/test_booking_visibility_fix.py` (13 tests)
+- **Backend Tests**: 100% pass rate (13/13)
+
 ---
 
 ## Backlog / Future Tasks
