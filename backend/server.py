@@ -2818,7 +2818,7 @@ async def update_booking(
 ):
     """Update booking status with validation rules"""
     try:
-        valid_statuses = ["pending", "confirmed", "completed", "canceled", "declined"]
+        valid_statuses = ["pending_payment", "pending", "confirmed", "completed", "canceled", "declined"]
         # Support both 'cancelled' and 'canceled' spellings
         if new_status == "cancelled":
             new_status = "canceled"
