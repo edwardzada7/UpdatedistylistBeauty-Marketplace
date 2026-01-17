@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { providerServicesAPI, walletsAPI, bookingsAPI } from "@/services/api";
 import { CURRENCY } from "@/utils/constants";
-import BottomNavigation from "@/components/BottomNavigation";
+import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

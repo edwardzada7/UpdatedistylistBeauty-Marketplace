@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { providerServicesAPI } from "@/services/api";
 import { SERVICE_CATALOG, CURRENCY, getAllSubServices } from "@/utils/constants";
-import BottomNavigation from "@/components/BottomNavigation";
+import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

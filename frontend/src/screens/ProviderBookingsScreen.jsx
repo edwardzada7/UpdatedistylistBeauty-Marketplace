@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { bookingsAPI } from "@/services/api";
 import { CURRENCY } from "@/utils/constants";
-import BottomNavigation from "@/components/BottomNavigation";
+import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
