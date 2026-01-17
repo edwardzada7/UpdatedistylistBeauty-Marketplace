@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, User, Mail, Phone, Save, Loader2, LogOut, Shield, Star, MapPin, FileText, Globe, Building2 } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, Save, Loader2, LogOut, Shield, Star, MapPin, FileText, Globe, Building2, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
 import { usersAPI, stylistsAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
