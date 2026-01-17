@@ -230,6 +230,18 @@ const ProviderProfileScreen = () => {
     return <LoadingSpinner fullScreen message="Loading provider profile..." />;
   }
 
+  if (verifyingPayment) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-purple-600 mx-auto mb-4" />
+          <p className="text-lg font-medium text-gray-700">Verifying payment...</p>
+          <p className="text-sm text-gray-500 mt-2">Please wait while we confirm your booking payment</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!provider) {
     return (
       <div className="min-h-screen bg-gray-50">
