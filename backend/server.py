@@ -1144,6 +1144,139 @@ async def _credit_escrow(user_auth_id: str, amount: float, booking_id: int, refe
         logging.error(f"Failed to credit escrow: {str(e)}")
 
 
+async def _release_escrow_to_provider(booking_id: int, provider_auth_id: str, customer_auth_id: str):
+    """Release escrow funds to provider when booking is completed"""
+    try:
+        # Get the booking to find the amount
+        booking_response = supabase.table("bookings").select("*").eq("id", booking_id).execute()
+        if not booking_response.data:
+            logging.warning(f"Booking {booking_id} not found for escrow release")
+            return
+        
+        booking = booking_response.data[0]
+        
+        # Calculate total amount from booking_services if available
+        amount = 0
+        if check_table_exists("booking_services"):
+            services_response = supabase.table("booking_services").select("price").eq("booking_id", booking_id).execute()
+            if services_response.data:
+                amount = sum(float(svc.get("price", 0)) for svc in services_response.data)
+        
+        # Fallback to payment record
+        if amount == 0 and check_table_exists("payments"):
+            payment_response = supabase.table("payments").select("amount").eq("booking_id", booking_id).eq("status", "success").execute()
+            if payment_response.data:
+                amount = float(payment_response.data[0].get("amount", 0))
+        
+        if amount <= 0:
+            logging.warning(f"No amount found for booking {booking_id}")
+            return
+        
+        # Deduct from customer's escrow balance
+        customer_wallet = supabase.table("wallets").select("*").eq("user_auth_id", customer_auth_id).execute()
+        if customer_wallet.data:
+            wallet = customer_wallet.data[0]
+            new_escrow = max(0, (wallet.get("escrow_balance") or 0) - amount)
+            supabase.table("wallets").update({"escrow_balance": new_escrow}).eq("id", wallet["id"]).execute()
+        
+        # Credit to provider's available balance
+        provider_wallet = supabase.table("wallets").select("*").eq("user_auth_id", provider_auth_id).execute()
+        if provider_wallet.data:
+            wallet = provider_wallet.data[0]
+            new_balance = (wallet.get("balance") or 0) + amount
+            supabase.table("wallets").update({"balance": new_balance}).eq("id", wallet["id"]).execute()
+        else:
+            supabase.table("wallets").insert({
+                "user_auth_id": provider_auth_id,
+                "balance": amount,
+                "escrow_balance": 0
+            }).execute()
+        
+        # Record transactions
+        if check_table_exists("wallet_transactions"):
+            # Customer debit from escrow
+            supabase.table("wallet_transactions").insert({
+                "user_auth_id": customer_auth_id,
+                "type": "ESCROW_RELEASE",
+                "direction": "DEBIT",
+                "amount": amount,
+                "booking_id": booking_id,
+                "description": f"Payment released for booking #{booking_id}",
+                "created_at": datetime.utcnow().isoformat()
+            }).execute()
+            
+            # Provider credit (earnings)
+            supabase.table("wallet_transactions").insert({
+                "user_auth_id": provider_auth_id,
+                "type": "EARNINGS",
+                "direction": "CREDIT",
+                "amount": amount,
+                "booking_id": booking_id,
+                "description": f"Earnings from booking #{booking_id}",
+                "created_at": datetime.utcnow().isoformat()
+            }).execute()
+        
+        logging.info(f"Escrow released: {amount} from customer {customer_auth_id} to provider {provider_auth_id} for booking #{booking_id}")
+    except Exception as e:
+        logging.error(f"Failed to release escrow: {str(e)}")
+
+
+async def _refund_escrow_to_customer(booking_id: int, customer_auth_id: str):
+    """Refund escrow funds to customer when booking is canceled"""
+    try:
+        # Get the booking to find the amount
+        booking_response = supabase.table("bookings").select("*").eq("id", booking_id).execute()
+        if not booking_response.data:
+            logging.warning(f"Booking {booking_id} not found for escrow refund")
+            return
+        
+        booking = booking_response.data[0]
+        
+        # Calculate total amount from booking_services if available
+        amount = 0
+        if check_table_exists("booking_services"):
+            services_response = supabase.table("booking_services").select("price").eq("booking_id", booking_id).execute()
+            if services_response.data:
+                amount = sum(float(svc.get("price", 0)) for svc in services_response.data)
+        
+        # Fallback to payment record
+        if amount == 0 and check_table_exists("payments"):
+            payment_response = supabase.table("payments").select("amount").eq("booking_id", booking_id).eq("status", "success").execute()
+            if payment_response.data:
+                amount = float(payment_response.data[0].get("amount", 0))
+        
+        if amount <= 0:
+            logging.warning(f"No amount found for booking {booking_id} refund")
+            return
+        
+        # Move from escrow to available balance for customer
+        customer_wallet = supabase.table("wallets").select("*").eq("user_auth_id", customer_auth_id).execute()
+        if customer_wallet.data:
+            wallet = customer_wallet.data[0]
+            new_escrow = max(0, (wallet.get("escrow_balance") or 0) - amount)
+            new_balance = (wallet.get("balance") or 0) + amount
+            supabase.table("wallets").update({
+                "escrow_balance": new_escrow,
+                "balance": new_balance
+            }).eq("id", wallet["id"]).execute()
+        
+        # Record transaction
+        if check_table_exists("wallet_transactions"):
+            supabase.table("wallet_transactions").insert({
+                "user_auth_id": customer_auth_id,
+                "type": "ESCROW_REFUND",
+                "direction": "CREDIT",
+                "amount": amount,
+                "booking_id": booking_id,
+                "description": f"Refund for canceled booking #{booking_id}",
+                "created_at": datetime.utcnow().isoformat()
+            }).execute()
+        
+        logging.info(f"Escrow refunded: {amount} to customer {customer_auth_id} for booking #{booking_id}")
+    except Exception as e:
+        logging.error(f"Failed to refund escrow: {str(e)}")
+
+
 @api_router.post("/webhooks/paystack")
 async def paystack_webhook(request: Request, x_paystack_signature: str = Header(None)):
     """Handle Paystack webhook events"""
