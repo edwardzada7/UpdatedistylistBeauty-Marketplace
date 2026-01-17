@@ -120,7 +120,8 @@ const ProviderProfileScreen = () => {
     try {
       const bookingData = {
         provider_id: parseInt(userId),
-        customer_id: userData?.id,
+        customer_id: userData?.id,  // Legacy integer ID for backward compatibility
+        customer_auth_id: userData?.auth_id,  // UUID auth_id for proper filtering
         booking_date: selectedDate,
         booking_time: selectedSlot,
         service_ids: selectedServicesList.map(s => s.id),
