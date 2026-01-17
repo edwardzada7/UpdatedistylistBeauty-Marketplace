@@ -153,10 +153,10 @@ export const providersAPI = {
     api.get(`/providers/${providerId}/available-slots?date=${date}&service_duration=${serviceDuration}`),
 };
 
-// ==================== BOOKINGS API (Phase 2.1 + 2.2) ====================
+// ==================== BOOKINGS API (Phase 2.1 + 2.2 + 2.3) ====================
 
 export const bookingsAPI = {
-  // Create a booking
+  // Create a booking - now accepts customer_auth_id (UUID)
   create: (data) => api.post("/bookings", data),
   
   // Get bookings with filters (enhanced for Phase 2.2)
@@ -198,6 +198,9 @@ export const bookingsAPI = {
     if (authId) queryParams.append("auth_id", authId);
     return api.put(`/bookings/${bookingId}?${queryParams}`);
   },
+  
+  // Get provider metrics (booking counts)
+  getProviderMetrics: (authId) => api.get(`/providers/metrics?auth_id=${authId}`),
 };
 
 // ==================== WALLETS API ====================
