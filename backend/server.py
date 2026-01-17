@@ -2285,8 +2285,10 @@ async def update_booking(
         # Validate transition based on role
         if role and auth_id:
             is_provider = (role == "provider" and booking.get("provider_id") == auth_id)
-            is_customer = False
-            if role == "customer":
+            is_customer = (role == "customer" and booking.get("customer_auth_id") == auth_id)
+            
+            # Fallback: check by customer_id (integer) for legacy bookings
+            if role == "customer" and not is_customer:
                 user_response = supabase.table("users").select("id").eq("auth_id", auth_id).execute()
                 if user_response.data:
                     is_customer = (booking.get("customer_id") == user_response.data[0]["id"])
