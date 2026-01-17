@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { bookingsAPI, paymentsAPI } from "@/services/api";
@@ -32,6 +32,119 @@ const STATUS_CONFIG = {
   declined: { label: "Declined", className: "bg-gray-100 text-gray-700 border-gray-200" }
 };
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return "Date TBD";
+  const date = new Date(dateStr + "T00:00:00");
+  return date.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric"
+  });
+};
+
+const formatTime = (timeStr) => {
+  if (!timeStr) return "Time TBD";
+  // Handle HH:MM:SS or HH:MM format
+  const parts = timeStr.split(":");
+  const hours = parseInt(parts[0]);
+  const minutes = parts[1];
+  const ampm = hours >= 12 ? "PM" : "AM";
+  const displayHours = hours % 12 || 12;
+  return `${displayHours}:${minutes} ${ampm}`;
+};
+
+// Extracted BookingCard component
+const BookingCard = ({ booking, onPayNow, isPaying, navigate }) => {
+  const statusConfig = STATUS_CONFIG[booking.status] || STATUS_CONFIG.pending;
+  const needsPayment = booking.status === "pending_payment";
+  
+  const handleCardClick = () => {
+    navigate(`/bookings/${booking.id}`);
+  };
+
+  const handlePayClick = (e) => {
+    e.stopPropagation();
+    onPayNow(booking);
+  };
+  
+  return (
+    <Card 
+      className="cursor-pointer hover:shadow-md transition-all"
+      onClick={handleCardClick}
+      data-testid={`booking-card-${booking.id}`}
+    >
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <User className="h-4 w-4 text-purple-600" />
+              <span className="font-semibold text-gray-900">
+                {booking.provider_display_name || "Provider"}
+              </span>
+            </div>
+            
+            <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
+              <span className="flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5" />
+                {formatDate(booking.booking_date)}
+              </span>
+              <span className="flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5" />
+                {formatTime(booking.booking_time)}
+              </span>
+            </div>
+            
+            {booking.services && booking.services.length > 0 && (
+              <p className="text-xs text-gray-500 mb-2">
+                {booking.services.map(s => s.service_name).join(", ")}
+              </p>
+            )}
+            
+            <div className="flex items-center gap-3 flex-wrap">
+              <Badge variant="outline" className={statusConfig.className}>
+                {statusConfig.label}
+              </Badge>
+              <span className="font-bold text-purple-600">
+                {CURRENCY}{(booking.total_amount || 0).toLocaleString()}
+              </span>
+              {booking.total_duration > 0 && (
+                <span className="text-xs text-gray-500">
+                  {booking.total_duration} min
+                </span>
+              )}
+            </div>
+            
+            {/* Pay Now button for pending_payment bookings */}
+            {needsPayment && (
+              <Button 
+                className="mt-3 w-full bg-green-600 hover:bg-green-700"
+                size="sm"
+                onClick={handlePayClick}
+                disabled={isPaying}
+                data-testid={`pay-now-btn-${booking.id}`}
+              >
+                {isPaying ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    Pay Now
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+          
+          <ChevronRight className="h-5 w-5 text-gray-400 mt-2" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 const CustomerBookingsScreen = () => {
   const navigate = useNavigate();
   const { userData } = useAuth();
@@ -42,13 +155,8 @@ const CustomerBookingsScreen = () => {
 
   const authId = userData?.auth_id;
 
-  useEffect(() => {
-    if (authId) {
-      fetchBookings();
-    }
-  }, [authId]);
-
-  const fetchBookings = async () => {
+  const fetchBookings = useCallback(async () => {
+    if (!authId) return;
     try {
       setLoading(true);
       const response = await bookingsAPI.list({
@@ -62,7 +170,13 @@ const CustomerBookingsScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [authId]);
+
+  useEffect(() => {
+    if (authId) {
+      fetchBookings();
+    }
+  }, [authId, fetchBookings]);
 
   // Split bookings into upcoming and past
   const today = new Date().toISOString().split('T')[0];
@@ -79,9 +193,7 @@ const CustomerBookingsScreen = () => {
     return isPastStatus || isPastDate;
   });
 
-  const handlePayNow = async (e, booking) => {
-    e.stopPropagation(); // Prevent card click
-
+  const handlePayNow = async (booking) => {
     if (!userData?.email) {
       toast.error("User email not found. Please complete your profile.");
       return;
@@ -109,110 +221,6 @@ const CustomerBookingsScreen = () => {
     } finally {
       setPayingBookingId(null);
     }
-  };
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "Date TBD";
-    const date = new Date(dateStr + "T00:00:00");
-    return date.toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric"
-    });
-  };
-
-  const formatTime = (timeStr) => {
-    if (!timeStr) return "Time TBD";
-    // Handle HH:MM:SS or HH:MM format
-    const parts = timeStr.split(":");
-    const hours = parseInt(parts[0]);
-    const minutes = parts[1];
-    const ampm = hours >= 12 ? "PM" : "AM";
-    const displayHours = hours % 12 || 12;
-    return `${displayHours}:${minutes} ${ampm}`;
-  };
-
-  const BookingCard = ({ booking }) => {
-    const statusConfig = STATUS_CONFIG[booking.status] || STATUS_CONFIG.pending;
-    const isPaying = payingBookingId === booking.id;
-    const needsPayment = booking.status === "pending_payment";
-    
-    return (
-      <Card 
-        className="cursor-pointer hover:shadow-md transition-all"
-        onClick={() => navigate(`/bookings/${booking.id}`)}
-        data-testid={`booking-card-${booking.id}`}
-      >
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <User className="h-4 w-4 text-purple-600" />
-                <span className="font-semibold text-gray-900">
-                  {booking.provider_display_name || "Provider"}
-                </span>
-              </div>
-              
-              <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
-                <span className="flex items-center gap-1">
-                  <Calendar className="h-3.5 w-3.5" />
-                  {formatDate(booking.booking_date)}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Clock className="h-3.5 w-3.5" />
-                  {formatTime(booking.booking_time)}
-                </span>
-              </div>
-              
-              {booking.services && booking.services.length > 0 && (
-                <p className="text-xs text-gray-500 mb-2">
-                  {booking.services.map(s => s.service_name).join(", ")}
-                </p>
-              )}
-              
-              <div className="flex items-center gap-3 flex-wrap">
-                <Badge variant="outline" className={statusConfig.className}>
-                  {statusConfig.label}
-                </Badge>
-                <span className="font-bold text-purple-600">
-                  {CURRENCY}{(booking.total_amount || 0).toLocaleString()}
-                </span>
-                {booking.total_duration > 0 && (
-                  <span className="text-xs text-gray-500">
-                    {booking.total_duration} min
-                  </span>
-                )}
-              </div>
-              
-              {/* Pay Now button for pending_payment bookings */}
-              {needsPayment && (
-                <Button 
-                  className="mt-3 w-full bg-green-600 hover:bg-green-700"
-                  size="sm"
-                  onClick={(e) => handlePayNow(e, booking)}
-                  disabled={isPaying}
-                  data-testid={`pay-now-btn-${booking.id}`}
-                >
-                  {isPaying ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <CreditCard className="h-4 w-4 mr-2" />
-                      Pay Now
-                    </>
-                  )}
-                </Button>
-              )}
-            </div>
-            
-            <ChevronRight className="h-5 w-5 text-gray-400 mt-2" />
-          </div>
-        </CardContent>
-      </Card>
-    );
   };
 
   if (loading) {
@@ -260,7 +268,13 @@ const CustomerBookingsScreen = () => {
           <TabsContent value="upcoming" className="space-y-3">
             {upcomingBookings.length > 0 ? (
               upcomingBookings.map(booking => (
-                <BookingCard key={booking.id} booking={booking} />
+                <BookingCard 
+                  key={booking.id} 
+                  booking={booking}
+                  onPayNow={handlePayNow}
+                  isPaying={payingBookingId === booking.id}
+                  navigate={navigate}
+                />
               ))
             ) : (
               <EmptyState
@@ -275,7 +289,13 @@ const CustomerBookingsScreen = () => {
           <TabsContent value="past" className="space-y-3">
             {pastBookings.length > 0 ? (
               pastBookings.map(booking => (
-                <BookingCard key={booking.id} booking={booking} />
+                <BookingCard 
+                  key={booking.id} 
+                  booking={booking}
+                  onPayNow={handlePayNow}
+                  isPaying={payingBookingId === booking.id}
+                  navigate={navigate}
+                />
               ))
             ) : (
               <EmptyState
