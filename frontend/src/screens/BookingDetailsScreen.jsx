@@ -96,6 +96,37 @@ const BookingDetailsScreen = () => {
     toast.info("Rebook feature coming soon!");
   };
 
+  const handlePayNow = async () => {
+    if (!booking || !userData?.email) {
+      toast.error("Unable to process payment. Please try again.");
+      return;
+    }
+
+    setProcessingPayment(true);
+    try {
+      const response = await paymentsAPI.initialize({
+        amount: booking.total_amount || 0,
+        email: userData.email,
+        purpose: "booking_escrow",
+        booking_id: booking.id
+      });
+
+      if (response.data.status && response.data.authorization_url) {
+        toast.info("Redirecting to payment page...");
+        // Redirect to Paystack checkout
+        window.location.href = response.data.authorization_url;
+      } else {
+        toast.error(response.data.message || "Failed to initialize payment");
+      }
+    } catch (error) {
+      console.error("Payment initialization failed:", error);
+      const errorMsg = error.response?.data?.detail || "Failed to initialize payment";
+      toast.error(errorMsg);
+    } finally {
+      setProcessingPayment(false);
+    }
+  };
+
   const formatDate = (dateStr) => {
     if (!dateStr) return "Date TBD";
     const date = new Date(dateStr + "T00:00:00");
