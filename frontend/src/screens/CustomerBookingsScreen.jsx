@@ -68,7 +68,7 @@ const CustomerBookingsScreen = () => {
   const today = new Date().toISOString().split('T')[0];
   
   const upcomingBookings = bookings.filter(b => {
-    const isUpcomingStatus = ["pending", "confirmed"].includes(b.status);
+    const isUpcomingStatus = ["pending_payment", "pending", "confirmed"].includes(b.status);
     const isUpcomingDate = b.booking_date >= today;
     return isUpcomingStatus && isUpcomingDate;
   });
@@ -78,6 +78,38 @@ const CustomerBookingsScreen = () => {
     const isPastDate = b.booking_date < today;
     return isPastStatus || isPastDate;
   });
+
+  const handlePayNow = async (e, booking) => {
+    e.stopPropagation(); // Prevent card click
+
+    if (!userData?.email) {
+      toast.error("User email not found. Please complete your profile.");
+      return;
+    }
+
+    setPayingBookingId(booking.id);
+    try {
+      const response = await paymentsAPI.initialize({
+        amount: booking.total_amount || 0,
+        email: userData.email,
+        purpose: "booking_escrow",
+        booking_id: booking.id
+      });
+
+      if (response.data.status && response.data.authorization_url) {
+        toast.info("Redirecting to payment page...");
+        window.location.href = response.data.authorization_url;
+      } else {
+        toast.error(response.data.message || "Failed to initialize payment");
+      }
+    } catch (error) {
+      console.error("Payment initialization failed:", error);
+      const errorMsg = error.response?.data?.detail || "Failed to initialize payment";
+      toast.error(errorMsg);
+    } finally {
+      setPayingBookingId(null);
+    }
+  };
 
   const formatDate = (dateStr) => {
     if (!dateStr) return "Date TBD";
