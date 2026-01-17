@@ -14,7 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { CURRENCY } from "@/utils/constants";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
-import BottomNavigation from "@/components/BottomNavigation";
+import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation";
 
 const ProviderProfileScreen = () => {
   const navigate = useNavigate();
