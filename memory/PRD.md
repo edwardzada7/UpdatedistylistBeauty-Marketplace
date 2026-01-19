@@ -245,7 +245,7 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
   - Verified Bookings tab appears in bottom navigation for customers
 
 - **Phase 2.2 - Paystack Payment Integration** (January 17, 2026):
-  - ✅ Backend: `POST /api/payments/paystack/initialize` - Initialize payment for wallet top-up or booking escrow
+  - ✅ Backend: `POST /api/payments/paystack/initialize` - Initialize payment for wallet top-up ONLY
   - ✅ Backend: `GET /api/payments/paystack/verify` - Verify transaction & update wallet balances (idempotent)
   - ✅ Backend: `POST /api/webhooks/paystack` - Handle `charge.success` events with signature verification
   - ✅ Backend: `GET /api/wallet/me` - Get wallet balances (available_balance, escrow_balance)
@@ -253,22 +253,34 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
   - ✅ Backend: Escrow release on booking `completed`, refund on `canceled`
   - ✅ Backend: Added `pending_payment` status to valid booking statuses
   - ✅ Frontend: WalletScreen with real balances, top-up flow, transactions
-  - ✅ Frontend: CustomerBookingsScreen shows `pending_payment` status with Pay Now button
-  - ✅ Frontend: BookingDetailsScreen shows Pay Now button for pending_payment bookings
-  - ✅ Frontend: ProviderProfileScreen creates booking with `pending_payment` status and initiates payment
+  - ✅ Frontend: CustomerBookingsScreen shows `pending_payment` status with Pay from Wallet button
+  - ✅ Frontend: BookingDetailsScreen shows Pay from Wallet button for pending_payment bookings
+  - ✅ Frontend: ProviderProfileScreen creates booking with `pending_payment` status and wallet payment
   - ⚠️ **REQUIRES**: Run SQL migration `/app/backend/migrations/phase22_paystack_integration.sql`
-  - ⚠️ **REQUIRES**: Configure real Paystack TEST keys in `.env` files
+  - ⚠️ **REQUIRES**: Configure real Paystack TEST keys in `.env` files (for wallet top-up)
+
+- **Phase 2.2.1 - Wallet-Based Booking Payments** (January 19, 2026):
+  - ✅ Backend: `POST /api/bookings/{id}/pay-with-wallet` - Pay for booking using wallet balance
+  - ✅ Backend: Paystack now REJECTS `booking_escrow` purpose (only `wallet_topup` allowed)
+  - ✅ Backend: Wallet payment: deducts from available_balance, adds to escrow_balance
+  - ✅ Backend: 402 response when insufficient funds with `needed`, `available`, `shortfall`
+  - ✅ Backend: Idempotency - no double-debit on repeated calls
+  - ✅ Backend: Escrow release/refund with idempotency guards (checks wallet_transactions)
+  - ✅ Frontend: ProviderProfileScreen - new `payment` step with wallet balance display
+  - ✅ Frontend: "Pay from Wallet" button with Wallet icon (replaces "Pay Now")
+  - ✅ Frontend: Insufficient funds shows "Top Up Wallet" button linking to wallet screen
+  - ✅ **Testing**: 30/30 backend tests passed
 
 ---
 
 ## Backlog / Future Tasks
 
 ### P0 (High Priority)
-- [x] ~~Payment gateway integration (Paystack)~~ - **DONE** (Phase 2.2)
-- [ ] **REQUIRED**: Run Phase 2.2 database migration for wallet_transactions table
-- [ ] **REQUIRED**: Configure real Paystack TEST keys:
-  - Backend: `PAYSTACK_SECRET_KEY` in `/app/backend/.env`
-  - Frontend: `REACT_APP_PAYSTACK_PUBLIC_KEY` in `/app/frontend/.env`
+- [x] ~~Payment gateway integration (Paystack for wallet top-up)~~ - **DONE**
+- [x] ~~Wallet-based booking payments~~ - **DONE** (Phase 2.2.1)
+- [ ] **REQUIRED**: Run Phase 2.2 database migration for full transaction logging:
+  - `wallet_transactions.user_auth_id` column
+  - `bookings.payment_status` and `bookings.payment_reference` columns
 
 ### P1 (Medium Priority)
 - [ ] Full Wallet/Earnings section UI on Stylist Dashboard
