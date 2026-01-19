@@ -19,7 +19,7 @@ import {
   ChevronRight,
   CalendarClock,
   History,
-  CreditCard,
+  Wallet,
   Loader2
 } from "lucide-react";
 
