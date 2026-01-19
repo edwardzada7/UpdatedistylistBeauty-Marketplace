@@ -1326,6 +1326,194 @@ async def paystack_webhook(request: Request, x_paystack_signature: str = Header(
         return {"status": "ok"}  # Always return 200 to Paystack
 
 
+# =============================================================================
+# WALLET-BASED BOOKING PAYMENT (POST /api/bookings/{booking_id}/pay-with-wallet)
+# =============================================================================
+
+class WalletPaymentResponse(BaseModel):
+    status: str
+    message: str
+    booking_id: int
+    amount_paid: float
+    new_wallet_balance: float
+    new_escrow_balance: float
+
+
+@api_router.post("/bookings/{booking_id}/pay-with-wallet")
+async def pay_booking_with_wallet(
+    booking_id: int,
+    auth_id: str = Query(..., description="Customer's auth_id for authentication")
+):
+    """
+    Pay for a booking using wallet balance (escrow flow).
+    - Validates booking belongs to user and status is pending_payment
+    - Checks sufficient wallet balance
+    - Deducts from available_balance, adds to escrow_balance
+    - Creates wallet_transactions records
+    - Updates booking status to 'pending' (awaiting provider confirmation)
+    - Idempotent: if already paid, returns success without double-charging
+    """
+    try:
+        # 1. Validate booking exists
+        if not check_table_exists("bookings"):
+            raise HTTPException(status_code=404, detail="Bookings table not found")
+        
+        booking_response = supabase.table("bookings").select("*").eq("id", booking_id).execute()
+        
+        if not booking_response.data:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        
+        booking = booking_response.data[0]
+        
+        # 2. Validate booking belongs to user
+        if booking.get("customer_auth_id") != auth_id:
+            raise HTTPException(status_code=403, detail="You can only pay for your own bookings")
+        
+        # 3. Check if already paid (idempotency)
+        current_status = booking.get("status", "")
+        payment_status = booking.get("payment_status", "")
+        
+        if current_status not in ["pending_payment", "pending"] or payment_status == "paid":
+            # Already paid or in invalid state - return success for idempotency
+            wallet_response = supabase.table("wallets").select("*").eq("user_auth_id", auth_id).execute()
+            wallet = wallet_response.data[0] if wallet_response.data else {"balance": 0, "escrow_balance": 0}
+            
+            return WalletPaymentResponse(
+                status="success",
+                message="Booking already paid" if payment_status == "paid" else f"Booking status is {current_status}",
+                booking_id=booking_id,
+                amount_paid=0,
+                new_wallet_balance=float(wallet.get("balance", 0) or 0),
+                new_escrow_balance=float(wallet.get("escrow_balance", 0) or 0)
+            )
+        
+        # 4. Calculate total booking amount from booking_services
+        total_amount = 0
+        if check_table_exists("booking_services"):
+            services_response = supabase.table("booking_services").select("price").eq("booking_id", booking_id).execute()
+            if services_response.data:
+                total_amount = sum(float(svc.get("price", 0) or 0) for svc in services_response.data)
+        
+        # Fallback to booking total if no services found
+        if total_amount == 0:
+            total_amount = float(booking.get("total_amount", 0) or 0)
+        
+        if total_amount <= 0:
+            raise HTTPException(status_code=400, detail="Invalid booking amount")
+        
+        # 5. Get customer wallet
+        wallet_response = supabase.table("wallets").select("*").eq("user_auth_id", auth_id).execute()
+        
+        if not wallet_response.data:
+            # No wallet - insufficient funds
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "error": "Insufficient wallet balance",
+                    "needed": total_amount,
+                    "available": 0,
+                    "shortfall": total_amount
+                }
+            )
+        
+        wallet = wallet_response.data[0]
+        available_balance = float(wallet.get("balance", 0) or 0)
+        
+        # 6. Check sufficient balance
+        if available_balance < total_amount:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "error": "Insufficient wallet balance",
+                    "needed": total_amount,
+                    "available": available_balance,
+                    "shortfall": total_amount - available_balance
+                }
+            )
+        
+        # 7. Process payment - deduct from available, add to escrow
+        reference = f"wallet_booking_{booking_id}_{uuid.uuid4().hex[:8]}"
+        new_available = available_balance - total_amount
+        current_escrow = float(wallet.get("escrow_balance", 0) or 0)
+        new_escrow = current_escrow + total_amount
+        
+        # Update wallet balances
+        supabase.table("wallets").update({
+            "balance": new_available,
+            "escrow_balance": new_escrow
+        }).eq("id", wallet["id"]).execute()
+        
+        # 8. Create wallet_transactions records
+        if check_table_exists("wallet_transactions"):
+            # Debit transaction (from available)
+            supabase.table("wallet_transactions").insert({
+                "user_auth_id": auth_id,
+                "type": "BOOKING_PAYMENT",
+                "direction": "DEBIT",
+                "amount": total_amount,
+                "reference": reference,
+                "booking_id": booking_id,
+                "description": f"Payment for booking #{booking_id}",
+                "status": "completed",
+                "created_at": datetime.utcnow().isoformat()
+            }).execute()
+            
+            # Escrow hold transaction
+            supabase.table("wallet_transactions").insert({
+                "user_auth_id": auth_id,
+                "type": "ESCROW_HOLD",
+                "direction": "CREDIT",
+                "amount": total_amount,
+                "reference": reference,
+                "booking_id": booking_id,
+                "description": f"Escrow hold for booking #{booking_id}",
+                "status": "completed",
+                "created_at": datetime.utcnow().isoformat()
+            }).execute()
+        
+        # 9. Update booking status to 'pending' (awaiting provider confirmation)
+        supabase.table("bookings").update({
+            "status": "pending",
+            "payment_status": "paid",
+            "payment_reference": reference
+        }).eq("id", booking_id).execute()
+        
+        # 10. Create payment record
+        if check_table_exists("payments"):
+            supabase.table("payments").insert({
+                "reference": reference,
+                "email": booking.get("customer_email", ""),
+                "amount": total_amount,
+                "purpose": "booking_payment",
+                "payment_provider": "wallet",
+                "booking_id": booking_id,
+                "status": "success",
+                "processed": True,
+                "created_at": datetime.utcnow().isoformat(),
+                "processed_at": datetime.utcnow().isoformat()
+            }).execute()
+        
+        logging.info(f"Wallet payment successful: booking {booking_id}, amount {total_amount}, ref {reference}")
+        
+        return WalletPaymentResponse(
+            status="success",
+            message="Payment successful. Booking confirmed.",
+            booking_id=booking_id,
+            amount_paid=total_amount,
+            new_wallet_balance=new_available,
+            new_escrow_balance=new_escrow
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Wallet payment error for booking {booking_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Payment processing failed: {str(e)}"
+        )
+
+
 @api_router.get("/wallet/me")
 async def get_my_wallet(auth_id: str = Query(..., description="User's auth_id")):
     """Get current user's wallet with balances"""
