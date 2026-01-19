@@ -1231,6 +1231,16 @@ async def _release_escrow_to_provider(booking_id: int, provider_auth_id: str, cu
 async def _refund_escrow_to_customer(booking_id: int, customer_auth_id: str):
     """Refund escrow funds to customer when booking is canceled"""
     try:
+        # Check for idempotency - don't refund twice
+        if check_table_exists("wallet_transactions"):
+            existing_refund = supabase.table("wallet_transactions").select("id").eq(
+                "booking_id", booking_id
+            ).eq("type", "ESCROW_REFUND").execute()
+            
+            if existing_refund.data:
+                logging.info(f"Escrow already refunded for booking {booking_id}")
+                return
+        
         # Get the booking to find the amount
         booking_response = supabase.table("bookings").select("*").eq("id", booking_id).execute()
         if not booking_response.data:
@@ -1257,6 +1267,7 @@ async def _refund_escrow_to_customer(booking_id: int, customer_auth_id: str):
             return
         
         # Move from escrow to available balance for customer
+        refund_ref = f"escrow_refund_{booking_id}_{uuid.uuid4().hex[:8]}"
         customer_wallet = supabase.table("wallets").select("*").eq("user_auth_id", customer_auth_id).execute()
         if customer_wallet.data:
             wallet = customer_wallet.data[0]
@@ -1274,8 +1285,10 @@ async def _refund_escrow_to_customer(booking_id: int, customer_auth_id: str):
                 "type": "ESCROW_REFUND",
                 "direction": "CREDIT",
                 "amount": amount,
+                "reference": refund_ref,
                 "booking_id": booking_id,
                 "description": f"Refund for canceled booking #{booking_id}",
+                "status": "completed",
                 "created_at": datetime.utcnow().isoformat()
             }).execute()
         
