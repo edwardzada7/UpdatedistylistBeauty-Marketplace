@@ -857,8 +857,15 @@ def get_paystack_headers():
 
 @api_router.post("/payments/paystack/initialize")
 async def initialize_paystack_payment(request: PaymentInitRequest):
-    """Initialize a Paystack transaction for wallet top-up or booking escrow"""
+    """Initialize a Paystack transaction for wallet top-up ONLY"""
     try:
+        # ONLY allow wallet_topup - bookings must use wallet payment
+        if request.purpose != "wallet_topup":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Paystack is only available for wallet top-ups. Use /api/bookings/{id}/pay-with-wallet for booking payments."
+            )
+        
         headers = get_paystack_headers()
         if not headers:
             raise HTTPException(
@@ -871,20 +878,6 @@ async def initialize_paystack_payment(request: PaymentInitRequest):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Amount must be greater than 0"
-            )
-        
-        # Validate purpose
-        if request.purpose not in ["wallet_topup", "booking_escrow"]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Purpose must be 'wallet_topup' or 'booking_escrow'"
-            )
-        
-        # For booking_escrow, validate booking_id
-        if request.purpose == "booking_escrow" and not request.booking_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="booking_id is required for booking_escrow payments"
             )
         
         # Generate unique reference
@@ -901,7 +894,6 @@ async def initialize_paystack_payment(request: PaymentInitRequest):
             "reference": reference,
             "metadata": {
                 "purpose": request.purpose,
-                "booking_id": request.booking_id,
                 "custom_fields": [
                     {"display_name": "Purpose", "variable_name": "purpose", "value": request.purpose}
                 ]
@@ -939,7 +931,7 @@ async def initialize_paystack_payment(request: PaymentInitRequest):
             "email": request.email,
             "amount": request.amount,
             "purpose": request.purpose,
-            "booking_id": request.booking_id,
+            "payment_provider": "paystack",
             "status": "pending",
             "paystack_access_code": paystack_data["data"].get("access_code"),
             "created_at": datetime.utcnow().isoformat()
