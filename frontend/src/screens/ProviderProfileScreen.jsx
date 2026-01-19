@@ -53,23 +53,6 @@ const ProviderProfileScreen = () => {
       setLoadingWallet(false);
     }
   };
-      const response = await paymentsAPI.verify(reference);
-      if (response.data.status === "success") {
-        toast.success("Payment successful! Your booking is confirmed.", {
-          description: "The provider will be notified shortly."
-        });
-        // Navigate to bookings
-        navigate("/bookings", { replace: true });
-      } else {
-        toast.error(`Payment ${response.data.status}: ${response.data.message}`);
-      }
-    } catch (error) {
-      console.error("Payment verification failed:", error);
-      toast.error("Failed to verify payment. Please check your bookings.");
-    } finally {
-      setVerifyingPayment(false);
-    }
-  };
 
   useEffect(() => {
     fetchProviderProfile();
