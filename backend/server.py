@@ -1401,6 +1401,27 @@ async def pay_booking_with_wallet(
         current_status = booking.get("status", "")
         payment_status = booking.get("payment_status", "")
         
+        # If status is 'pending' (not 'pending_payment'), check if already paid
+        # This handles the case where payment_status column doesn't exist
+        if current_status == "pending":
+            # Check if there's already a payment record for this booking
+            if check_table_exists("payments"):
+                existing_payment = supabase.table("payments").select("id").eq(
+                    "booking_id", booking_id
+                ).eq("status", "success").execute()
+                if existing_payment.data:
+                    # Already paid - return success for idempotency
+                    wallet_response = supabase.table("wallets").select("*").eq("user_auth_id", auth_id).execute()
+                    wallet = wallet_response.data[0] if wallet_response.data else {"balance": 0, "escrow_balance": 0}
+                    return WalletPaymentResponse(
+                        status="success",
+                        message="Booking already paid",
+                        booking_id=booking_id,
+                        amount_paid=0,
+                        new_wallet_balance=float(wallet.get("balance", 0) or 0),
+                        new_escrow_balance=float(wallet.get("escrow_balance", 0) or 0)
+                    )
+        
         if current_status not in ["pending_payment", "pending"] or payment_status == "paid":
             # Already paid or in invalid state - return success for idempotency
             wallet_response = supabase.table("wallets").select("*").eq("user_auth_id", auth_id).execute()
