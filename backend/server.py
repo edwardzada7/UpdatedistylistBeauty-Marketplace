@@ -1471,33 +1471,37 @@ async def pay_booking_with_wallet(
             "escrow_balance": new_escrow
         }).eq("id", wallet["id"]).execute()
         
-        # 8. Create wallet_transactions records
-        if check_table_exists("wallet_transactions"):
-            # Debit transaction (from available)
-            supabase.table("wallet_transactions").insert({
-                "user_auth_id": auth_id,
-                "type": "BOOKING_PAYMENT",
-                "direction": "DEBIT",
-                "amount": total_amount,
-                "reference": reference,
-                "booking_id": booking_id,
-                "description": f"Payment for booking #{booking_id}",
-                "status": "completed",
-                "created_at": datetime.utcnow().isoformat()
-            }).execute()
-            
-            # Escrow hold transaction
-            supabase.table("wallet_transactions").insert({
-                "user_auth_id": auth_id,
-                "type": "ESCROW_HOLD",
-                "direction": "CREDIT",
-                "amount": total_amount,
-                "reference": reference,
-                "booking_id": booking_id,
-                "description": f"Escrow hold for booking #{booking_id}",
-                "status": "completed",
-                "created_at": datetime.utcnow().isoformat()
-            }).execute()
+        # 8. Create wallet_transactions records (non-blocking - don't fail payment if logging fails)
+        try:
+            if check_table_exists("wallet_transactions"):
+                # Debit transaction (from available)
+                supabase.table("wallet_transactions").insert({
+                    "user_auth_id": auth_id,
+                    "type": "BOOKING_PAYMENT",
+                    "direction": "DEBIT",
+                    "amount": total_amount,
+                    "reference": reference,
+                    "booking_id": booking_id,
+                    "description": f"Payment for booking #{booking_id}",
+                    "status": "completed",
+                    "created_at": datetime.utcnow().isoformat()
+                }).execute()
+                
+                # Escrow hold transaction
+                supabase.table("wallet_transactions").insert({
+                    "user_auth_id": auth_id,
+                    "type": "ESCROW_HOLD",
+                    "direction": "CREDIT",
+                    "amount": total_amount,
+                    "reference": reference,
+                    "booking_id": booking_id,
+                    "description": f"Escrow hold for booking #{booking_id}",
+                    "status": "completed",
+                    "created_at": datetime.utcnow().isoformat()
+                }).execute()
+        except Exception as tx_error:
+            # Log but don't fail the payment - wallet was already updated
+            logging.warning(f"Failed to log wallet transactions for booking {booking_id}: {str(tx_error)}")
         
         # 9. Update booking status to 'pending' (awaiting provider confirmation)
         supabase.table("bookings").update({
