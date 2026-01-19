@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,9 +7,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Star, CheckCircle2, MapPin, Calendar, Clock, Store, Home, Car, ShoppingCart, User, Loader2, ChevronLeft, ChevronRight, CreditCard } from "lucide-react";
+import { ArrowLeft, Star, CheckCircle2, MapPin, Calendar, Clock, Store, Home, Car, ShoppingCart, User, Loader2, ChevronLeft, ChevronRight, Wallet, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { providersAPI, bookingsAPI, paymentsAPI } from "@/services/api";
+import { providersAPI, bookingsAPI, paymentsAPI, walletsAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { CURRENCY } from "@/utils/constants";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -19,35 +19,40 @@ import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation
 const ProviderProfileScreen = () => {
   const navigate = useNavigate();
   const { userId } = useParams();
-  const [searchParams] = useSearchParams();
-  const { userData } = useAuth();
+  const { userData, user } = useAuth();
   const [provider, setProvider] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedServices, setSelectedServices] = useState({});
   
+  // Wallet state
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [loadingWallet, setLoadingWallet] = useState(false);
+  
   // Booking flow state - Phase 2.1
-  const [bookingStep, setBookingStep] = useState('services'); // 'services' | 'datetime' | 'confirm'
+  const [bookingStep, setBookingStep] = useState('services'); // 'services' | 'datetime' | 'confirm' | 'payment'
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedSlot, setSelectedSlot] = useState('');
   const [availableSlots, setAvailableSlots] = useState([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [bookingNotes, setBookingNotes] = useState('');
   const [submittingBooking, setSubmittingBooking] = useState(false);
-  const [verifyingPayment, setVerifyingPayment] = useState(false);
+  const [pendingBookingId, setPendingBookingId] = useState(null);
+  const [processingWalletPayment, setProcessingWalletPayment] = useState(false);
 
-  // Check for payment callback
-  useEffect(() => {
-    const reference = searchParams.get("reference");
-    const trxref = searchParams.get("trxref");
-    
-    if (reference || trxref) {
-      verifyPayment(reference || trxref);
-    }
-  }, [searchParams]);
-
-  const verifyPayment = async (reference) => {
-    setVerifyingPayment(true);
+  // Fetch wallet balance when entering payment step
+  const fetchWalletBalance = async () => {
+    if (!user?.id) return;
+    setLoadingWallet(true);
     try {
+      const response = await walletsAPI.getMyWallet(user.id);
+      setWalletBalance(response.data?.available_balance || 0);
+    } catch (error) {
+      console.error("Failed to fetch wallet:", error);
+      setWalletBalance(0);
+    } finally {
+      setLoadingWallet(false);
+    }
+  };
       const response = await paymentsAPI.verify(reference);
       if (response.data.status === "success") {
         toast.success("Payment successful! Your booking is confirmed.", {
