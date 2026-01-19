@@ -194,30 +194,47 @@ const CustomerBookingsScreen = () => {
   });
 
   const handlePayNow = async (booking) => {
-    if (!userData?.email) {
-      toast.error("User email not found. Please complete your profile.");
+    if (!userData?.auth_id) {
+      toast.error("Authentication required. Please log in.");
       return;
     }
 
     setPayingBookingId(booking.id);
     try {
-      const response = await paymentsAPI.initialize({
-        amount: booking.total_amount || 0,
-        email: userData.email,
-        purpose: "booking_escrow",
-        booking_id: booking.id
-      });
-
-      if (response.data.status && response.data.authorization_url) {
-        toast.info("Redirecting to payment page...");
-        window.location.href = response.data.authorization_url;
-      } else {
-        toast.error(response.data.message || "Failed to initialize payment");
+      // Use wallet-based payment instead of Paystack
+      const response = await paymentsAPI.payWithWallet(booking.id, userData.auth_id);
+      
+      if (response.data.status === "success") {
+        toast.success("Payment successful!", {
+          description: "Your booking has been confirmed."
+        });
+        // Refresh bookings list
+        fetchBookings();
       }
     } catch (error) {
-      console.error("Payment initialization failed:", error);
-      const errorMsg = error.response?.data?.detail || "Failed to initialize payment";
-      toast.error(errorMsg);
+      console.error("Wallet payment failed:", error);
+      
+      // Handle insufficient funds (402)
+      if (error.response?.status === 402) {
+        const detail = error.response.data?.detail;
+        if (detail && typeof detail === 'object') {
+          toast.error(`Insufficient balance. Need ${CURRENCY}${detail.needed?.toLocaleString()}, have ${CURRENCY}${detail.available?.toLocaleString()}`, {
+            action: {
+              label: "Top Up",
+              onClick: () => navigate("/wallet")
+            }
+          });
+        } else {
+          toast.error("Insufficient wallet balance. Please top up your wallet.", {
+            action: {
+              label: "Top Up",
+              onClick: () => navigate("/wallet")
+            }
+          });
+        }
+      } else {
+        toast.error(error.response?.data?.detail || "Payment failed. Please try again.");
+      }
     } finally {
       setPayingBookingId(null);
     }
