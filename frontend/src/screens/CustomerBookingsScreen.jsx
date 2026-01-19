@@ -130,8 +130,8 @@ const BookingCard = ({ booking, onPayNow, isPaying, navigate }) => {
                   </>
                 ) : (
                   <>
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    Pay Now
+                    <Wallet className="h-4 w-4 mr-2" />
+                    Pay from Wallet
                   </>
                 )}
               </Button>
