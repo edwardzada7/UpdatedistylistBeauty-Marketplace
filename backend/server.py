@@ -1504,7 +1504,7 @@ async def pay_booking_with_wallet(
             logging.warning(f"Failed to log wallet transactions for booking {booking_id}: {str(tx_error)}")
         
         # 9. Update booking status to 'pending' (awaiting provider confirmation)
-        # Try with payment_reference first, fallback to just status update if column doesn't exist
+        # Handle missing columns gracefully
         try:
             supabase.table("bookings").update({
                 "status": "pending",
@@ -1512,13 +1512,17 @@ async def pay_booking_with_wallet(
                 "payment_reference": reference
             }).eq("id", booking_id).execute()
         except Exception as booking_update_error:
-            if "payment_reference" in str(booking_update_error):
-                # Column doesn't exist, update without it
-                logging.warning(f"payment_reference column missing, updating without it")
-                supabase.table("bookings").update({
-                    "status": "pending",
-                    "payment_status": "paid"
-                }).eq("id", booking_id).execute()
+            error_str = str(booking_update_error)
+            if "payment_reference" in error_str or "payment_status" in error_str:
+                # Columns don't exist, try minimal update
+                logging.warning(f"Some payment columns missing, updating status only: {error_str}")
+                try:
+                    supabase.table("bookings").update({
+                        "status": "pending"
+                    }).eq("id", booking_id).execute()
+                except Exception as minimal_error:
+                    logging.error(f"Failed to update booking status: {minimal_error}")
+                    raise
             else:
                 raise
         
