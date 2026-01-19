@@ -350,7 +350,7 @@ This creates/updates:
 ---
 
 ## Last Updated
-- **Date**: January 17, 2026
-- **Phase**: 2.2 - Paystack Payment Integration (Complete)
-- **Status**: Backend 100% (23/23 tests passed), Frontend code verified
-- **Next Steps**: Run DB migration, configure Paystack keys
+- **Date**: January 19, 2026
+- **Phase**: 2.2.1 - Wallet-Based Booking Payments (Complete)
+- **Status**: Backend 100% (30/30 tests passed), Frontend code verified
+- **Next Steps**: Run DB migration for full transaction logging
