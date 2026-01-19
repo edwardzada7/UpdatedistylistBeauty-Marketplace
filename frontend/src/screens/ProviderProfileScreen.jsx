@@ -450,6 +450,140 @@ const ProviderProfileScreen = () => {
     );
   }
 
+  // Payment step - wallet-based payment
+  if (bookingStep === 'payment') {
+    const insufficientFunds = walletBalance < totalPrice;
+    const shortfall = totalPrice - walletBalance;
+    
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <header className="bg-white shadow-sm border-b">
+          <div className="container mx-auto px-4 py-4 flex items-center gap-4">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleBackToDateTime}
+              data-testid="back-to-datetime-btn"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <h1 className="text-xl font-bold">Complete Payment</h1>
+          </div>
+        </header>
+
+        <div className="container mx-auto px-4 py-6 pb-40 md:pb-32">
+          <div className="max-w-lg mx-auto space-y-4">
+            {/* Booking Summary */}
+            <Card className="bg-purple-50 border-purple-200">
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-600 mb-2">Booking Summary</p>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Provider</span>
+                    <span className="font-medium">{provider.display_name || provider.name}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Date</span>
+                    <span className="font-medium">{selectedDate}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Time</span>
+                    <span className="font-medium">{selectedSlot}</span>
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-purple-200">
+                  {selectedServicesList.map(s => (
+                    <div key={s.id} className="flex justify-between text-sm">
+                      <span>{s.sub_service_name}</span>
+                      <span className="font-medium">{CURRENCY}{s.price?.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 pt-3 border-t border-purple-200 flex justify-between">
+                  <span className="font-semibold">Total Amount</span>
+                  <span className="font-bold text-purple-600 text-lg">
+                    {CURRENCY}{totalPrice.toLocaleString()}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Wallet Balance Card */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Wallet className="h-5 w-5 text-purple-600" />
+                    <span className="font-medium">Wallet Balance</span>
+                  </div>
+                  <span className={`text-xl font-bold ${insufficientFunds ? 'text-red-600' : 'text-green-600'}`}>
+                    {loadingWallet ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      `${CURRENCY}${walletBalance.toLocaleString()}`
+                    )}
+                  </span>
+                </div>
+                
+                {insufficientFunds && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-red-700">Insufficient Balance</p>
+                        <p className="text-sm text-red-600">
+                          You need {CURRENCY}{shortfall.toLocaleString()} more to complete this booking.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {insufficientFunds ? (
+                  <Button
+                    className="w-full bg-purple-600 hover:bg-purple-700"
+                    onClick={handleTopUpWallet}
+                    data-testid="topup-wallet-btn"
+                  >
+                    <Wallet className="h-4 w-4 mr-2" />
+                    Top Up Wallet
+                  </Button>
+                ) : (
+                  <Button
+                    className="w-full bg-green-600 hover:bg-green-700"
+                    onClick={handlePayWithWallet}
+                    disabled={processingWalletPayment || loadingWallet}
+                    data-testid="pay-with-wallet-btn"
+                  >
+                    {processingWalletPayment ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Processing Payment...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                        Pay {CURRENCY}{totalPrice.toLocaleString()} from Wallet
+                      </>
+                    )}
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Payment Info */}
+            <div className="text-center text-sm text-gray-500 space-y-1">
+              <p>Funds will be held in escrow until service is completed.</p>
+              <p>You can cancel for a full refund before the provider confirms.</p>
+            </div>
+          </div>
+        </div>
+
+        <BottomNavigation />
+      </div>
+    );
+  }
+
   // Default: Services selection step
   return (
     <div className="min-h-screen bg-gray-50">
