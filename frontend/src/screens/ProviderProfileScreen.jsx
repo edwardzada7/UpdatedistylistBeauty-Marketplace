@@ -144,17 +144,18 @@ const ProviderProfileScreen = () => {
     setSelectedDate('');
     setSelectedSlot('');
     setAvailableSlots([]);
+    setPendingBookingId(null);
   };
 
-  // Confirm booking
+  // Go back to datetime from payment
+  const handleBackToDateTime = () => {
+    setBookingStep('datetime');
+  };
+
+  // Create booking and proceed to payment step
   const handleConfirmBooking = async () => {
     if (!selectedSlot) {
       toast.error("Please select a time slot");
-      return;
-    }
-
-    if (!userData?.email) {
-      toast.error("User email not found. Please complete your profile.");
       return;
     }
     
@@ -164,14 +165,14 @@ const ProviderProfileScreen = () => {
       // Create booking with pending_payment status
       const bookingData = {
         provider_id: parseInt(userId),
-        customer_id: userData?.id,  // Legacy integer ID for backward compatibility
-        customer_auth_id: userData?.auth_id,  // UUID auth_id for proper filtering
+        customer_id: userData?.id,
+        customer_auth_id: userData?.auth_id,
         booking_date: selectedDate,
         booking_time: selectedSlot,
         service_ids: selectedServicesList.map(s => s.id),
         service_duration_minutes: totalDuration,
         notes: bookingNotes || null,
-        status: "pending_payment"  // Start with pending_payment status
+        status: "pending_payment"
       };
       
       const bookingResponse = await bookingsAPI.create(bookingData);
@@ -180,34 +181,82 @@ const ProviderProfileScreen = () => {
       if (!newBookingId) {
         throw new Error("Booking created but no ID returned");
       }
-
-      // Initialize payment for booking escrow
-      const paymentResponse = await paymentsAPI.initialize({
-        amount: totalPrice,
-        email: userData.email,
-        purpose: "booking_escrow",
-        booking_id: newBookingId
+      
+      setPendingBookingId(newBookingId);
+      
+      // Fetch wallet balance and proceed to payment step
+      await fetchWalletBalance();
+      setBookingStep('payment');
+      
+      toast.success("Booking created!", {
+        description: "Please complete payment to confirm."
       });
-
-      if (paymentResponse.data.status && paymentResponse.data.authorization_url) {
-        toast.info("Redirecting to payment page...", {
-          description: "Complete payment to confirm your booking"
-        });
-        // Redirect to Paystack checkout
-        window.location.href = paymentResponse.data.authorization_url;
-      } else {
-        // Payment initialization failed - booking still created as pending_payment
-        toast.warning("Booking created but payment failed to initialize", {
-          description: "You can pay later from your bookings page"
-        });
-        navigate("/bookings");
-      }
       
     } catch (error) {
       console.error("Booking failed:", error);
       
       // Handle 409 conflict
       if (error.response?.status === 409) {
+        toast.error("That time is no longer available. Please choose another slot.");
+        fetchAvailableSlots(selectedDate);
+      } else {
+        toast.error(error.response?.data?.detail || "Failed to create booking. Please try again.");
+      }
+    } finally {
+      setSubmittingBooking(false);
+    }
+  };
+
+  // Pay with wallet balance
+  const handlePayWithWallet = async () => {
+    if (!pendingBookingId || !userData?.auth_id) {
+      toast.error("Booking information missing. Please try again.");
+      return;
+    }
+    
+    setProcessingWalletPayment(true);
+    
+    try {
+      const response = await paymentsAPI.payWithWallet(pendingBookingId, userData.auth_id);
+      
+      if (response.data.status === "success") {
+        toast.success("Payment successful!", {
+          description: "Your booking has been confirmed."
+        });
+        
+        // Reset state and navigate to bookings
+        setSelectedServices({});
+        setBookingStep('services');
+        setSelectedDate('');
+        setSelectedSlot('');
+        setBookingNotes('');
+        setPendingBookingId(null);
+        
+        navigate("/bookings");
+      }
+    } catch (error) {
+      console.error("Wallet payment failed:", error);
+      
+      // Handle insufficient funds (402)
+      if (error.response?.status === 402) {
+        const detail = error.response.data?.detail;
+        if (detail && typeof detail === 'object') {
+          toast.error(`Insufficient balance. Need ${CURRENCY}${detail.needed?.toLocaleString()}, have ${CURRENCY}${detail.available?.toLocaleString()}`);
+        } else {
+          toast.error("Insufficient wallet balance");
+        }
+      } else {
+        toast.error(error.response?.data?.detail || "Payment failed. Please try again.");
+      }
+    } finally {
+      setProcessingWalletPayment(false);
+    }
+  };
+
+  // Navigate to wallet top-up
+  const handleTopUpWallet = () => {
+    navigate("/wallet");
+  };
         toast.error("That time is no longer available. Please choose another slot.");
         // Refresh slots
         fetchAvailableSlots(selectedDate);
