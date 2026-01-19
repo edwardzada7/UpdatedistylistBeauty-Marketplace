@@ -1139,6 +1139,16 @@ async def _credit_escrow(user_auth_id: str, amount: float, booking_id: int, refe
 async def _release_escrow_to_provider(booking_id: int, provider_auth_id: str, customer_auth_id: str):
     """Release escrow funds to provider when booking is completed"""
     try:
+        # Check for idempotency - don't release twice
+        if check_table_exists("wallet_transactions"):
+            existing_release = supabase.table("wallet_transactions").select("id").eq(
+                "booking_id", booking_id
+            ).eq("type", "ESCROW_RELEASE").execute()
+            
+            if existing_release.data:
+                logging.info(f"Escrow already released for booking {booking_id}")
+                return
+        
         # Get the booking to find the amount
         booking_response = supabase.table("bookings").select("*").eq("id", booking_id).execute()
         if not booking_response.data:
@@ -1185,6 +1195,7 @@ async def _release_escrow_to_provider(booking_id: int, provider_auth_id: str, cu
             }).execute()
         
         # Record transactions
+        release_ref = f"escrow_release_{booking_id}_{uuid.uuid4().hex[:8]}"
         if check_table_exists("wallet_transactions"):
             # Customer debit from escrow
             supabase.table("wallet_transactions").insert({
@@ -1192,8 +1203,10 @@ async def _release_escrow_to_provider(booking_id: int, provider_auth_id: str, cu
                 "type": "ESCROW_RELEASE",
                 "direction": "DEBIT",
                 "amount": amount,
+                "reference": release_ref,
                 "booking_id": booking_id,
                 "description": f"Payment released for booking #{booking_id}",
+                "status": "completed",
                 "created_at": datetime.utcnow().isoformat()
             }).execute()
             
@@ -1203,8 +1216,10 @@ async def _release_escrow_to_provider(booking_id: int, provider_auth_id: str, cu
                 "type": "EARNINGS",
                 "direction": "CREDIT",
                 "amount": amount,
+                "reference": release_ref,
                 "booking_id": booking_id,
                 "description": f"Earnings from booking #{booking_id}",
+                "status": "completed",
                 "created_at": datetime.utcnow().isoformat()
             }).execute()
         
