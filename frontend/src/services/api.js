@@ -218,14 +218,17 @@ export const walletsAPI = {
   getTransactions: (authId, limit = 50) => api.get(`/wallet/transactions?auth_id=${authId}&limit=${limit}`),
 };
 
-// ==================== PAYMENTS API (Phase 2.2 - Paystack) ====================
+// ==================== PAYMENTS API (Paystack for wallet top-up only) ====================
 
 export const paymentsAPI = {
-  // Initialize a Paystack payment
+  // Initialize a Paystack payment (ONLY for wallet top-up)
   initialize: (data) => api.post("/payments/paystack/initialize", data),
   
   // Verify a payment by reference
   verify: (reference) => api.get(`/payments/paystack/verify?reference=${reference}`),
+  
+  // Pay for a booking using wallet balance (NEW - wallet-based payment)
+  payWithWallet: (bookingId, authId) => api.post(`/bookings/${bookingId}/pay-with-wallet?auth_id=${authId}`),
 };
 
 // ==================== UTILITY API ====================
