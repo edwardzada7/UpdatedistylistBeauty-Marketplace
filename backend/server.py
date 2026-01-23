@@ -1072,8 +1072,22 @@ async def verify_paystack_payment(reference: str = Query(..., description="Payme
 
 
 async def _credit_wallet(user_auth_id: str, amount: float, tx_type: str, reference: str):
-    """Credit user's available wallet balance"""
+    """Credit user's available wallet balance with proper transaction logging"""
     try:
+        # Idempotency check - don't credit twice for same reference
+        if check_table_exists("payments"):
+            existing = supabase.table("payments").select("id, processed").eq("reference", reference).execute()
+            if existing.data and existing.data[0].get("processed"):
+                logging.info(f"Reference {reference} already processed, skipping wallet credit")
+                return
+        
+        # Also check wallet_transactions for this reference
+        if check_table_exists("wallet_transactions"):
+            existing_tx = supabase.table("wallet_transactions").select("id").eq("reference", reference).execute()
+            if existing_tx.data:
+                logging.info(f"Transaction already exists for reference {reference}, skipping")
+                return
+        
         # Get or create wallet
         wallet_response = supabase.table("wallets").select("*").eq("user_auth_id", user_auth_id).execute()
         
@@ -1088,17 +1102,22 @@ async def _credit_wallet(user_auth_id: str, amount: float, tx_type: str, referen
                 "balance": amount
             }).execute()
         
-        # Record transaction
+        # Record transaction with proper field values matching DB constraints
+        # type: 'credit' or 'debit', direction: 'credit' or 'debit', status: 'pending'|'completed'|'failed'
         if check_table_exists("wallet_transactions"):
             supabase.table("wallet_transactions").insert({
                 "user_auth_id": user_auth_id,
-                "type": tx_type,
-                "direction": "CREDIT",
+                "auth_id": user_auth_id,  # Ensure auth_id is always set
+                "type": "credit",  # DB constraint: 'credit' or 'debit'
+                "direction": "credit",  # lowercase
                 "amount": amount,
                 "reference": reference,
-                "description": f"Wallet {tx_type.lower().replace('_', ' ')}",
+                "description": f"Wallet top-up: {CURRENCY}{amount:,.2f}",
+                "status": "completed",
                 "created_at": datetime.utcnow().isoformat()
             }).execute()
+        
+        logging.info(f"Wallet credited: {amount} for user {user_auth_id}, ref {reference}")
     except Exception as e:
         logging.error(f"Failed to credit wallet: {str(e)}")
 
