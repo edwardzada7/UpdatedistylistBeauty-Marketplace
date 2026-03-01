@@ -25,7 +25,8 @@ import {
   Car,
   RefreshCcw,
   CreditCard,
-  Wallet
+  Wallet,
+  MessageCircle
 } from "lucide-react";
 
 const STATUS_CONFIG = {
