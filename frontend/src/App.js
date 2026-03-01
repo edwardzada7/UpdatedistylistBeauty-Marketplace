@@ -319,6 +319,12 @@ function AppRoutes() {
 
       {/* Catch all - redirect based on auth state and role */}
       <Route path="*" element={<RoleBasedRedirect />} />
+
+      {/* ============================================= */}
+      {/* ADMIN ROUTES - Separate from user auth */}
+      {/* ============================================= */}
+      <Route path="/admin" element={<AdminLoginScreen />} />
+      <Route path="/admin/withdrawals" element={<AdminWithdrawalsScreen />} />
     </Routes>
   );
 }
