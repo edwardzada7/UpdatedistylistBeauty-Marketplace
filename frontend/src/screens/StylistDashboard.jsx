@@ -38,7 +38,7 @@ const StylistDashboard = () => {
   const navigate = useNavigate();
   const { userData, providerData, displayName, isProvider, signOut } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [walletBalance, setWalletBalance] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const [activeServices, setActiveServices] = useState([]);
   const [stats, setStats] = useState({
     totalServices: 0,
@@ -47,9 +47,51 @@ const StylistDashboard = () => {
     completedBookings: 0,
     pendingBookings: 0
   });
+  
+  // Wallet/Earnings metrics from new endpoint
+  const [walletMetrics, setWalletMetrics] = useState({
+    available_balance: 0,
+    escrow_balance: 0,
+    total_balance: 0,
+    total_earnings: 0,
+    pending_withdrawals_total: 0,
+    last_7_days_earnings: 0,
+    last_30_days_earnings: 0,
+    recent_transactions: []
+  });
+  const [metricsLoading, setMetricsLoading] = useState(true);
+  const [metricsError, setMetricsError] = useState(null);
 
   const providerId = userData?.id;
   const authId = userData?.auth_id;
+
+  // Load wallet/earnings metrics
+  const loadWalletMetrics = useCallback(async () => {
+    if (!authId) return;
+    
+    setMetricsLoading(true);
+    setMetricsError(null);
+    
+    try {
+      const response = await providersAPI.getDashboardMetrics(authId);
+      setWalletMetrics(response.data || {
+        available_balance: 0,
+        escrow_balance: 0,
+        total_balance: 0,
+        total_earnings: 0,
+        pending_withdrawals_total: 0,
+        last_7_days_earnings: 0,
+        last_30_days_earnings: 0,
+        recent_transactions: []
+      });
+    } catch (error) {
+      console.error("Failed to load wallet metrics:", error);
+      setMetricsError("Failed to load earnings data");
+    } finally {
+      setMetricsLoading(false);
+      setRefreshing(false);
+    }
+  }, [authId]);
 
   // Load dashboard data
   useEffect(() => {
@@ -92,15 +134,6 @@ const StylistDashboard = () => {
           completedBookings: bookingMetrics.completed_count || 0
         });
 
-        // Load wallet balance
-        try {
-          const walletResponse = await walletsAPI.getByAuthId(userData?.auth_id);
-          setWalletBalance(walletResponse.data?.balance || 0);
-        } catch (e) {
-          // Wallet might not exist
-          setWalletBalance(0);
-        }
-
       } catch (error) {
         console.error("Failed to load dashboard:", error);
       } finally {
@@ -109,7 +142,13 @@ const StylistDashboard = () => {
     };
 
     loadDashboardData();
-  }, [providerId, authId, userData?.auth_id]);
+    loadWalletMetrics();
+  }, [providerId, authId, loadWalletMetrics]);
+
+  const handleRefreshMetrics = () => {
+    setRefreshing(true);
+    loadWalletMetrics();
+  };
 
   const handleSignOut = async () => {
     try {
