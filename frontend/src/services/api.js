@@ -285,6 +285,29 @@ export const chatAPI = {
   getUnreadCount: (authId) => api.get(`/chat/unread-count?auth_id=${authId}`),
 };
 
+// ==================== REVIEWS API (Phase 3) ====================
+
+export const reviewsAPI = {
+  // Create a review for a booking
+  create: (authId, data) => api.post(`/reviews?auth_id=${authId}`, data),
+  
+  // Get reviews for a provider with aggregates
+  getProviderReviews: (providerAuthId, limit = 20, offset = 0) => 
+    api.get(`/providers/${providerAuthId}/reviews?limit=${limit}&offset=${offset}`),
+  
+  // Get my reviews (as customer or provider)
+  getMyReviews: (authId, role, limit = 50, offset = 0) => 
+    api.get(`/reviews/me?auth_id=${authId}&role=${role}&limit=${limit}&offset=${offset}`),
+  
+  // Get review for a specific booking
+  getByBooking: (bookingId, authId) => 
+    api.get(`/reviews/by-booking/${bookingId}?auth_id=${authId}`),
+  
+  // Provider reply to a review
+  reply: (reviewId, authId, data) => 
+    api.post(`/reviews/${reviewId}/reply?auth_id=${authId}`, data),
+};
+
 // ==================== UTILITY API ====================
 
 export const utilityAPI = {
