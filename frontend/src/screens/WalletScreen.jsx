@@ -385,6 +385,19 @@ export default function WalletScreen() {
                 Top Up Wallet
               </Button>
             )}
+
+            {/* Withdraw Button (for providers only) */}
+            {isProvider && (
+              <Button 
+                className="w-full mt-6 bg-white text-purple-700 hover:bg-purple-50"
+                onClick={() => setShowWithdrawModal(true)}
+                disabled={(wallet.available_balance || 0) <= 0}
+                data-testid="withdraw-btn"
+              >
+                <Banknote className="h-4 w-4 mr-2" />
+                Withdraw Funds
+              </Button>
+            )}
           </CardContent>
         </Card>
 
