@@ -2544,18 +2544,38 @@ async def get_my_notifications(
         if not check_table_exists("notifications"):
             return []
         
-        query = supabase.table("notifications").select("*").eq(
-            "recipient_auth_id", auth_id
-        )
-        
-        if unread_only:
-            query = query.eq("read", False)
-        
-        response = query.order("created_at", desc=True).range(
-            offset, offset + limit - 1
-        ).execute()
-        
-        return response.data or []
+        # Try new schema (recipient_auth_id) first
+        try:
+            query = supabase.table("notifications").select("*").eq(
+                "recipient_auth_id", auth_id
+            )
+            
+            if unread_only:
+                query = query.eq("read", False)
+            
+            response = query.order("created_at", desc=True).range(
+                offset, offset + limit - 1
+            ).execute()
+            
+            return response.data or []
+        except Exception:
+            # Fallback to old schema (user_id)
+            try:
+                query = supabase.table("notifications").select("*").eq(
+                    "user_id", auth_id
+                )
+                
+                if unread_only:
+                    query = query.eq("read", False)
+                
+                response = query.order("created_at", desc=True).range(
+                    offset, offset + limit - 1
+                ).execute()
+                
+                return response.data or []
+            except Exception as e:
+                logging.warning(f"Fallback notification query failed: {e}")
+                return []
         
     except Exception as e:
         logging.error(f"Failed to fetch notifications: {str(e)}")
@@ -2573,11 +2593,23 @@ async def get_unread_count(
         if not check_table_exists("notifications"):
             return {"count": 0}
         
-        response = supabase.table("notifications").select(
-            "*", count="exact"
-        ).eq("recipient_auth_id", auth_id).eq("read", False).execute()
-        
-        return {"count": response.count or 0}
+        # Try new schema first
+        try:
+            response = supabase.table("notifications").select(
+                "*", count="exact"
+            ).eq("recipient_auth_id", auth_id).eq("read", False).execute()
+            
+            return {"count": response.count or 0}
+        except Exception:
+            # Fallback to old schema
+            try:
+                response = supabase.table("notifications").select(
+                    "*", count="exact"
+                ).eq("user_id", auth_id).eq("read", False).execute()
+                
+                return {"count": response.count or 0}
+            except Exception:
+                return {"count": 0}
         
     except Exception as e:
         logging.error(f"Failed to get unread count: {str(e)}")
