@@ -1562,8 +1562,25 @@ async def pay_booking_with_wallet(
                 }
             )
         
-        # 7. Process payment - deduct from available, add to escrow
-        reference = f"wallet_booking_{booking_id}_{uuid.uuid4().hex[:8]}"
+        # 7. Check idempotency - prevent double payment for same booking
+        payment_ref = f"wallet_booking_{booking_id}"
+        if check_table_exists("payments"):
+            existing_payment = supabase.table("payments").select("id, reference").eq(
+                "booking_id", booking_id
+            ).eq("status", "success").eq("payment_provider", "wallet").execute()
+            if existing_payment.data:
+                logging.info(f"Booking {booking_id} already paid via wallet, returning success")
+                return WalletPaymentResponse(
+                    status="success",
+                    message="Booking already paid",
+                    booking_id=booking_id,
+                    amount_paid=0,
+                    new_wallet_balance=available_balance,
+                    new_escrow_balance=float(wallet.get("escrow_balance", 0) or 0)
+                )
+        
+        # 8. Process payment - deduct from available, add to escrow
+        reference = f"{payment_ref}_{uuid.uuid4().hex[:8]}"
         new_available = available_balance - total_amount
         current_escrow = float(wallet.get("escrow_balance", 0) or 0)
         new_escrow = current_escrow + total_amount
@@ -1574,31 +1591,19 @@ async def pay_booking_with_wallet(
             "escrow_balance": new_escrow
         }).eq("id", wallet["id"]).execute()
         
-        # 8. Create wallet_transactions records (non-blocking - don't fail payment if logging fails)
+        # 9. Create wallet_transactions records with proper DB constraint values
         try:
             if check_table_exists("wallet_transactions"):
-                # Debit transaction (from available)
+                # Single transaction for booking payment (debit from available to escrow)
                 supabase.table("wallet_transactions").insert({
                     "user_auth_id": auth_id,
-                    "type": "BOOKING_PAYMENT",
-                    "direction": "DEBIT",
+                    "auth_id": auth_id,  # Ensure auth_id is always set
+                    "type": "debit",  # DB constraint: 'credit' or 'debit'
+                    "direction": "debit",  # lowercase
                     "amount": total_amount,
                     "reference": reference,
                     "booking_id": booking_id,
-                    "description": f"Payment for booking #{booking_id}",
-                    "status": "completed",
-                    "created_at": datetime.utcnow().isoformat()
-                }).execute()
-                
-                # Escrow hold transaction
-                supabase.table("wallet_transactions").insert({
-                    "user_auth_id": auth_id,
-                    "type": "ESCROW_HOLD",
-                    "direction": "CREDIT",
-                    "amount": total_amount,
-                    "reference": reference,
-                    "booking_id": booking_id,
-                    "description": f"Escrow hold for booking #{booking_id}",
+                    "description": f"Booking payment #{booking_id}",
                     "status": "completed",
                     "created_at": datetime.utcnow().isoformat()
                 }).execute()
