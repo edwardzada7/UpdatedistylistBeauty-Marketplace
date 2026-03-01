@@ -318,6 +318,16 @@ function AppRoutes() {
         }
       />
 
+      {/* SHARED ROUTES */}
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <NotificationsScreen />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Catch all - redirect based on auth state and role */}
       <Route path="*" element={<RoleBasedRedirect />} />
 
