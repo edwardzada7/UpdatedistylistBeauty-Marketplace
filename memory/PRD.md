@@ -367,6 +367,6 @@ This creates/updates:
 
 ## Last Updated
 - **Date**: January 19, 2026
-- **Phase**: 2.2.2 - Wallet Transaction & Idempotency Fixes (Complete)
-- **Status**: Backend 100% (22/22 tests passed), No frontend changes needed
-- **Performance**: Bookings list ~0.4s (was ~25s)
+- **Phase**: 2.2.3 - Escrow Refund Fix (Complete)
+- **Status**: Backend 100% (55/55 tests passed)
+- **Key Fix**: Cancel/decline now properly refunds escrow to customer available balance
