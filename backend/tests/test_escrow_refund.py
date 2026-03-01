@@ -6,7 +6,7 @@ import pytest
 import requests
 import os
 
-API_URL = os.getenv("REACT_APP_BACKEND_URL", "https://istylist-pay.preview.emergentagent.com")
+API_URL = os.getenv("REACT_APP_BACKEND_URL", "https://istylist-payments.preview.emergentagent.com")
 BASE_URL = f"{API_URL}/api"
 
 
