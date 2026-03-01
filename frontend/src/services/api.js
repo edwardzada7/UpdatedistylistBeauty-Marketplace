@@ -151,6 +151,10 @@ export const providersAPI = {
   // Get available slots for a date
   getAvailableSlots: (providerId, date, serviceDuration) => 
     api.get(`/providers/${providerId}/available-slots?date=${date}&service_duration=${serviceDuration}`),
+  
+  // Get provider dashboard metrics (wallet balances, earnings, transactions)
+  getDashboardMetrics: (authId) => 
+    api.get(`/providers/dashboard-metrics?auth_id=${authId}`),
 };
 
 // ==================== BOOKINGS API (Phase 2.1 + 2.2 + 2.3) ====================
