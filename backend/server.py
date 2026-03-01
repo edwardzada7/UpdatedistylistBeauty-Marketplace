@@ -2657,6 +2657,283 @@ async def mark_notifications_read(request: MarkReadRequest):
         return {"success": False, "message": str(e)}
 
 
+# ==================== BOOKING CHAT ENDPOINTS (Phase 2C) ====================
+
+def get_booking_provider_uuid(booking: dict) -> Optional[str]:
+    """Get provider UUID from booking, handling both provider_id and stylist_auth_id fields."""
+    return booking.get("provider_id") or booking.get("stylist_auth_id")
+
+
+def is_chat_participant(booking: dict, auth_id: str) -> bool:
+    """Check if auth_id is a participant in the booking chat."""
+    customer_auth_id = booking.get("customer_auth_id")
+    provider_uuid = get_booking_provider_uuid(booking)
+    return auth_id == customer_auth_id or auth_id == provider_uuid
+
+
+@api_router.get("/bookings/{booking_id}/chat")
+async def get_booking_chat(
+    booking_id: int,
+    auth_id: str = Query(..., description="User's auth_id (UUID)"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0)
+):
+    """
+    Get chat messages for a booking.
+    Only participants (customer or provider) can access.
+    """
+    try:
+        # 1. Get booking
+        booking_response = supabase.table("bookings").select(
+            "id, customer_auth_id, provider_id, stylist_auth_id, status"
+        ).eq("id", booking_id).execute()
+        
+        if not booking_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        booking = booking_response.data[0]
+        
+        # 2. Validate participant
+        if not is_chat_participant(booking, auth_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not a participant in this booking"
+            )
+        
+        # 3. Get provider UUID
+        provider_uuid = get_booking_provider_uuid(booking)
+        customer_auth_id = booking.get("customer_auth_id")
+        
+        # 4. Fetch chat messages (ordered ASC for chronological display)
+        if not check_table_exists("chats"):
+            return {
+                "messages": [],
+                "participants": {
+                    "customer_auth_id": customer_auth_id,
+                    "provider_auth_id": provider_uuid
+                }
+            }
+        
+        chat_response = supabase.table("chats").select("*").eq(
+            "booking_id", booking_id
+        ).order("created_at", desc=False).range(offset, offset + limit - 1).execute()
+        
+        return {
+            "messages": chat_response.data or [],
+            "participants": {
+                "customer_auth_id": customer_auth_id,
+                "provider_auth_id": provider_uuid
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to get booking chat: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load chat: {str(e)}"
+        )
+
+
+class SendChatMessageRequest(BaseModel):
+    auth_id: str
+    message: str = Field(..., min_length=1, max_length=2000)
+
+
+@api_router.post("/bookings/{booking_id}/chat")
+async def send_chat_message(
+    booking_id: int,
+    request: SendChatMessageRequest
+):
+    """
+    Send a chat message for a booking.
+    Only participants (customer or provider) can send.
+    """
+    try:
+        # 1. Get booking
+        booking_response = supabase.table("bookings").select(
+            "id, customer_auth_id, provider_id, stylist_auth_id, status"
+        ).eq("id", booking_id).execute()
+        
+        if not booking_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        booking = booking_response.data[0]
+        
+        # 2. Validate participant
+        if not is_chat_participant(booking, request.auth_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not a participant in this booking"
+            )
+        
+        # 3. Determine sender and receiver
+        customer_auth_id = booking.get("customer_auth_id")
+        provider_uuid = get_booking_provider_uuid(booking)
+        
+        sender_auth_id = request.auth_id
+        receiver_auth_id = provider_uuid if request.auth_id == customer_auth_id else customer_auth_id
+        
+        # 4. Insert chat message
+        if not check_table_exists("chats"):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Chat service not available"
+            )
+        
+        chat_data = {
+            "booking_id": booking_id,
+            "sender_auth_id": sender_auth_id,
+            "receiver_auth_id": receiver_auth_id,
+            "message": request.message.strip(),
+            "read": False
+        }
+        
+        result = supabase.table("chats").insert(chat_data).execute()
+        
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send message"
+            )
+        
+        inserted_message = result.data[0]
+        
+        # 5. Create notification for receiver (graceful - don't fail if notifications unavailable)
+        try:
+            # Get sender name
+            sender_name = "Someone"
+            sender_response = supabase.table("users").select("name").eq("auth_id", sender_auth_id).execute()
+            if sender_response.data:
+                sender_name = sender_response.data[0].get("name") or "Someone"
+            
+            await create_notification(
+                recipient_auth_id=receiver_auth_id,
+                notification_type="chat_message",
+                title="New Message",
+                message=f"{sender_name} sent you a message about your booking",
+                actor_auth_id=sender_auth_id,
+                metadata={"booking_id": booking_id, "chat_id": inserted_message["id"]}
+            )
+        except Exception as notif_error:
+            logging.warning(f"Failed to create chat notification: {notif_error}")
+        
+        logging.info(f"Chat message sent: booking={booking_id}, sender={sender_auth_id[:8]}...")
+        
+        return inserted_message
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to send chat message: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to send message: {str(e)}"
+        )
+
+
+class MarkChatReadRequest(BaseModel):
+    auth_id: str
+
+
+@api_router.post("/bookings/{booking_id}/chat/mark-read")
+async def mark_chat_read(
+    booking_id: int,
+    request: MarkChatReadRequest
+):
+    """
+    Mark all chat messages as read for a participant.
+    Only marks messages where receiver_auth_id matches the auth_id.
+    """
+    try:
+        # 1. Get booking
+        booking_response = supabase.table("bookings").select(
+            "id, customer_auth_id, provider_id, stylist_auth_id"
+        ).eq("id", booking_id).execute()
+        
+        if not booking_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        booking = booking_response.data[0]
+        
+        # 2. Validate participant
+        if not is_chat_participant(booking, request.auth_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not a participant in this booking"
+            )
+        
+        # 3. Mark messages as read
+        if not check_table_exists("chats"):
+            return {"success": True, "updated_count": 0}
+        
+        now = datetime.utcnow().isoformat()
+        
+        # Get count of unread messages first
+        count_response = supabase.table("chats").select("id", count="exact").eq(
+            "booking_id", booking_id
+        ).eq("receiver_auth_id", request.auth_id).eq("read", False).execute()
+        
+        unread_count = count_response.count or 0
+        
+        if unread_count > 0:
+            # Update to read
+            try:
+                supabase.table("chats").update({
+                    "read": True,
+                    "read_at": now
+                }).eq("booking_id", booking_id).eq(
+                    "receiver_auth_id", request.auth_id
+                ).eq("read", False).execute()
+            except Exception:
+                # Try without read_at if column doesn't exist
+                supabase.table("chats").update({
+                    "read": True
+                }).eq("booking_id", booking_id).eq(
+                    "receiver_auth_id", request.auth_id
+                ).eq("read", False).execute()
+        
+        return {"success": True, "updated_count": unread_count}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to mark chat as read: {str(e)}")
+        return {"success": False, "updated_count": 0, "error": str(e)}
+
+
+@api_router.get("/chat/unread-count")
+async def get_chat_unread_count(
+    auth_id: str = Query(..., description="User's auth_id (UUID)")
+):
+    """
+    Get total unread chat message count across all bookings.
+    """
+    try:
+        if not check_table_exists("chats"):
+            return {"unread_count": 0}
+        
+        response = supabase.table("chats").select("id", count="exact").eq(
+            "receiver_auth_id", auth_id
+        ).eq("read", False).execute()
+        
+        return {"unread_count": response.count or 0}
+        
+    except Exception as e:
+        logging.error(f"Failed to get chat unread count: {str(e)}")
+        return {"unread_count": 0}
+
+
 # ==================== PROVIDER SERVICES ENDPOINTS ====================
 # Using the existing 'services' table in Supabase with enhanced schema
 # Table mapping: stylist_id -> provider_id, category -> sub_service_id (composite), name -> sub_service_name
