@@ -1990,6 +1990,18 @@ async def request_withdrawal(
         
         logging.info(f"Withdrawal request created: {withdrawal_record['id']} for provider {auth_id}, amount {request_data.amount}")
         
+        # Create notification for provider confirming withdrawal request
+        await create_notification(
+            recipient_auth_id=auth_id,
+            notification_type="withdrawal_requested",
+            title="Withdrawal Request Submitted",
+            message=f"Your withdrawal request for {CURRENCY}{request_data.amount:,.2f} has been submitted and is pending admin review",
+            metadata={
+                "withdrawal_id": withdrawal_record["id"],
+                "amount": request_data.amount
+            }
+        )
+        
         return {
             "ok": True,
             "withdrawal_request_id": withdrawal_record["id"],
