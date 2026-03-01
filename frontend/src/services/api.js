@@ -247,6 +247,23 @@ export const paymentsAPI = {
   payWithWallet: (bookingId, authId) => api.post(`/bookings/${bookingId}/pay-with-wallet?auth_id=${authId}`),
 };
 
+// ==================== NOTIFICATIONS API (Phase 2B) ====================
+
+export const notificationsAPI = {
+  // Get user's notifications
+  getAll: (authId, unreadOnly = false, limit = 20, offset = 0) => 
+    api.get(`/notifications/me?auth_id=${authId}&unread_only=${unreadOnly}&limit=${limit}&offset=${offset}`),
+  
+  // Get unread count
+  getUnreadCount: (authId) => api.get(`/notifications/unread-count?auth_id=${authId}`),
+  
+  // Mark notifications as read
+  markRead: (authId, ids) => api.post("/notifications/mark-read", { auth_id: authId, ids }),
+  
+  // Mark all as read
+  markAllRead: (authId) => api.post("/notifications/mark-read", { auth_id: authId, mark_all: true }),
+};
+
 // ==================== UTILITY API ====================
 
 export const utilityAPI = {
