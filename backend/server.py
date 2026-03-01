@@ -137,6 +137,33 @@ class PaymentVerifyResponse(BaseModel):
     amount: Optional[float] = None
 
 
+# ==================== WITHDRAWAL REQUEST MODELS (Phase A) ====================
+
+class WithdrawalRequestCreate(BaseModel):
+    amount: float = Field(..., gt=0, description="Amount to withdraw (must be positive)")
+    bank_name: str = Field(..., min_length=2, description="Bank name")
+    account_name: str = Field(..., min_length=2, description="Account holder name")
+    account_number: str = Field(..., min_length=10, max_length=10, description="10-digit account number")
+    note: Optional[str] = None
+
+class WithdrawalRequestResponse(BaseModel):
+    id: int
+    provider_auth_id: str
+    amount: float
+    currency: str = "NGN"
+    bank_name: str
+    account_name: str
+    account_number: str
+    status: str
+    note: Optional[str] = None
+    created_at: str
+    updated_at: Optional[str] = None
+
+class AdminWithdrawalAction(BaseModel):
+    action: str = Field(..., pattern="^(approve|reject)$", description="Action: 'approve' or 'reject'")
+    note: Optional[str] = None
+
+
 # Provider Services Models (Phase 1.3 - Enhanced)
 class ProviderServiceCreate(BaseModel):
     provider_id: int  # user_id from stylists table
