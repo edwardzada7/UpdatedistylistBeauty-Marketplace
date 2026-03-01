@@ -215,8 +215,8 @@ export const walletsAPI = {
   delete: (id) => api.delete(`/wallets/${id}`),
   // Phase 2.2 - Enhanced wallet endpoints
   getMyWallet: (authId) => api.get(`/wallet/me?auth_id=${authId}`),
-  getTransactions: (authId, limit = 50, role = "customer") => 
-    api.get(`/wallet/transactions?auth_id=${authId}&limit=${limit}&role=${role}`),
+  getTransactions: (authId, limit = 50) => 
+    api.get(`/wallet/transactions?auth_id=${authId}&limit=${limit}`),
 };
 
 // ==================== PAYMENTS API (Paystack for wallet top-up only) ====================
