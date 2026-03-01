@@ -2221,6 +2221,18 @@ async def admin_process_withdrawal(
             
             logging.info(f"Withdrawal {withdrawal_id} APPROVED. Amount: {amount}, Provider: {provider_auth_id}")
             
+            # Create notification for provider about approval
+            await create_notification(
+                recipient_auth_id=provider_auth_id,
+                notification_type="withdrawal_approved",
+                title="Withdrawal Approved",
+                message=f"Your withdrawal request for {CURRENCY}{amount:,.2f} has been approved. The funds will be transferred to your bank account shortly.",
+                metadata={
+                    "withdrawal_id": withdrawal_id,
+                    "amount": amount
+                }
+            )
+            
             return {
                 "ok": True,
                 "status": "approved",
@@ -2256,6 +2268,19 @@ async def admin_process_withdrawal(
                 }).execute()
             
             logging.info(f"Withdrawal {withdrawal_id} REJECTED. Amount: {amount}, Provider: {provider_auth_id}")
+            
+            # Create notification for provider about rejection
+            await create_notification(
+                recipient_auth_id=provider_auth_id,
+                notification_type="withdrawal_rejected",
+                title="Withdrawal Rejected",
+                message=f"Your withdrawal request for {CURRENCY}{amount:,.2f} has been rejected. Reason: {action_data.note or 'No reason provided'}",
+                metadata={
+                    "withdrawal_id": withdrawal_id,
+                    "amount": amount,
+                    "reason": action_data.note
+                }
+            )
             
             return {
                 "ok": True,
