@@ -63,6 +63,38 @@ const ProviderProfileScreen = () => {
     fetchProviderProfile();
   }, [userId]);
 
+  // Fetch reviews when provider data is available
+  useEffect(() => {
+    if (provider?.provider_id) {
+      fetchProviderReviews();
+    }
+  }, [provider?.provider_id]);
+
+  const fetchProviderReviews = async () => {
+    if (!provider) return;
+    
+    setLoadingReviews(true);
+    try {
+      // We need provider's auth_id. Try to get it from users table by provider_id
+      const usersResponse = await fetch(`${process.env.REACT_APP_BACKEND_URL || ''}/api/users/${provider.provider_id}`);
+      if (usersResponse.ok) {
+        const userData = await usersResponse.json();
+        if (userData?.auth_id) {
+          const response = await reviewsAPI.getProviderReviews(userData.auth_id, 5, 0);
+          setReviews(response.data?.reviews || []);
+          setReviewsStats({
+            avg_rating: response.data?.avg_rating || 0,
+            total_reviews: response.data?.total_reviews || 0
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch reviews:", error);
+    } finally {
+      setLoadingReviews(false);
+    }
+  };
+
   const fetchProviderProfile = async () => {
     setLoading(true);
     try {
