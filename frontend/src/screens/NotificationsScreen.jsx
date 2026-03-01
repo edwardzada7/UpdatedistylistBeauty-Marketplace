@@ -112,6 +112,31 @@ const NotificationsScreen = () => {
     }
   };
 
+  const getNotificationTitle = (type) => {
+    switch (type) {
+      case "booking_created":
+        return "New Booking Request";
+      case "booking_confirmed":
+        return "Booking Confirmed";
+      case "booking_declined":
+        return "Booking Declined";
+      case "booking_canceled":
+        return "Booking Canceled";
+      case "booking_completed":
+        return "Service Completed";
+      case "withdrawal_requested":
+        return "Withdrawal Requested";
+      case "withdrawal_approved":
+        return "Withdrawal Approved";
+      case "withdrawal_rejected":
+        return "Withdrawal Rejected";
+      case "wallet_topup_success":
+        return "Wallet Top-Up Successful";
+      default:
+        return "Notification";
+    }
+  };
+
   const getNotificationColor = (type) => {
     switch (type) {
       case "booking_created":
