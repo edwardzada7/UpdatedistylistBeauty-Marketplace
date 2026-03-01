@@ -4681,6 +4681,405 @@ async def update_booking(
         )
 
 
+# ==================== REVIEWS MODELS (Phase 3) ====================
+
+class ReviewCreate(BaseModel):
+    booking_id: int
+    rating: int = Field(..., ge=1, le=5, description="Rating from 1 to 5")
+    comment: Optional[str] = None
+
+class ReviewReply(BaseModel):
+    provider_reply: str = Field(..., min_length=1, description="Provider's reply to the review")
+
+class ReviewResponse(BaseModel):
+    id: int
+    booking_id: int
+    reviewer_auth_id: str
+    provider_auth_id: str
+    rating: int
+    comment: Optional[str] = None
+    provider_reply: Optional[str] = None
+    created_at: str
+    replied_at: Optional[str] = None
+    reviewer_name: Optional[str] = None
+
+
+# ==================== REVIEWS ENDPOINTS (Phase 3) ====================
+
+def _get_provider_uuid_from_booking(booking: dict) -> Optional[str]:
+    """Get provider UUID from booking, handling both provider_id and stylist_auth_id fields."""
+    return booking.get("provider_id") or booking.get("stylist_auth_id")
+
+
+@api_router.post("/reviews", status_code=status.HTTP_201_CREATED)
+async def create_review(
+    review: ReviewCreate,
+    auth_id: str = Query(..., description="Reviewer's auth_id (UUID)")
+):
+    """Create a review for a completed booking (customer only)"""
+    try:
+        if not check_table_exists("reviews"):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Reviews table not available"
+            )
+        
+        # Validate booking exists
+        booking_response = supabase.table("bookings").select("*").eq("id", review.booking_id).execute()
+        if not booking_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        booking = booking_response.data[0]
+        
+        # Validate reviewer is the customer of this booking
+        if booking.get("customer_auth_id") != auth_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only review your own bookings"
+            )
+        
+        # Validate booking is completed
+        if booking.get("status") != "completed":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You can only review completed bookings"
+            )
+        
+        # Get provider_auth_id from booking
+        provider_auth_id = _get_provider_uuid_from_booking(booking)
+        if not provider_auth_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Could not determine provider for this booking"
+            )
+        
+        # Create review
+        review_data = {
+            "booking_id": review.booking_id,
+            "reviewer_auth_id": auth_id,
+            "provider_auth_id": provider_auth_id,
+            "rating": review.rating,
+            "comment": review.comment,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        
+        try:
+            result = supabase.table("reviews").insert(review_data).execute()
+        except Exception as e:
+            error_str = str(e).lower()
+            # Handle unique constraint violation
+            if "unique" in error_str or "duplicate" in error_str or "23505" in error_str:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="You have already reviewed this booking"
+                )
+            raise
+        
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create review"
+            )
+        
+        # Create notification for provider about new review
+        try:
+            # Get reviewer name
+            reviewer_response = supabase.table("users").select("name").eq("auth_id", auth_id).execute()
+            reviewer_name = "A customer"
+            if reviewer_response.data:
+                reviewer_name = reviewer_response.data[0].get("name") or "A customer"
+            
+            notification_data = {
+                "recipient_auth_id": provider_auth_id,
+                "actor_auth_id": auth_id,
+                "type": "new_review",
+                "title": "New Review Received",
+                "message": f"{reviewer_name} left a {review.rating}-star review for booking #{review.booking_id}",
+                "metadata": {
+                    "booking_id": review.booking_id,
+                    "review_id": result.data[0]["id"],
+                    "rating": review.rating
+                },
+                "read": False,
+                "created_at": datetime.utcnow().isoformat()
+            }
+            supabase.table("notifications").insert(notification_data).execute()
+        except Exception as notif_err:
+            logging.warning(f"Failed to create review notification: {notif_err}")
+        
+        return result.data[0]
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to create review: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create review: {str(e)}"
+        )
+
+
+@api_router.get("/providers/{provider_auth_id}/reviews")
+async def get_provider_reviews(
+    provider_auth_id: str,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0)
+):
+    """Get reviews for a provider with aggregate stats"""
+    try:
+        if not check_table_exists("reviews"):
+            return {
+                "reviews": [],
+                "avg_rating": 0,
+                "total_reviews": 0
+            }
+        
+        # Get reviews with pagination
+        reviews_response = supabase.table("reviews").select("*").eq(
+            "provider_auth_id", provider_auth_id
+        ).order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+        
+        reviews = reviews_response.data or []
+        
+        # Get aggregate stats (total count and average)
+        all_reviews_response = supabase.table("reviews").select("rating").eq(
+            "provider_auth_id", provider_auth_id
+        ).execute()
+        all_ratings = [r["rating"] for r in (all_reviews_response.data or [])]
+        total_reviews = len(all_ratings)
+        avg_rating = round(sum(all_ratings) / total_reviews, 1) if total_reviews > 0 else 0
+        
+        # Batch fetch reviewer names to avoid N+1
+        reviewer_ids = list(set(r.get("reviewer_auth_id") for r in reviews if r.get("reviewer_auth_id")))
+        reviewer_names_map = {}
+        if reviewer_ids:
+            users_response = supabase.table("users").select("auth_id, name").in_("auth_id", reviewer_ids).execute()
+            for u in users_response.data or []:
+                reviewer_names_map[u.get("auth_id")] = u.get("name") or "Anonymous"
+        
+        # Enrich reviews with reviewer names
+        enriched_reviews = []
+        for review in reviews:
+            enriched = {**review}
+            enriched["reviewer_name"] = reviewer_names_map.get(review.get("reviewer_auth_id"), "Anonymous")
+            enriched_reviews.append(enriched)
+        
+        return {
+            "reviews": enriched_reviews,
+            "avg_rating": avg_rating,
+            "total_reviews": total_reviews
+        }
+    
+    except Exception as e:
+        logging.error(f"Failed to fetch provider reviews: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch reviews: {str(e)}"
+        )
+
+
+@api_router.get("/reviews/me")
+async def get_my_reviews(
+    auth_id: str = Query(..., description="User's auth_id (UUID)"),
+    role: str = Query(..., description="Role: 'customer' or 'provider'"),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0)
+):
+    """Get reviews for the current user (as customer or provider)"""
+    try:
+        if not check_table_exists("reviews"):
+            return []
+        
+        if role == "customer":
+            # Reviews the user has written
+            reviews_response = supabase.table("reviews").select("*").eq(
+                "reviewer_auth_id", auth_id
+            ).order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+        elif role == "provider":
+            # Reviews the user has received
+            reviews_response = supabase.table("reviews").select("*").eq(
+                "provider_auth_id", auth_id
+            ).order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Role must be 'customer' or 'provider'"
+            )
+        
+        reviews = reviews_response.data or []
+        
+        # Batch fetch names for context
+        reviewer_ids = list(set(r.get("reviewer_auth_id") for r in reviews if r.get("reviewer_auth_id")))
+        provider_ids = list(set(r.get("provider_auth_id") for r in reviews if r.get("provider_auth_id")))
+        all_auth_ids = list(set(reviewer_ids + provider_ids))
+        
+        names_map = {}
+        if all_auth_ids:
+            users_response = supabase.table("users").select("auth_id, name").in_("auth_id", all_auth_ids).execute()
+            for u in users_response.data or []:
+                names_map[u.get("auth_id")] = u.get("name") or "User"
+        
+        # Enrich reviews
+        enriched_reviews = []
+        for review in reviews:
+            enriched = {**review}
+            enriched["reviewer_name"] = names_map.get(review.get("reviewer_auth_id"), "Anonymous")
+            enriched["provider_name"] = names_map.get(review.get("provider_auth_id"), "Provider")
+            enriched_reviews.append(enriched)
+        
+        return enriched_reviews
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to fetch my reviews: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch reviews: {str(e)}"
+        )
+
+
+@api_router.get("/reviews/by-booking/{booking_id}")
+async def get_review_by_booking(
+    booking_id: int,
+    auth_id: str = Query(..., description="User's auth_id to verify access")
+):
+    """Get review for a specific booking (if exists)"""
+    try:
+        if not check_table_exists("reviews"):
+            return None
+        
+        # Verify user has access to this booking
+        booking_response = supabase.table("bookings").select("*").eq("id", booking_id).execute()
+        if not booking_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        booking = booking_response.data[0]
+        provider_uuid = _get_provider_uuid_from_booking(booking)
+        
+        # Only customer or provider of the booking can see the review
+        if booking.get("customer_auth_id") != auth_id and provider_uuid != auth_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to view this review"
+            )
+        
+        # Get review
+        review_response = supabase.table("reviews").select("*").eq("booking_id", booking_id).execute()
+        
+        if not review_response.data:
+            return None
+        
+        review = review_response.data[0]
+        
+        # Get reviewer name
+        reviewer_name = "Anonymous"
+        if review.get("reviewer_auth_id"):
+            user_response = supabase.table("users").select("name").eq("auth_id", review["reviewer_auth_id"]).execute()
+            if user_response.data:
+                reviewer_name = user_response.data[0].get("name") or "Anonymous"
+        
+        review["reviewer_name"] = reviewer_name
+        return review
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to fetch review for booking: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch review: {str(e)}"
+        )
+
+
+@api_router.post("/reviews/{review_id}/reply")
+async def reply_to_review(
+    review_id: int,
+    reply: ReviewReply,
+    auth_id: str = Query(..., description="Provider's auth_id (UUID)")
+):
+    """Provider replies to a review"""
+    try:
+        if not check_table_exists("reviews"):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Reviews table not available"
+            )
+        
+        # Get the review
+        review_response = supabase.table("reviews").select("*").eq("id", review_id).execute()
+        if not review_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Review not found"
+            )
+        
+        review = review_response.data[0]
+        
+        # Verify the provider owns this review
+        if review.get("provider_auth_id") != auth_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the provider can reply to this review"
+            )
+        
+        # Update with reply (allow overwrite for edits)
+        update_data = {
+            "provider_reply": reply.provider_reply,
+            "replied_at": datetime.utcnow().isoformat()
+        }
+        
+        result = supabase.table("reviews").update(update_data).eq("id", review_id).execute()
+        
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to save reply"
+            )
+        
+        # Create notification for reviewer about the reply
+        try:
+            # Get provider name
+            provider_response = supabase.table("users").select("name").eq("auth_id", auth_id).execute()
+            provider_name = "The provider"
+            if provider_response.data:
+                provider_name = provider_response.data[0].get("name") or "The provider"
+            
+            notification_data = {
+                "recipient_auth_id": review.get("reviewer_auth_id"),
+                "actor_auth_id": auth_id,
+                "type": "review_reply",
+                "title": "Provider Replied to Your Review",
+                "message": f"{provider_name} replied to your review for booking #{review.get('booking_id')}",
+                "metadata": {
+                    "booking_id": review.get("booking_id"),
+                    "review_id": review_id
+                },
+                "read": False,
+                "created_at": datetime.utcnow().isoformat()
+            }
+            supabase.table("notifications").insert(notification_data).execute()
+        except Exception as notif_err:
+            logging.warning(f"Failed to create reply notification: {notif_err}")
+        
+        return result.data[0]
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to reply to review: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save reply: {str(e)}"
+        )
+
+
 # ==================== ROOT ENDPOINT ====================
 
 @api_router.get("/")
