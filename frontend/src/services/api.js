@@ -205,6 +205,20 @@ export const bookingsAPI = {
   
   // Get provider metrics (booking counts)
   getProviderMetrics: (authId) => api.get(`/providers/metrics?auth_id=${authId}`),
+  
+  // ==================== BOOKING CHAT API (Phase 2C) ====================
+  
+  // Get chat messages for a booking
+  getChat: (bookingId, authId, limit = 50, offset = 0) => 
+    api.get(`/bookings/${bookingId}/chat?auth_id=${authId}&limit=${limit}&offset=${offset}`),
+  
+  // Send a chat message
+  sendChatMessage: (bookingId, authId, message) => 
+    api.post(`/bookings/${bookingId}/chat`, { auth_id: authId, message }),
+  
+  // Mark chat messages as read
+  markChatRead: (bookingId, authId) => 
+    api.post(`/bookings/${bookingId}/chat/mark-read`, { auth_id: authId }),
 };
 
 // ==================== WALLETS API ====================
