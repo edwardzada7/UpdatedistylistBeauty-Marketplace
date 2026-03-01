@@ -2634,24 +2634,46 @@ async def mark_notifications_read(request: MarkReadRequest):
         
         now = datetime.utcnow().isoformat()
         
+        # Determine which column to use (try new schema first)
+        auth_column = "recipient_auth_id"
+        try:
+            # Test if new schema works
+            supabase.table("notifications").select("recipient_auth_id").limit(1).execute()
+        except Exception:
+            auth_column = "user_id"
+        
         if request.mark_all:
             # Mark all unread notifications as read
-            supabase.table("notifications").update({
-                "read": True,
-                "read_at": now
-            }).eq("recipient_auth_id", request.auth_id).eq("read", False).execute()
+            update_data = {"read": True}
+            # Try adding read_at if column exists
+            try:
+                supabase.table("notifications").update({
+                    "read": True,
+                    "read_at": now
+                }).eq(auth_column, request.auth_id).eq("read", False).execute()
+            except Exception:
+                supabase.table("notifications").update({
+                    "read": True
+                }).eq(auth_column, request.auth_id).eq("read", False).execute()
             
             return {"success": True, "message": "All notifications marked as read"}
         
         elif request.ids and len(request.ids) > 0:
             # Mark specific notifications as read
             for notification_id in request.ids:
-                supabase.table("notifications").update({
-                    "read": True,
-                    "read_at": now
-                }).eq("id", notification_id).eq(
-                    "recipient_auth_id", request.auth_id
-                ).execute()
+                try:
+                    supabase.table("notifications").update({
+                        "read": True,
+                        "read_at": now
+                    }).eq("id", notification_id).eq(
+                        auth_column, request.auth_id
+                    ).execute()
+                except Exception:
+                    supabase.table("notifications").update({
+                        "read": True
+                    }).eq("id", notification_id).eq(
+                        auth_column, request.auth_id
+                    ).execute()
             
             return {"success": True, "message": f"Marked {len(request.ids)} notifications as read"}
         
