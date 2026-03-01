@@ -1324,6 +1324,14 @@ async def _refund_escrow_to_customer(booking_id: int, customer_auth_id: str):
             if services_response.data:
                 amount = sum(float(svc.get("price", 0) or 0) for svc in services_response.data)
         
+        # Fallback to booking.total_amount
+        if amount == 0:
+            amount = float(booking.get("total_amount", 0) or 0)
+        
+        # Fallback to booking.service_price (legacy)
+        if amount == 0:
+            amount = float(booking.get("service_price", 0) or 0)
+        
         # Fallback to payment record
         if amount == 0 and check_table_exists("payments"):
             payment_response = supabase.table("payments").select("amount").eq("booking_id", booking_id).eq("status", "success").execute()
