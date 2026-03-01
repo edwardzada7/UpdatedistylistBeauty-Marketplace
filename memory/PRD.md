@@ -425,7 +425,7 @@ Table columns: id, provider_auth_id, amount, currency, bank_name, account_name, 
         │   ├── AdminLoginScreen.jsx           # Admin login (Phase A.1)
         │   └── AdminWithdrawalsScreen.jsx     # Admin withdrawal dashboard (Phase A.1)
         ├── services/
-        │   └── api.js                         # API client (with paymentsAPI, walletsAPI, withdrawalsAPI)
+        │   └── api.js                         # API client (with paymentsAPI, walletsAPI, withdrawalsAPI, providersAPI.getDashboardMetrics)
         ├── components/
         │   └── BottomNavigation.jsx           # Updated with Bookings tab, hidden on /admin/*
         └── contexts/
@@ -436,6 +436,6 @@ Table columns: id, provider_auth_id, amount, currency, bank_name, account_name, 
 
 ## Last Updated
 - **Date**: March 1, 2026
-- **Phase**: Phase A.1 - Admin Dashboard UI (Complete)
-- **Status**: Backend 100% (17/17 withdrawal tests passed), Frontend UI complete
-- **Key Feature**: Admin Dashboard for reviewing and processing withdrawal requests
+- **Phase**: Phase A.2 - Provider Dashboard Earnings UI (Complete)
+- **Status**: Backend 100% (23/23 tests passed), Frontend UI complete
+- **Key Feature**: Provider Dashboard shows wallet balances, earnings summaries, pending withdrawals, and recent transactions
