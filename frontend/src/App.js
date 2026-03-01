@@ -329,6 +329,15 @@ function AppRoutes() {
         }
       />
 
+      <Route
+        path="/bookings/:id/chat"
+        element={
+          <ProtectedRoute>
+            <BookingChatScreen />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Catch all - redirect based on auth state and role */}
       <Route path="*" element={<RoleBasedRedirect />} />
 
