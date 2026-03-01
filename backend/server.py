@@ -1723,35 +1723,41 @@ async def get_wallet_transactions(
     """Get user's wallet transaction history by auth_id"""
     try:
         if not check_table_exists("wallet_transactions"):
+            logging.info("wallet_transactions table does not exist")
             return []
         
         results = []
         
-        # Try user_auth_id column first (primary storage)
+        # Query by user_auth_id (primary column for transactions)
         try:
+            logging.info(f"Fetching transactions for auth_id: {auth_id}")
             response = supabase.table("wallet_transactions").select("*").eq(
                 "user_auth_id", auth_id
             ).order("created_at", desc=True).limit(limit).execute()
             results = response.data or []
+            logging.info(f"Found {len(results)} transactions via user_auth_id")
         except Exception as e:
-            logging.debug(f"user_auth_id query failed: {e}")
+            logging.warning(f"user_auth_id query failed: {e}")
         
-        # Also try auth_id column (some records may use this)
-        if len(results) < limit:
-            try:
-                auth_response = supabase.table("wallet_transactions").select("*").eq(
-                    "auth_id", auth_id
-                ).order("created_at", desc=True).limit(limit).execute()
-                
-                if auth_response.data:
-                    existing_ids = {r.get("id") for r in results}
-                    for tx in auth_response.data:
-                        if tx.get("id") not in existing_ids:
-                            results.append(tx)
-            except Exception as e:
-                logging.debug(f"auth_id query failed: {e}")
+        # Also try auth_id column as fallback
+        try:
+            auth_response = supabase.table("wallet_transactions").select("*").eq(
+                "auth_id", auth_id
+            ).order("created_at", desc=True).limit(limit).execute()
+            
+            if auth_response.data:
+                existing_ids = {r.get("id") for r in results}
+                new_count = 0
+                for tx in auth_response.data:
+                    if tx.get("id") not in existing_ids:
+                        results.append(tx)
+                        new_count += 1
+                if new_count > 0:
+                    logging.info(f"Found {new_count} additional transactions via auth_id column")
+        except Exception as e:
+            logging.debug(f"auth_id column query failed (may not exist): {e}")
         
-        # Sort by created_at desc, fallback to id desc
+        # Sort by created_at desc
         results.sort(key=lambda x: (x.get("created_at") or "", x.get("id") or 0), reverse=True)
         
         return results[:limit]
