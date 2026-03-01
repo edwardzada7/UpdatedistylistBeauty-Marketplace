@@ -438,7 +438,8 @@ Table columns: id, provider_auth_id, amount, currency, bank_name, account_name, 
 │   │   └── test_withdrawals.py          # Phase A withdrawal tests (17 tests)
 │   └── migrations/
 │       ├── phase19_privacy_identity.sql
-│       └── phase22_paystack_integration.sql
+│       ├── phase22_paystack_integration.sql
+│       └── phase2B_notifications.sql         # Phase 2B notifications migration
 └── frontend/
     └── src/
         ├── screens/
@@ -453,11 +454,13 @@ Table columns: id, provider_auth_id, amount, currency, bank_name, account_name, 
         │   ├── BookingDetailsScreen.jsx       # Booking details with Pay Now
         │   ├── WalletScreen.jsx               # Wallet with top-up (customer) and withdraw (provider)
         │   ├── AdminLoginScreen.jsx           # Admin login (Phase A.1)
-        │   └── AdminWithdrawalsScreen.jsx     # Admin withdrawal dashboard (Phase A.1)
+        │   ├── AdminWithdrawalsScreen.jsx     # Admin withdrawal dashboard (Phase A.1)
+        │   └── NotificationsScreen.jsx        # Notifications list (Phase 2B)
         ├── services/
-        │   └── api.js                         # API client (with paymentsAPI, walletsAPI, withdrawalsAPI, providersAPI.getDashboardMetrics)
+        │   └── api.js                         # API client (with paymentsAPI, walletsAPI, withdrawalsAPI, notificationsAPI)
         ├── components/
-        │   └── BottomNavigation.jsx           # Updated with Bookings tab, hidden on /admin/*
+        │   ├── BottomNavigation.jsx           # Updated with Bookings tab, hidden on /admin/*
+        │   └── NotificationBell.jsx           # Bell icon with unread badge (Phase 2B)
         └── contexts/
             └── AuthContext.jsx                # Auth state management
 ```
@@ -466,6 +469,7 @@ Table columns: id, provider_auth_id, amount, currency, bank_name, account_name, 
 
 ## Last Updated
 - **Date**: March 1, 2026
-- **Phase**: Phase A.2 - Provider Dashboard Earnings UI (Complete)
-- **Status**: Backend 100% (23/23 tests passed), Frontend UI complete
-- **Key Feature**: Provider Dashboard shows wallet balances, earnings summaries, pending withdrawals, and recent transactions
+- **Phase**: Phase 2B - In-App Notifications (Complete)
+- **Status**: Backend 100% (37+ tests passed), Frontend UI complete
+- **Key Feature**: In-app notifications for booking and withdrawal events with bell icon and unread badge
+- **Migration Required**: Run `/app/backend/migrations/phase2B_notifications.sql` in Supabase SQL Editor
