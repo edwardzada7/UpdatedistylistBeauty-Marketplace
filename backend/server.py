@@ -2268,6 +2268,148 @@ async def admin_process_withdrawal(
         )
 
 
+# ==================== PROVIDER DASHBOARD METRICS ENDPOINT ====================
+
+@api_router.get("/providers/dashboard-metrics")
+async def get_provider_dashboard_metrics(
+    auth_id: str = Query(..., description="Provider's auth_id (UUID)")
+):
+    """
+    Lightweight endpoint for provider dashboard metrics.
+    Returns wallet balances, earnings summaries, pending withdrawals, and recent transactions.
+    Optimized for speed with minimal queries.
+    """
+    try:
+        result = {
+            "available_balance": 0,
+            "escrow_balance": 0,
+            "total_balance": 0,
+            "total_earnings": 0,
+            "pending_withdrawals_total": 0,
+            "last_7_days_earnings": 0,
+            "last_30_days_earnings": 0,
+            "recent_transactions": []
+        }
+        
+        # 1. Get wallet balances
+        try:
+            wallet_response = supabase.table("wallets").select(
+                "available_balance, escrow_balance, balance"
+            ).eq("user_auth_id", auth_id).execute()
+            
+            if wallet_response.data:
+                w = wallet_response.data[0]
+                result["available_balance"] = float(w.get("available_balance") or 0)
+                result["escrow_balance"] = float(w.get("escrow_balance") or 0)
+                # total_balance = available + escrow
+                result["total_balance"] = result["available_balance"] + result["escrow_balance"]
+        except Exception as e:
+            logging.warning(f"Failed to fetch wallet for {auth_id}: {e}")
+        
+        # 2. Get pending withdrawals total
+        if check_table_exists("withdrawal_requests"):
+            try:
+                withdrawals_response = supabase.table("withdrawal_requests").select(
+                    "amount"
+                ).eq("provider_auth_id", auth_id).eq("status", "pending").execute()
+                
+                if withdrawals_response.data:
+                    result["pending_withdrawals_total"] = sum(
+                        float(w.get("amount") or 0) for w in withdrawals_response.data
+                    )
+            except Exception as e:
+                logging.warning(f"Failed to fetch pending withdrawals for {auth_id}: {e}")
+        
+        # 3. Get transactions and calculate earnings
+        if check_table_exists("wallet_transactions"):
+            try:
+                # Get recent transactions - try auth_id first, fallback to user_auth_id
+                tx_response = None
+                try:
+                    tx_response = supabase.table("wallet_transactions").select(
+                        "id, type, direction, amount, status, description, reference, created_at"
+                    ).eq("auth_id", auth_id).order("created_at", desc=True).limit(10).execute()
+                except Exception:
+                    pass
+                
+                if not tx_response or not tx_response.data:
+                    try:
+                        tx_response = supabase.table("wallet_transactions").select(
+                            "id, type, direction, amount, status, description, reference, created_at"
+                        ).eq("user_auth_id", auth_id).order("created_at", desc=True).limit(10).execute()
+                    except Exception:
+                        pass
+                
+                if tx_response and tx_response.data:
+                    result["recent_transactions"] = tx_response.data
+                
+                # Calculate earnings from credit transactions
+                # Get all credit transactions for this provider to sum total earnings
+                try:
+                    earnings_response = supabase.table("wallet_transactions").select(
+                        "amount, created_at"
+                    ).eq("auth_id", auth_id).eq("direction", "credit").eq("status", "completed").execute()
+                    
+                    if not earnings_response.data:
+                        # Fallback to user_auth_id
+                        earnings_response = supabase.table("wallet_transactions").select(
+                            "amount, created_at"
+                        ).eq("user_auth_id", auth_id).eq("direction", "credit").eq("status", "completed").execute()
+                    
+                    if earnings_response.data:
+                        now = datetime.utcnow()
+                        seven_days_ago = now - timedelta(days=7)
+                        thirty_days_ago = now - timedelta(days=30)
+                        
+                        total = 0
+                        last_7 = 0
+                        last_30 = 0
+                        
+                        for tx in earnings_response.data:
+                            amount = float(tx.get("amount") or 0)
+                            total += amount
+                            
+                            created_str = tx.get("created_at")
+                            if created_str:
+                                try:
+                                    # Parse ISO format with timezone
+                                    created_at = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+                                    created_at = created_at.replace(tzinfo=None)  # Make naive for comparison
+                                    
+                                    if created_at >= seven_days_ago:
+                                        last_7 += amount
+                                    if created_at >= thirty_days_ago:
+                                        last_30 += amount
+                                except Exception as parse_err:
+                                    logging.debug(f"Date parse error: {parse_err}")
+                                    last_30 += amount  # Include in 30-day if we can't parse
+                        
+                        result["total_earnings"] = total
+                        result["last_7_days_earnings"] = last_7
+                        result["last_30_days_earnings"] = last_30
+                except Exception as e:
+                    logging.warning(f"Failed to calculate earnings for {auth_id}: {e}")
+                    
+            except Exception as e:
+                logging.warning(f"Failed to fetch transactions for {auth_id}: {e}")
+        
+        return result
+        
+    except Exception as e:
+        logging.error(f"Provider dashboard metrics failed for {auth_id}: {str(e)}")
+        # Return empty metrics instead of 500 error
+        return {
+            "available_balance": 0,
+            "escrow_balance": 0,
+            "total_balance": 0,
+            "total_earnings": 0,
+            "pending_withdrawals_total": 0,
+            "last_7_days_earnings": 0,
+            "last_30_days_earnings": 0,
+            "recent_transactions": []
+        }
+
+
 # ==================== PROVIDER SERVICES ENDPOINTS ====================
 # Using the existing 'services' table in Supabase with enhanced schema
 # Table mapping: stylist_id -> provider_id, category -> sub_service_id (composite), name -> sub_service_name
