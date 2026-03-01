@@ -117,27 +117,7 @@ def test_mark_read_only_affects_receiver():
         {"id": 3, "sender_auth_id": "customer", "receiver_auth_id": "provider", "read": False},
     ]
     
-    # Provider marks messages as read - should only mark message 2
-    auth_id = "provider"
-    for msg in messages:
-        if msg["receiver_auth_id"] == auth_id:
-            msg["read"] = True
-    
-    assert messages[0]["read"] == False  # Sent to provider, marked by provider
-    assert messages[1]["read"] == True   # Sent to customer, NOT marked (wrong receiver)
-    assert messages[2]["read"] == False  # Sent to provider, marked by provider
-    
-    # Wait, the logic is inverted - provider is the receiver of messages 0 and 2
-    # Let me fix this test
-    
-    # Reset
-    messages = [
-        {"id": 1, "sender_auth_id": "customer", "receiver_auth_id": "provider", "read": False},
-        {"id": 2, "sender_auth_id": "provider", "receiver_auth_id": "customer", "read": False},
-        {"id": 3, "sender_auth_id": "customer", "receiver_auth_id": "provider", "read": False},
-    ]
-    
-    # Provider marks messages as read - marks messages where they are the receiver
+    # Provider marks messages as read - marks messages where they are the receiver (id 1 and 3)
     auth_id = "provider"
     marked_count = 0
     for msg in messages:
