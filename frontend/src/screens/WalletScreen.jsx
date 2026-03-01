@@ -171,6 +171,86 @@ export default function WalletScreen() {
     setShowTopUpModal(true);
   };
 
+  // Handle withdrawal request (for providers)
+  const handleWithdrawRequest = async () => {
+    const amount = parseFloat(withdrawAmount);
+    
+    // Validation
+    if (isNaN(amount) || amount <= 0) {
+      toast.error("Please enter a valid amount");
+      return;
+    }
+    
+    if (amount > (wallet.available_balance || 0)) {
+      toast.error("Insufficient balance");
+      return;
+    }
+    
+    if (!bankName.trim()) {
+      toast.error("Please enter your bank name");
+      return;
+    }
+    
+    if (!accountName.trim()) {
+      toast.error("Please enter the account holder name");
+      return;
+    }
+    
+    if (!accountNumber || accountNumber.length !== 10 || !/^\d+$/.test(accountNumber)) {
+      toast.error("Please enter a valid 10-digit account number");
+      return;
+    }
+    
+    setProcessingWithdraw(true);
+    try {
+      const response = await withdrawalsAPI.request(user.id, {
+        amount,
+        bank_name: bankName.trim(),
+        account_name: accountName.trim(),
+        account_number: accountNumber,
+        note: withdrawNote.trim() || null
+      });
+      
+      if (response.data.ok) {
+        toast.success("Withdrawal request submitted successfully!");
+        // Reset form
+        setWithdrawAmount("");
+        setBankName("");
+        setAccountName("");
+        setAccountNumber("");
+        setWithdrawNote("");
+        setShowWithdrawModal(false);
+        // Refresh data
+        fetchWalletData();
+      } else {
+        toast.error(response.data.message || "Failed to submit withdrawal request");
+      }
+    } catch (error) {
+      console.error("Withdrawal request failed:", error);
+      const errorDetail = error.response?.data?.detail;
+      if (typeof errorDetail === "object" && errorDetail.error) {
+        toast.error(`${errorDetail.error}. Available: ${CURRENCY}${errorDetail.available?.toLocaleString()}`);
+      } else {
+        toast.error(errorDetail || "Failed to submit withdrawal request");
+      }
+    } finally {
+      setProcessingWithdraw(false);
+    }
+  };
+
+  const getWithdrawalStatusBadge = (status) => {
+    switch (status) {
+      case "pending":
+        return <span className="px-2 py-1 text-xs bg-amber-100 text-amber-700 rounded-full">Pending</span>;
+      case "approved":
+        return <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full">Approved</span>;
+      case "rejected":
+        return <span className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded-full">Rejected</span>;
+      default:
+        return <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded-full">{status}</span>;
+    }
+  };
+
   const getTransactionIcon = (type, direction) => {
     if (type === "TOPUP" || type === "ESCROW_REFUND") {
       return <ArrowDownLeft className="h-4 w-4" />;
