@@ -209,14 +209,17 @@ const StylistDashboard = () => {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <h1 className="text-lg font-semibold">Stylist Dashboard</h1>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => navigate("/profile")}
-            className="text-white hover:bg-white/20"
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <NotificationBell className="text-white hover:bg-white/20" />
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => navigate("/profile")}
+              className="text-white hover:bg-white/20"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         {/* Profile Section */}
