@@ -639,7 +639,7 @@ const StylistDashboard = () => {
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-gray-600" />
-              Dashboard Stats
+              Performance Overview
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -650,9 +650,9 @@ const StylistDashboard = () => {
               </div>
               <div className="p-3 bg-green-50 rounded-lg text-center">
                 <p className="text-2xl font-bold text-green-600">
-                  {CURRENCY}{stats.totalEarnings.toLocaleString()}
+                  {CURRENCY}{(walletMetrics.total_earnings || 0).toLocaleString()}
                 </p>
-                <p className="text-xs text-gray-500">Service Value</p>
+                <p className="text-xs text-gray-500">Total Earnings</p>
               </div>
               <div className="p-3 bg-blue-50 rounded-lg text-center">
                 <p className="text-2xl font-bold text-blue-600">{stats.upcomingBookings}</p>
