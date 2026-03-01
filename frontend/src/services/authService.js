@@ -56,9 +56,11 @@ export async function signUpWithEmail({ email, password, phone, fullName, role }
  * Login with email and password
  */
 export async function loginWithEmail(email, password) {
+  let freshClient;
+  
   try {
     // Use a fresh client to avoid potential body stream issues
-    const freshClient = createFreshSupabaseClient();
+    freshClient = createFreshSupabaseClient();
     
     const { data, error } = await freshClient.auth.signInWithPassword({
       email,
@@ -66,8 +68,24 @@ export async function loginWithEmail(email, password) {
     });
 
     if (error) {
-      // Extract error message safely
-      const errorMsg = error.message || error.error_description || "Failed to login";
+      // CRITICAL: Extract error message ONCE to avoid body stream issues
+      // Supabase errors can have consumed response bodies - we must extract safely
+      let errorMsg = "Invalid login credentials";
+      
+      try {
+        // Prefer message first, then error_description
+        if (error.message && typeof error.message === 'string') {
+          errorMsg = error.message;
+        } else if (error.error_description && typeof error.error_description === 'string') {
+          errorMsg = error.error_description;
+        } else if (error.msg && typeof error.msg === 'string') {
+          errorMsg = error.msg;
+        }
+      } catch (extractErr) {
+        // If extraction fails, use default message
+        console.warn("[authService] Error extracting login error message:", extractErr);
+      }
+      
       throw new Error(errorMsg);
     }
     
@@ -78,10 +96,23 @@ export async function loginWithEmail(email, password) {
     
     return data;
   } catch (err) {
+    // Handle errors that are already Error objects (from our throw above)
     if (err instanceof Error) {
       throw err;
     }
-    const msg = typeof err === 'string' ? err : (err?.message || "Failed to login");
+    
+    // Safely extract message from unknown error types
+    let msg = "Failed to login";
+    try {
+      if (typeof err === 'string') {
+        msg = err;
+      } else if (err && typeof err.message === 'string') {
+        msg = err.message;
+      }
+    } catch (e) {
+      // Use default message if extraction fails
+    }
+    
     throw new Error(msg);
   }
 }
