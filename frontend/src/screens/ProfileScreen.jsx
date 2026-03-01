@@ -15,6 +15,7 @@ import { TOAST_MESSAGES, APP_NAME, CURRENCY } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
+import NotificationBell from "@/components/NotificationBell";
 
 const ProfileScreen = () => {
   const navigate = useNavigate();
