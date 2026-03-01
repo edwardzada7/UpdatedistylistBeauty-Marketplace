@@ -178,6 +178,58 @@ const BookingDetailsScreen = () => {
     }
   };
 
+  // Submit a review
+  const handleSubmitReview = async () => {
+    if (!booking || !authId) return;
+    
+    setSubmittingReview(true);
+    try {
+      await reviewsAPI.create(authId, {
+        booking_id: booking.id,
+        rating: reviewRating,
+        comment: reviewComment.trim() || null
+      });
+      
+      toast.success("Review submitted successfully!", {
+        description: "Thank you for your feedback."
+      });
+      
+      setShowReviewModal(false);
+      setReviewComment("");
+      fetchExistingReview(); // Refresh to show the review
+    } catch (error) {
+      console.error("Failed to submit review:", error);
+      if (error.response?.status === 409) {
+        toast.error("You have already reviewed this booking");
+      } else {
+        toast.error(error.response?.data?.detail || "Failed to submit review");
+      }
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  // Provider reply to review
+  const handleSubmitReply = async () => {
+    if (!existingReview || !authId) return;
+    
+    setSubmittingReply(true);
+    try {
+      await reviewsAPI.reply(existingReview.id, authId, {
+        provider_reply: replyText.trim()
+      });
+      
+      toast.success("Reply submitted successfully!");
+      setShowReplyModal(false);
+      fetchExistingReview(); // Refresh to show the reply
+    } catch (error) {
+      console.error("Failed to submit reply:", error);
+      toast.error(error.response?.data?.detail || "Failed to submit reply");
+    } finally {
+      setSubmittingReply(false);
+    }
+  };
+
   const formatDate = (dateStr) => {
     if (!dateStr) return "Date TBD";
     const date = new Date(dateStr + "T00:00:00");
