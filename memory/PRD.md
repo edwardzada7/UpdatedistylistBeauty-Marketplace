@@ -271,6 +271,15 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
   - ✅ Frontend: Insufficient funds shows "Top Up Wallet" button linking to wallet screen
   - ✅ **Testing**: 30/30 backend tests passed
 
+- **Phase 2.2.2 - Wallet Transaction & Idempotency Fixes** (January 19, 2026):
+  - ✅ **Transaction Logging**: Fixed to use proper DB constraint values (`type: 'credit'|'debit'`, `direction: 'credit'|'debit'`, `status: 'completed'`)
+  - ✅ **auth_id Always Set**: All wallet_transactions now include both `user_auth_id` and `auth_id` fields
+  - ✅ **Idempotency via Payments Table**: Uses `payments.reference` and `payments.processed` as source of truth
+  - ✅ **Double-Processing Fixed**: Same Paystack reference or wallet payment cannot credit/debit twice
+  - ✅ **Declined Status Refund**: Both `canceled` AND `declined` now trigger escrow refund to customer
+  - ✅ **Performance Optimization**: Bookings list reduced from ~25s to ~0.4s (batched queries, no N+1)
+  - ✅ **Testing**: 22/22 backend tests passed (test_wallet_payment.py + test_wallet_fixes.py)
+
 ---
 
 ## Backlog / Future Tasks
