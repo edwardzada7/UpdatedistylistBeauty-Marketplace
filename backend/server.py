@@ -1123,8 +1123,17 @@ async def _credit_wallet(user_auth_id: str, amount: float, tx_type: str, referen
 
 
 async def _credit_escrow(user_auth_id: str, amount: float, booking_id: int, reference: str):
-    """Hold funds in escrow for a booking"""
+    """Hold funds in escrow for a booking with proper transaction logging"""
     try:
+        # Idempotency check - don't credit escrow twice for same booking+reference
+        if check_table_exists("wallet_transactions"):
+            existing_tx = supabase.table("wallet_transactions").select("id").eq(
+                "reference", reference
+            ).execute()
+            if existing_tx.data:
+                logging.info(f"Escrow transaction already exists for reference {reference}, skipping")
+                return
+        
         # Get or create wallet
         wallet_response = supabase.table("wallets").select("*").eq("user_auth_id", user_auth_id).execute()
         
@@ -1139,18 +1148,22 @@ async def _credit_escrow(user_auth_id: str, amount: float, booking_id: int, refe
                 "escrow_balance": amount
             }).execute()
         
-        # Record transaction
+        # Record transaction with proper field values matching DB constraints
         if check_table_exists("wallet_transactions"):
             supabase.table("wallet_transactions").insert({
                 "user_auth_id": user_auth_id,
-                "type": "ESCROW_HOLD",
-                "direction": "CREDIT",
+                "auth_id": user_auth_id,  # Ensure auth_id is always set
+                "type": "credit",  # DB constraint: 'credit' or 'debit'
+                "direction": "credit",  # lowercase - escrow hold is a credit to escrow
                 "amount": amount,
                 "reference": reference,
                 "booking_id": booking_id,
                 "description": f"Escrow hold for booking #{booking_id}",
+                "status": "completed",
                 "created_at": datetime.utcnow().isoformat()
             }).execute()
+        
+        logging.info(f"Escrow credited: {amount} for user {user_auth_id}, booking {booking_id}")
     except Exception as e:
         logging.error(f"Failed to credit escrow: {str(e)}")
 
