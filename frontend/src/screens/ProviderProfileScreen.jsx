@@ -39,6 +39,11 @@ const ProviderProfileScreen = () => {
   const [pendingBookingId, setPendingBookingId] = useState(null);
   const [processingWalletPayment, setProcessingWalletPayment] = useState(false);
 
+  // Reviews state - Phase 3
+  const [reviews, setReviews] = useState([]);
+  const [reviewsStats, setReviewsStats] = useState({ avg_rating: 0, total_reviews: 0 });
+  const [loadingReviews, setLoadingReviews] = useState(false);
+
   // Fetch wallet balance when entering payment step
   const fetchWalletBalance = async () => {
     if (!user?.id) return;
