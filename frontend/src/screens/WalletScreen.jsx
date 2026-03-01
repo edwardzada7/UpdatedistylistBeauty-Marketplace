@@ -600,6 +600,145 @@ export default function WalletScreen() {
         </div>
       )}
 
+      {/* Withdrawal Modal (for providers) */}
+      {showWithdrawModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Banknote className="h-5 w-5 text-purple-600" />
+                Withdraw Funds
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Available balance display */}
+              <div className="bg-purple-50 p-3 rounded-lg">
+                <p className="text-sm text-gray-600">Available Balance</p>
+                <p className="text-xl font-bold text-purple-700">
+                  {CURRENCY}{(wallet.available_balance || 0).toLocaleString()}
+                </p>
+              </div>
+
+              {/* Amount */}
+              <div className="space-y-2">
+                <Label htmlFor="withdraw-amount">Amount ({CURRENCY})</Label>
+                <Input
+                  id="withdraw-amount"
+                  type="number"
+                  placeholder="Enter amount to withdraw"
+                  value={withdrawAmount}
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  min="100"
+                  max={wallet.available_balance || 0}
+                  data-testid="withdraw-amount-input"
+                />
+              </div>
+
+              {/* Bank Name */}
+              <div className="space-y-2">
+                <Label htmlFor="bank-name">Bank Name</Label>
+                <Input
+                  id="bank-name"
+                  type="text"
+                  placeholder="e.g., GTBank, First Bank"
+                  value={bankName}
+                  onChange={(e) => setBankName(e.target.value)}
+                  data-testid="bank-name-input"
+                />
+              </div>
+
+              {/* Account Name */}
+              <div className="space-y-2">
+                <Label htmlFor="account-name">Account Holder Name</Label>
+                <Input
+                  id="account-name"
+                  type="text"
+                  placeholder="Name on the bank account"
+                  value={accountName}
+                  onChange={(e) => setAccountName(e.target.value)}
+                  data-testid="account-name-input"
+                />
+              </div>
+
+              {/* Account Number */}
+              <div className="space-y-2">
+                <Label htmlFor="account-number">Account Number</Label>
+                <Input
+                  id="account-number"
+                  type="text"
+                  placeholder="10-digit account number"
+                  value={accountNumber}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                    setAccountNumber(val);
+                  }}
+                  maxLength={10}
+                  data-testid="account-number-input"
+                />
+              </div>
+
+              {/* Note (optional) */}
+              <div className="space-y-2">
+                <Label htmlFor="withdraw-note">Note (optional)</Label>
+                <Input
+                  id="withdraw-note"
+                  type="text"
+                  placeholder="Any additional notes"
+                  value={withdrawNote}
+                  onChange={(e) => setWithdrawNote(e.target.value)}
+                  data-testid="withdraw-note-input"
+                />
+              </div>
+
+              {/* Info message */}
+              <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg text-amber-800 text-sm">
+                <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <p>
+                  Withdrawal requests are processed manually via bank transfer. 
+                  Please allow 24-48 hours for review and processing.
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    setShowWithdrawModal(false);
+                    setWithdrawAmount("");
+                    setBankName("");
+                    setAccountName("");
+                    setAccountNumber("");
+                    setWithdrawNote("");
+                  }}
+                  disabled={processingWithdraw}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 bg-purple-600 hover:bg-purple-700"
+                  onClick={handleWithdrawRequest}
+                  disabled={processingWithdraw || !withdrawAmount || !bankName || !accountName || !accountNumber}
+                  data-testid="confirm-withdraw-btn"
+                >
+                  {processingWithdraw ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Submit Request
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <BottomNavigation />
     </div>
   );
