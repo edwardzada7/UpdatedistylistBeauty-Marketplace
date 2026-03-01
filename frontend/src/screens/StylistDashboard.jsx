@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { providerServicesAPI, walletsAPI, bookingsAPI } from "@/services/api";
+import { providerServicesAPI, providersAPI, bookingsAPI } from "@/services/api";
 import { CURRENCY } from "@/utils/constants";
 import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -26,7 +26,12 @@ import {
   AlertCircle,
   TrendingUp,
   Share2,
-  Grid3X3
+  Grid3X3,
+  Banknote,
+  RefreshCcw,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Loader2
 } from "lucide-react";
 
 const StylistDashboard = () => {
