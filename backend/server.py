@@ -2484,23 +2484,45 @@ async def create_notification(
             logging.warning("Notifications table does not exist")
             return False
         
+        # Build notification data - handle both old and new schema
         notification_data = {
-            "recipient_auth_id": recipient_auth_id,
             "type": notification_type,
             "title": title,
             "message": message,
-            "metadata": metadata or {},
             "read": False
         }
         
-        if actor_auth_id:
-            notification_data["actor_auth_id"] = actor_auth_id
+        # Try new schema first (recipient_auth_id)
+        try:
+            notification_data["recipient_auth_id"] = recipient_auth_id
+            if actor_auth_id:
+                notification_data["actor_auth_id"] = actor_auth_id
+            if metadata:
+                notification_data["metadata"] = metadata
+            
+            result = supabase.table("notifications").insert(notification_data).execute()
+            
+            if result.data:
+                logging.info(f"Notification created: type={notification_type}, recipient={recipient_auth_id[:8]}...")
+                return True
+        except Exception as schema_error:
+            # If new schema fails, try old schema (user_id or auth_id)
+            logging.warning(f"New schema insert failed, trying alternative: {schema_error}")
+            try:
+                fallback_data = {
+                    "user_id": recipient_auth_id,
+                    "type": notification_type,
+                    "title": title,
+                    "message": message,
+                    "read": False
+                }
+                result = supabase.table("notifications").insert(fallback_data).execute()
+                if result.data:
+                    logging.info(f"Notification created (fallback): type={notification_type}")
+                    return True
+            except Exception as fallback_error:
+                logging.warning(f"Fallback schema also failed: {fallback_error}")
         
-        result = supabase.table("notifications").insert(notification_data).execute()
-        
-        if result.data:
-            logging.info(f"Notification created: type={notification_type}, recipient={recipient_auth_id[:8]}...")
-            return True
         return False
         
     except Exception as e:
