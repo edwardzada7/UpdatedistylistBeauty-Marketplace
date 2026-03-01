@@ -877,6 +877,89 @@ const ProviderProfileScreen = () => {
               </CardContent>
             </Card>
           )}
+
+          {/* Reviews Section - Phase 3 */}
+          <Card data-testid="reviews-section">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Star className="h-5 w-5 text-amber-500" />
+                  Reviews
+                </div>
+                {reviewsStats.total_reviews > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                      <span className="font-bold">{reviewsStats.avg_rating}</span>
+                    </div>
+                    <span className="text-sm text-gray-500">
+                      ({reviewsStats.total_reviews} review{reviewsStats.total_reviews !== 1 ? 's' : ''})
+                    </span>
+                  </div>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingReviews ? (
+                <div className="text-center py-4">
+                  <Loader2 className="h-6 w-6 animate-spin mx-auto text-purple-600" />
+                  <p className="text-sm text-gray-500 mt-2">Loading reviews...</p>
+                </div>
+              ) : reviews.length > 0 ? (
+                <div className="space-y-4">
+                  {reviews.map((review) => (
+                    <div key={review.id} className="border-b last:border-b-0 pb-4 last:pb-0">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <p className="font-medium text-gray-900">{review.reviewer_name || "Anonymous"}</p>
+                          <div className="flex items-center gap-1 mt-1">
+                            {[...Array(5)].map((_, i) => (
+                              <Star
+                                key={i}
+                                className={`h-3 w-3 ${
+                                  i < review.rating
+                                    ? "fill-amber-400 text-amber-400"
+                                    : "text-gray-300"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          {new Date(review.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      
+                      {review.comment && (
+                        <p className="text-sm text-gray-700 mt-2">{review.comment}</p>
+                      )}
+                      
+                      {review.provider_reply && (
+                        <div className="mt-3 pl-4 border-l-2 border-purple-200 bg-purple-50 p-3 rounded-r">
+                          <p className="text-xs font-medium text-purple-700 mb-1">Provider Response</p>
+                          <p className="text-sm text-gray-700">{review.provider_reply}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  
+                  {reviewsStats.total_reviews > 5 && (
+                    <div className="text-center pt-2">
+                      <p className="text-sm text-gray-500">
+                        Showing {reviews.length} of {reviewsStats.total_reviews} reviews
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-gray-500">
+                  <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No reviews yet</p>
+                  <p className="text-xs mt-1">Be the first to book and leave a review!</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
 
