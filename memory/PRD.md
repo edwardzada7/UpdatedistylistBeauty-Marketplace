@@ -280,6 +280,13 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
   - ✅ **Performance Optimization**: Bookings list reduced from ~25s to ~0.4s (batched queries, no N+1)
   - ✅ **Testing**: 22/22 backend tests passed (test_wallet_payment.py + test_wallet_fixes.py)
 
+- **Phase 2.2.3 - Escrow Refund Fix** (January 19, 2026):
+  - ✅ **Refund Now Works**: Cancel/decline bookings now properly refund escrow → available_balance
+  - ✅ **Robust Refund Detection**: Checks payment_status OR payment records OR escrow balance presence
+  - ✅ **Amount Lookup Enhanced**: Tries booking_services → booking.total_amount → booking.service_price → payment records
+  - ✅ **Idempotency**: Uses payments table reference to prevent double-refund/release
+  - ✅ **Testing**: 55/55 backend tests passed (all wallet + escrow tests)
+
 ---
 
 ## Backlog / Future Tasks
