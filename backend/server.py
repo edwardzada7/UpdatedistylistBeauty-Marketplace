@@ -1171,14 +1171,23 @@ async def _credit_escrow(user_auth_id: str, amount: float, booking_id: int, refe
 async def _release_escrow_to_provider(booking_id: int, provider_auth_id: str, customer_auth_id: str):
     """Release escrow funds to provider when booking is completed"""
     try:
-        # Check for idempotency - don't release twice
-        if check_table_exists("wallet_transactions"):
-            existing_release = supabase.table("wallet_transactions").select("id").eq(
-                "booking_id", booking_id
-            ).eq("type", "ESCROW_RELEASE").execute()
-            
+        # Check for idempotency using payments table - don't release twice
+        release_ref = f"escrow_release_{booking_id}"
+        if check_table_exists("payments"):
+            existing_release = supabase.table("payments").select("id").eq(
+                "reference", release_ref
+            ).eq("status", "success").execute()
             if existing_release.data:
                 logging.info(f"Escrow already released for booking {booking_id}")
+                return
+        
+        # Also check wallet_transactions as backup
+        if check_table_exists("wallet_transactions"):
+            existing_tx = supabase.table("wallet_transactions").select("id").eq(
+                "booking_id", booking_id
+            ).eq("description", f"Escrow released for booking #{booking_id}").execute()
+            if existing_tx.data:
+                logging.info(f"Escrow release transaction exists for booking {booking_id}")
                 return
         
         # Get the booking to find the amount
@@ -1194,7 +1203,7 @@ async def _release_escrow_to_provider(booking_id: int, provider_auth_id: str, cu
         if check_table_exists("booking_services"):
             services_response = supabase.table("booking_services").select("price").eq("booking_id", booking_id).execute()
             if services_response.data:
-                amount = sum(float(svc.get("price", 0)) for svc in services_response.data)
+                amount = sum(float(svc.get("price", 0) or 0) for svc in services_response.data)
         
         # Fallback to payment record
         if amount == 0 and check_table_exists("payments"):
@@ -1226,18 +1235,32 @@ async def _release_escrow_to_provider(booking_id: int, provider_auth_id: str, cu
                 "escrow_balance": 0
             }).execute()
         
-        # Record transactions
-        release_ref = f"escrow_release_{booking_id}_{uuid.uuid4().hex[:8]}"
+        # Record payment for idempotency tracking
+        if check_table_exists("payments"):
+            supabase.table("payments").insert({
+                "reference": release_ref,
+                "amount": amount,
+                "purpose": "escrow_release",
+                "payment_provider": "internal",
+                "booking_id": booking_id,
+                "status": "success",
+                "processed": True,
+                "created_at": datetime.utcnow().isoformat(),
+                "processed_at": datetime.utcnow().isoformat()
+            }).execute()
+        
+        # Record transactions with proper field values
         if check_table_exists("wallet_transactions"):
             # Customer debit from escrow
             supabase.table("wallet_transactions").insert({
                 "user_auth_id": customer_auth_id,
-                "type": "ESCROW_RELEASE",
-                "direction": "DEBIT",
+                "auth_id": customer_auth_id,
+                "type": "debit",  # DB constraint: 'credit' or 'debit'
+                "direction": "debit",  # lowercase
                 "amount": amount,
                 "reference": release_ref,
                 "booking_id": booking_id,
-                "description": f"Payment released for booking #{booking_id}",
+                "description": f"Escrow released for booking #{booking_id}",
                 "status": "completed",
                 "created_at": datetime.utcnow().isoformat()
             }).execute()
@@ -1245,8 +1268,9 @@ async def _release_escrow_to_provider(booking_id: int, provider_auth_id: str, cu
             # Provider credit (earnings)
             supabase.table("wallet_transactions").insert({
                 "user_auth_id": provider_auth_id,
-                "type": "EARNINGS",
-                "direction": "CREDIT",
+                "auth_id": provider_auth_id,
+                "type": "credit",  # DB constraint: 'credit' or 'debit'
+                "direction": "credit",  # lowercase
                 "amount": amount,
                 "reference": release_ref,
                 "booking_id": booking_id,
