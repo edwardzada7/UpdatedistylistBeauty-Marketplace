@@ -4224,6 +4224,76 @@ async def update_booking(
                 else:
                     logging.info(f"Booking {booking_id}: No escrow to refund (no payment record found)")
         
+        # Create notifications based on status change
+        provider_id = booking.get("provider_id")
+        customer_auth_id = booking.get("customer_auth_id")
+        booking_date = booking.get("booking_date", "")
+        booking_time = booking.get("booking_time", "")
+        
+        # Get names for notifications
+        provider_name = "The stylist"
+        customer_name = "The customer"
+        try:
+            if provider_id:
+                provider_resp = supabase.table("users").select("name").eq("auth_id", provider_id).execute()
+                if provider_resp.data:
+                    provider_name = provider_resp.data[0].get("name") or "The stylist"
+            if customer_auth_id:
+                customer_resp = supabase.table("users").select("name").eq("auth_id", customer_auth_id).execute()
+                if customer_resp.data:
+                    customer_name = customer_resp.data[0].get("name") or "The customer"
+        except Exception:
+            pass
+        
+        # Send appropriate notification based on new status
+        if new_status == "confirmed" and customer_auth_id:
+            await create_notification(
+                recipient_auth_id=customer_auth_id,
+                notification_type="booking_confirmed",
+                title="Booking Confirmed",
+                message=f"{provider_name} has confirmed your booking for {booking_date} at {booking_time}",
+                actor_auth_id=provider_id,
+                metadata={"booking_id": booking_id}
+            )
+        elif new_status == "declined" and customer_auth_id:
+            await create_notification(
+                recipient_auth_id=customer_auth_id,
+                notification_type="booking_declined",
+                title="Booking Declined",
+                message=f"{provider_name} has declined your booking request",
+                actor_auth_id=provider_id,
+                metadata={"booking_id": booking_id}
+            )
+        elif new_status == "canceled":
+            # Determine who canceled and notify the other party
+            if role == "customer" and provider_id:
+                await create_notification(
+                    recipient_auth_id=provider_id,
+                    notification_type="booking_canceled",
+                    title="Booking Canceled",
+                    message=f"{customer_name} has canceled the booking for {booking_date}",
+                    actor_auth_id=customer_auth_id,
+                    metadata={"booking_id": booking_id}
+                )
+            elif role == "provider" and customer_auth_id:
+                await create_notification(
+                    recipient_auth_id=customer_auth_id,
+                    notification_type="booking_canceled",
+                    title="Booking Canceled",
+                    message=f"{provider_name} has canceled your booking for {booking_date}",
+                    actor_auth_id=provider_id,
+                    metadata={"booking_id": booking_id}
+                )
+        elif new_status == "completed" and customer_auth_id:
+            await create_notification(
+                recipient_auth_id=customer_auth_id,
+                notification_type="booking_completed",
+                title="Service Completed",
+                message=f"Your appointment with {provider_name} has been marked as completed",
+                actor_auth_id=provider_id,
+                metadata={"booking_id": booking_id}
+            )
+        
         # Return enriched booking
         enriched = await _enrich_booking(result.data[0], role)
         return enriched
