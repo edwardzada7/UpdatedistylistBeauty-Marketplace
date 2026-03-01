@@ -28,7 +28,18 @@ export default function LoginScreen() {
       navigate("/home", { replace: true });
     } catch (error) {
       console.error("[LoginScreen] Login error:", error);
-      toast.error(error.message || "Failed to login. Check credentials.");
+      // Safely extract error message to avoid any body stream issues
+      let errorMessage = "Failed to login. Check credentials.";
+      try {
+        if (error instanceof Error && error.message) {
+          errorMessage = error.message;
+        } else if (typeof error === 'string') {
+          errorMessage = error;
+        }
+      } catch (e) {
+        // Use default message
+      }
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
