@@ -1611,7 +1611,7 @@ async def pay_booking_with_wallet(
             # Log but don't fail the payment - wallet was already updated
             logging.warning(f"Failed to log wallet transactions for booking {booking_id}: {str(tx_error)}")
         
-        # 9. Update booking status to 'pending' (awaiting provider confirmation)
+        # 10. Update booking status to 'pending' (awaiting provider confirmation)
         # Handle missing columns gracefully
         try:
             supabase.table("bookings").update({
@@ -1634,7 +1634,7 @@ async def pay_booking_with_wallet(
             else:
                 raise
         
-        # 10. Create payment record
+        # 11. Create payment record for idempotency tracking
         if check_table_exists("payments"):
             supabase.table("payments").insert({
                 "reference": reference,
