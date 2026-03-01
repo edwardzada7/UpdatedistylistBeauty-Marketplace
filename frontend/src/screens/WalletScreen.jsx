@@ -428,6 +428,50 @@ export default function WalletScreen() {
           </Card>
         )}
 
+        {/* Withdrawal Requests (for providers) */}
+        {isProvider && withdrawalRequests.length > 0 && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-purple-600" />
+                Withdrawal Requests
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {withdrawalRequests.map((req, idx) => (
+                  <div
+                    key={req.id || idx}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                    data-testid={`withdrawal-request-${idx}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-full bg-blue-100 text-blue-600">
+                        <Banknote className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">
+                          {CURRENCY}{(req.amount || 0).toLocaleString()}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {req.bank_name} • ****{req.account_number?.slice(-4)}
+                        </p>
+                        <div className="flex items-center gap-1 text-xs text-gray-500">
+                          <Clock className="h-3 w-3" />
+                          {formatDate(req.created_at)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      {getWithdrawalStatusBadge(req.status)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Transaction History */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-3">
