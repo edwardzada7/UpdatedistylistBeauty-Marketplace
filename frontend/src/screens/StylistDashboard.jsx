@@ -278,17 +278,17 @@ const StylistDashboard = () => {
           </Card>
           <Card className="bg-white shadow-lg">
             <CardContent className="p-4 text-center">
-              <p className="text-xs text-gray-500">Total Value</p>
+              <p className="text-xs text-gray-500">Earnings</p>
               <p className="text-2xl font-bold text-green-600">
-                {CURRENCY}{stats.totalEarnings.toLocaleString()}
+                {CURRENCY}{(walletMetrics.total_earnings || 0).toLocaleString()}
               </p>
             </CardContent>
           </Card>
           <Card className="bg-white shadow-lg">
             <CardContent className="p-4 text-center">
-              <p className="text-xs text-gray-500">Wallet</p>
+              <p className="text-xs text-gray-500">Available</p>
               <p className="text-2xl font-bold text-blue-600">
-                {CURRENCY}{walletBalance.toLocaleString()}
+                {CURRENCY}{(walletMetrics.available_balance || 0).toLocaleString()}
               </p>
             </CardContent>
           </Card>
