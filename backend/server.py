@@ -3241,7 +3241,7 @@ async def update_booking(
             if provider_id and customer_auth_id:
                 await _release_escrow_to_provider(booking_id, provider_id, customer_auth_id)
         
-        elif new_status == "canceled" and current_status in ["pending", "confirmed", "pending_payment"]:
+        elif new_status in ["canceled", "declined"] and current_status in ["pending", "confirmed", "pending_payment"]:
             # Refund escrow to customer (only if payment was made)
             customer_auth_id = booking.get("customer_auth_id")
             payment_status = booking.get("payment_status")
