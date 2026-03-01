@@ -347,6 +347,29 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
   - ✅ **Testing**: 23/23 backend tests passed (including 6 new dashboard metrics tests)
   - ✅ **Performance**: Single API call for all metrics, limited transactions to 10
 
+- **Phase 2B - In-App Notifications** (March 1, 2026):
+  - ✅ **Database Migration Created**: `/app/backend/migrations/phase2B_notifications.sql`
+    - Creates `notifications` table with: id, recipient_auth_id, actor_auth_id, type, title, message, metadata, read, created_at, read_at
+    - Indexes for performance (recipient+created_at, recipient+read)
+    - RLS policies for user data isolation
+  - ✅ **Backend Endpoints**:
+    - `GET /api/notifications/me` - Get user's notifications with pagination
+    - `GET /api/notifications/unread-count` - Get unread count
+    - `POST /api/notifications/mark-read` - Mark notifications as read
+  - ✅ **Notification Events Integrated**:
+    - Booking: created, confirmed, declined, canceled, completed
+    - Withdrawal: requested, approved, rejected
+    - Wallet: topup_success
+  - ✅ **Frontend Components**:
+    - `NotificationsScreen.jsx` - Full notifications list with mark-as-read
+    - `NotificationBell.jsx` - Bell icon with unread badge count
+  - ✅ **Bell Icon Added To**:
+    - HomeScreen header
+    - StylistDashboard header
+    - ProfileScreen header
+  - ✅ **Testing**: 14/14 notification tests passed
+  - ⚠️ **NOTE**: User must run migration `/app/backend/migrations/phase2B_notifications.sql` in Supabase SQL Editor
+
 ---
 
 ## Backlog / Future Tasks
@@ -357,12 +380,11 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 - [x] ~~Provider withdrawal requests~~ - **DONE** (Phase A)
 - [x] ~~Admin Panel UI for withdrawal approvals~~ - **DONE** (Phase A.1)
 - [x] ~~Wallet/Earnings section on Stylist Dashboard~~ - **DONE** (Phase A.2)
-- [ ] **REQUIRED**: Run Phase 2.2 database migration for full transaction logging:
-  - `wallet_transactions.user_auth_id` column
-  - `bookings.payment_status` and `bookings.payment_reference` columns
+- [x] ~~In-App Notifications~~ - **DONE** (Phase 2B) - **MIGRATION REQUIRED**
+- [ ] **REQUIRED**: Run Phase 2B notifications migration in Supabase SQL Editor
+- [ ] **REQUIRED**: Run Phase 2.2 database migration for full transaction logging
 
 ### P1 (Medium Priority)
-- [ ] Notifications for booking status changes
 - [ ] Reviews & ratings system
 
 ### P2 (Low Priority)
@@ -374,6 +396,14 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 ---
 
 ## Database Migrations Required
+
+### Phase 2B - In-App Notifications (REQUIRED)
+Run `/app/backend/migrations/phase2B_notifications.sql` in Supabase SQL Editor.
+
+This creates/updates:
+- `notifications` table with recipient_auth_id, actor_auth_id, type, title, message, metadata, read, read_at
+- Indexes for performance
+- RLS policies for user isolation
 
 ### Phase 2.2 - Paystack Integration (PENDING)
 Run `/app/backend/migrations/phase22_paystack_integration.sql` in Supabase SQL Editor.
