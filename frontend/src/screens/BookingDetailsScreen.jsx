@@ -562,7 +562,223 @@ const BookingDetailsScreen = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Review Section - Phase 3 */}
+        {booking.status === "completed" && (
+          <Card data-testid="review-section">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Star className="h-4 w-4" />
+                Review
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {existingReview ? (
+                // Show existing review
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-1 mb-1">
+                        {[...Array(5)].map((_, i) => (
+                          <Star
+                            key={i}
+                            className={`h-4 w-4 ${
+                              i < existingReview.rating
+                                ? "fill-amber-400 text-amber-400"
+                                : "text-gray-300"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Reviewed on {new Date(existingReview.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {existingReview.comment && (
+                    <p className="text-gray-700">{existingReview.comment}</p>
+                  )}
+                  
+                  {existingReview.provider_reply && (
+                    <div className="pl-4 border-l-2 border-purple-200 bg-purple-50 p-3 rounded-r">
+                      <p className="text-xs font-medium text-purple-700 mb-1">Provider Response</p>
+                      <p className="text-sm text-gray-700">{existingReview.provider_reply}</p>
+                    </div>
+                  )}
+                  
+                  {/* Provider can reply if no reply yet */}
+                  {isProvider && !existingReview.provider_reply && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowReplyModal(true)}
+                      className="mt-2"
+                      data-testid="reply-to-review-btn"
+                    >
+                      <MessageCircle className="h-4 w-4 mr-1" />
+                      Reply to Review
+                    </Button>
+                  )}
+                </div>
+              ) : !isProvider ? (
+                // Customer can leave a review
+                <div className="text-center py-4">
+                  <Star className="h-8 w-8 mx-auto mb-2 text-amber-400" />
+                  <p className="text-gray-600 mb-3">How was your experience?</p>
+                  <Button
+                    onClick={() => setShowReviewModal(true)}
+                    className="bg-amber-500 hover:bg-amber-600"
+                    data-testid="leave-review-btn"
+                  >
+                    <Star className="h-4 w-4 mr-2" />
+                    Leave a Review
+                  </Button>
+                </div>
+              ) : (
+                // Provider - no review yet
+                <p className="text-center text-gray-500 py-4">
+                  No review yet from the customer
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
+
+      {/* Review Modal */}
+      {showReviewModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 space-y-4">
+            <h3 className="text-lg font-semibold">Leave a Review</h3>
+            
+            {/* Star Rating */}
+            <div>
+              <p className="text-sm text-gray-600 mb-2">Rating</p>
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setReviewRating(star)}
+                    className="p-1 hover:scale-110 transition-transform"
+                    data-testid={`rating-star-${star}`}
+                  >
+                    <Star
+                      className={`h-8 w-8 ${
+                        star <= reviewRating
+                          ? "fill-amber-400 text-amber-400"
+                          : "text-gray-300"
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {/* Comment */}
+            <div>
+              <p className="text-sm text-gray-600 mb-2">Comment (optional)</p>
+              <Textarea
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                placeholder="Share your experience..."
+                rows={4}
+                data-testid="review-comment-input"
+              />
+            </div>
+            
+            {/* Actions */}
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => setShowReviewModal(false)}
+                disabled={submittingReview}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSubmitReview}
+                disabled={submittingReview}
+                className="bg-amber-500 hover:bg-amber-600"
+                data-testid="submit-review-btn"
+              >
+                {submittingReview ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                Submit Review
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reply Modal */}
+      {showReplyModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 space-y-4">
+            <h3 className="text-lg font-semibold">Reply to Review</h3>
+            
+            {/* Original Review Summary */}
+            {existingReview && (
+              <div className="bg-gray-50 p-3 rounded text-sm">
+                <div className="flex items-center gap-1 mb-1">
+                  {[...Array(5)].map((_, i) => (
+                    <Star
+                      key={i}
+                      className={`h-3 w-3 ${
+                        i < existingReview.rating
+                          ? "fill-amber-400 text-amber-400"
+                          : "text-gray-300"
+                      }`}
+                    />
+                  ))}
+                </div>
+                {existingReview.comment && (
+                  <p className="text-gray-600">{existingReview.comment}</p>
+                )}
+              </div>
+            )}
+            
+            {/* Reply Text */}
+            <div>
+              <p className="text-sm text-gray-600 mb-2">Your Reply</p>
+              <Textarea
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                placeholder="Thank you for your feedback..."
+                rows={4}
+                data-testid="reply-text-input"
+              />
+            </div>
+            
+            {/* Actions */}
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => setShowReplyModal(false)}
+                disabled={submittingReply}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSubmitReply}
+                disabled={submittingReply || !replyText.trim()}
+                data-testid="submit-reply-btn"
+              >
+                {submittingReply ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                Submit Reply
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <BottomNavSpacer />
       <BottomNavigation />
