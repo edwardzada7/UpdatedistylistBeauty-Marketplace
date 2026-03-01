@@ -278,6 +278,13 @@ export const notificationsAPI = {
   markAllRead: (authId) => api.post("/notifications/mark-read", { auth_id: authId, mark_all: true }),
 };
 
+// ==================== CHAT API (Phase 2C) ====================
+
+export const chatAPI = {
+  // Get total unread chat count across all bookings
+  getUnreadCount: (authId) => api.get(`/chat/unread-count?auth_id=${authId}`),
+};
+
 // ==================== UTILITY API ====================
 
 export const utilityAPI = {
