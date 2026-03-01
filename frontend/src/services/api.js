@@ -219,6 +219,17 @@ export const walletsAPI = {
     api.get(`/wallet/transactions?auth_id=${authId}&limit=${limit}`),
 };
 
+// ==================== WITHDRAWALS API (Phase A) ====================
+
+export const withdrawalsAPI = {
+  // Request a withdrawal
+  request: (authId, data) => api.post(`/withdrawals/request?auth_id=${authId}`, data),
+  
+  // Get my withdrawal requests
+  getMyRequests: (authId, limit = 50) => 
+    api.get(`/withdrawals/me?auth_id=${authId}&limit=${limit}`),
+};
+
 // ==================== PAYMENTS API (Paystack for wallet top-up only) ====================
 
 export const paymentsAPI = {
