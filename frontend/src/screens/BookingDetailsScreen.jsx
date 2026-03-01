@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { bookingsAPI, paymentsAPI } from "@/services/api";
+import { bookingsAPI, paymentsAPI, reviewsAPI } from "@/services/api";
 import { CURRENCY } from "@/utils/constants";
 import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -26,7 +27,9 @@ import {
   RefreshCcw,
   CreditCard,
   Wallet,
-  MessageCircle
+  MessageCircle,
+  Star,
+  Send
 } from "lucide-react";
 
 const STATUS_CONFIG = {
