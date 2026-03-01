@@ -98,6 +98,13 @@ export async function loginWithEmail(email, password) {
   } catch (err) {
     // Handle errors that are already Error objects (from our throw above)
     if (err instanceof Error) {
+      // Check if this is a body stream error and convert to user-friendly message
+      const errMsg = err.message || "";
+      if (errMsg.includes("body stream already read") || 
+          errMsg.includes("Already read") ||
+          errMsg.includes("Failed to execute") && errMsg.includes("Response")) {
+        throw new Error("Invalid login credentials");
+      }
       throw err;
     }
     
@@ -111,6 +118,13 @@ export async function loginWithEmail(email, password) {
       }
     } catch (e) {
       // Use default message if extraction fails
+    }
+    
+    // Check for body stream issues in the message
+    if (msg.includes("body stream already read") || 
+        msg.includes("Already read") ||
+        (msg.includes("Failed to execute") && msg.includes("Response"))) {
+      throw new Error("Invalid login credentials");
     }
     
     throw new Error(msg);
