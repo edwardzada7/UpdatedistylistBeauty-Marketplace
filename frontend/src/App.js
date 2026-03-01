@@ -26,6 +26,10 @@ import ProviderBookingsScreen from "@/screens/ProviderBookingsScreen";
 // Shared Screens
 import BookingDetailsScreen from "@/screens/BookingDetailsScreen";
 
+// Admin Screens
+import AdminLoginScreen from "@/screens/AdminLoginScreen";
+import AdminWithdrawalsScreen from "@/screens/AdminWithdrawalsScreen";
+
 // Components
 import LoadingSpinner from "@/components/LoadingSpinner";
 
