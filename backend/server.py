@@ -1718,24 +1718,61 @@ async def get_my_wallet(auth_id: str = Query(..., description="User's auth_id"))
 @api_router.get("/wallet/transactions")
 async def get_wallet_transactions(
     auth_id: str = Query(..., description="User's auth_id"),
+    role: str = Query("customer", description="Role: customer or provider"),
     limit: int = Query(50, ge=1, le=100)
 ):
-    """Get user's wallet transaction history"""
+    """Get user's wallet transaction history based on role"""
     try:
         if not check_table_exists("wallet_transactions"):
             return []
         
-        # Try to query with user_auth_id column, fallback gracefully if column doesn't exist
+        # Build query based on role
         try:
-            response = supabase.table("wallet_transactions").select("*").eq(
-                "user_auth_id", auth_id
-            ).order("created_at", desc=True).limit(limit).execute()
-            return response.data or []
+            if role == "provider":
+                # Provider transactions may be stored with:
+                # - user_auth_id = provider_auth_id (when provider is credited)
+                # - provider_auth_id field (if it exists)
+                # - auth_id field (alternate column name)
+                # We need to check all possible columns
+                
+                # First try with user_auth_id (main column)
+                response = supabase.table("wallet_transactions").select("*").eq(
+                    "user_auth_id", auth_id
+                ).order("created_at", desc=True).limit(limit).execute()
+                
+                results = response.data or []
+                
+                # Also check auth_id column if different
+                try:
+                    auth_response = supabase.table("wallet_transactions").select("*").eq(
+                        "auth_id", auth_id
+                    ).order("created_at", desc=True).limit(limit).execute()
+                    
+                    if auth_response.data:
+                        # Merge and dedupe by id
+                        existing_ids = {r.get("id") for r in results}
+                        for tx in auth_response.data:
+                            if tx.get("id") not in existing_ids:
+                                results.append(tx)
+                except Exception:
+                    pass  # Column might not exist
+                
+                # Sort merged results by created_at desc
+                results.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+                return results[:limit]
+            else:
+                # Customer transactions - simple filter by user_auth_id
+                response = supabase.table("wallet_transactions").select("*").eq(
+                    "user_auth_id", auth_id
+                ).order("created_at", desc=True).limit(limit).execute()
+                return response.data or []
+                
         except Exception as col_error:
-            # If column doesn't exist, return empty list with warning
-            if "user_auth_id" in str(col_error):
+            error_str = str(col_error)
+            if "user_auth_id" in error_str:
                 logging.warning("wallet_transactions table missing user_auth_id column. Run migration.")
                 return []
+            logging.error(f"Transaction query error: {error_str}")
             raise
     except Exception as e:
         logging.error(f"Failed to fetch transactions: {str(e)}")
