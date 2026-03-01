@@ -465,10 +465,32 @@ Table columns: id, provider_auth_id, amount, currency, bank_name, account_name, 
 
 ## Last Updated
 - **Date**: March 1, 2026
-- **Phase**: Phase 2B - In-App Notifications (Complete) + Bug Fix
-- **Status**: Backend 100% (17 notification tests + 23 withdrawal tests passed), Frontend UI complete
-- **Key Fix**: Notifications now query by `auth_id` column (uuid) correctly, returning real data
-- **Tested**: GET /api/notifications/me returns 3 notifications, unread-count returns 2, mark-read works
+- **Phase**: Phase 3 - Reviews & Ratings (Complete)
+- **Status**: Backend 100% (15 review tests passed), Frontend UI complete
+- **Key Feature**: Customers can review completed bookings, providers can reply
+- **Tested**: All review endpoints working, test review created in database
+
+---
+
+## Phase 3 - Reviews & Ratings
+
+### Backend Endpoints
+- `POST /api/reviews?auth_id=X` - Create review (customer only, completed bookings)
+- `GET /api/providers/{provider_auth_id}/reviews` - Get provider reviews with aggregates
+- `GET /api/reviews/me?auth_id=X&role=customer|provider` - Get my reviews
+- `GET /api/reviews/by-booking/{booking_id}?auth_id=X` - Get review for specific booking
+- `POST /api/reviews/{review_id}/reply?auth_id=X` - Provider reply to review
+
+### Frontend Components
+- `ProviderProfileScreen.jsx` - Reviews section with rating display
+- `BookingDetailsScreen.jsx` - Leave review button, review modal, provider reply modal
+
+### Database Schema (reviews table)
+```sql
+id, booking_id, reviewer_auth_id, provider_auth_id, rating (1-5), 
+comment, provider_reply, created_at, replied_at
+UNIQUE(booking_id, reviewer_auth_id)
+```
 
 ---
 
