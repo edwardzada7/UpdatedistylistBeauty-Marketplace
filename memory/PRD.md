@@ -465,7 +465,25 @@ Table columns: id, provider_auth_id, amount, currency, bank_name, account_name, 
 
 ## Last Updated
 - **Date**: March 1, 2026
-- **Phase**: Phase 2B - In-App Notifications (Complete)
+- **Phase**: Phase 2B - In-App Notifications (Complete) + Bug Fix
 - **Status**: Backend 100% (17 notification tests + 23 withdrawal tests passed), Frontend UI complete
 - **Key Fix**: Notifications now query by `auth_id` column (uuid) correctly, returning real data
 - **Tested**: GET /api/notifications/me returns 3 notifications, unread-count returns 2, mark-read works
+
+---
+
+## Bug Fixes
+
+### Login Flow Crash (Fixed - March 1, 2026)
+**Problem**: App crashed with "Failed to execute 'json' on 'Response': body stream already read" when users entered incorrect credentials.
+
+**Root Cause**: The Supabase SDK internally reads the response body multiple times when authentication fails with 400 status, causing a JavaScript error that propagated to the UI.
+
+**Solution**: Added defensive error handling in `authService.js` and `LoginScreen.jsx`:
+- Detect "body stream already read" errors and convert to user-friendly message
+- Show "Invalid login credentials" instead of technical error
+- App stays on login page, no crash, loading state resets properly
+
+**Files Modified**:
+- `/app/frontend/src/services/authService.js` - Added body stream error detection in catch block
+- `/app/frontend/src/screens/LoginScreen.jsx` - Added safer error message extraction
