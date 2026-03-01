@@ -2981,7 +2981,7 @@ async def get_bookings(
     date_from: Optional[str] = Query(None, description="Filter from date (YYYY-MM-DD)"),
     date_to: Optional[str] = Query(None, description="Filter to date (YYYY-MM-DD)")
 ):
-    """Get bookings with optional filters and computed fields"""
+    """Get bookings with optional filters and computed fields (optimized)"""
     try:
         if not check_table_exists("bookings"):
             return []
@@ -2991,11 +2991,8 @@ async def get_bookings(
         # Role-based filtering using auth_id (UUID)
         if role and auth_id:
             if role == "provider":
-                # For provider role, match provider_id (UUID) directly
                 query = query.eq("provider_id", auth_id)
             elif role == "customer":
-                # For customer role, match customer_auth_id (UUID) directly
-                # This avoids the integer ID lookup and works with UUID auth
                 query = query.eq("customer_auth_id", auth_id)
         
         # Legacy filters (for backward compatibility)
@@ -3004,7 +3001,6 @@ async def get_bookings(
             if provider_uuid:
                 query = query.eq("provider_id", provider_uuid)
         if customer_id:
-            # Legacy: look up by integer customer_id
             query = query.eq("customer_id", customer_id)
         if booking_status:
             query = query.eq("status", booking_status)
@@ -3018,10 +3014,94 @@ async def get_bookings(
         result = query.order("booking_date", desc=True).order("booking_time", desc=True).execute()
         bookings = result.data or []
         
-        # Enrich bookings with computed fields
+        if not bookings:
+            return []
+        
+        # Batch fetch all related data to avoid N+1 queries
+        booking_ids = [b["id"] for b in bookings]
+        provider_ids = list(set(b.get("provider_id") for b in bookings if b.get("provider_id")))
+        customer_ids = list(set(b.get("customer_id") for b in bookings if b.get("customer_id")))
+        
+        # Batch fetch booking_services
+        booking_services_map = {}
+        if check_table_exists("booking_services") and booking_ids:
+            bs_response = supabase.table("booking_services").select("*").in_("booking_id", booking_ids).execute()
+            for bs in bs_response.data or []:
+                bid = bs.get("booking_id")
+                if bid not in booking_services_map:
+                    booking_services_map[bid] = []
+                booking_services_map[bid].append(bs)
+        
+        # Batch fetch service details
+        service_ids = list(set(
+            bs.get("service_id") 
+            for bss in booking_services_map.values() 
+            for bs in bss 
+            if bs.get("service_id")
+        ))
+        services_map = {}
+        if check_table_exists("services") and service_ids:
+            svc_response = supabase.table("services").select("*").in_("id", service_ids).execute()
+            for svc in svc_response.data or []:
+                services_map[svc["id"]] = svc
+        
+        # Batch fetch provider names
+        provider_names_map = {}
+        if provider_ids:
+            users_response = supabase.table("users").select("id, name, auth_id").in_("auth_id", provider_ids).execute()
+            user_id_to_auth = {}
+            for u in users_response.data or []:
+                provider_names_map[u.get("auth_id")] = u.get("name") or "Provider"
+                user_id_to_auth[u["id"]] = u.get("auth_id")
+            
+            # Try to get business names from stylists
+            if user_id_to_auth:
+                stylist_response = supabase.table("stylists").select("user_id, business_name").in_("user_id", list(user_id_to_auth.keys())).execute()
+                for s in stylist_response.data or []:
+                    if s.get("business_name") and s.get("user_id") in user_id_to_auth:
+                        auth_id_for_user = user_id_to_auth[s["user_id"]]
+                        provider_names_map[auth_id_for_user] = s["business_name"]
+        
+        # Batch fetch customer names
+        customer_names_map = {}
+        if customer_ids:
+            cust_response = supabase.table("users").select("id, name").in_("id", customer_ids).execute()
+            for c in cust_response.data or []:
+                customer_names_map[c["id"]] = c.get("name") or "Customer"
+        
+        # Enrich bookings using pre-fetched data
         enriched_bookings = []
         for booking in bookings:
-            enriched = await _enrich_booking(booking, role)
+            enriched = {**booking}
+            
+            # Add services
+            services = []
+            total_amount = 0
+            total_duration = 0
+            for bs in booking_services_map.get(booking["id"], []):
+                service_name = "Service"
+                if bs.get("service_id") and bs["service_id"] in services_map:
+                    svc = services_map[bs["service_id"]]
+                    parsed = parse_service_record(svc)
+                    service_name = parsed.get("sub_service_name") or parsed.get("name") or svc.get("name", "Service")
+                
+                price = bs.get("price") or 0
+                duration = bs.get("duration_minutes") or 0
+                services.append({
+                    "service_id": bs.get("service_id"),
+                    "service_name": service_name,
+                    "price": price,
+                    "duration_minutes": duration
+                })
+                total_amount += price
+                total_duration += duration
+            
+            enriched["services"] = services
+            enriched["total_amount"] = total_amount
+            enriched["total_duration"] = total_duration
+            enriched["provider_display_name"] = provider_names_map.get(booking.get("provider_id"), "Provider")
+            enriched["customer_display_name"] = customer_names_map.get(booking.get("customer_id"), "Customer")
+            
             enriched_bookings.append(enriched)
         
         return enriched_bookings
