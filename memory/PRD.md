@@ -287,6 +287,26 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
   - ✅ **Idempotency**: Uses payments table reference to prevent double-refund/release
   - ✅ **Testing**: 55/55 backend tests passed (all wallet + escrow tests)
 
+- **Phase A - Provider Withdrawal Requests** (March 1, 2026):
+  - ✅ **Backend Endpoints**:
+    - `POST /api/withdrawals/request` - Provider submits withdrawal request (validates balance, creates pending request)
+    - `GET /api/withdrawals/me` - Provider views their withdrawal requests history
+    - `PUT /api/admin/withdrawals/{id}` - Admin approves/rejects requests (protected by X-ADMIN-KEY)
+  - ✅ **Withdrawal Flow**:
+    - Provider requests withdrawal with bank details (amount, bank_name, account_name, account_number, note)
+    - Balance is NOT deducted until admin approval
+    - Creates wallet_transaction log with status='pending'
+    - Admin can approve (deducts balance, status='approved') or reject (no balance change, status='rejected')
+  - ✅ **Frontend Updates** (WalletScreen.jsx):
+    - "Withdraw Funds" button for providers
+    - Withdrawal request modal with bank details form
+    - Withdrawal requests history list showing status badges
+  - ✅ **Security**: Admin endpoint protected by ADMIN_DASH_KEY environment variable
+  - ✅ **Validation**: Account number must be 10 digits, amount must be positive and <= available_balance
+  - ✅ **Idempotency**: Cannot re-process already approved/rejected requests (409 Conflict)
+  - ✅ **Testing**: 14/14 backend tests passed (test_withdrawals.py)
+  - ⚠️ **Note**: Admin panel UI not yet implemented - use API directly for now
+
 ---
 
 ## Backlog / Future Tasks
@@ -294,11 +314,13 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 ### P0 (High Priority)
 - [x] ~~Payment gateway integration (Paystack for wallet top-up)~~ - **DONE**
 - [x] ~~Wallet-based booking payments~~ - **DONE** (Phase 2.2.1)
+- [x] ~~Provider withdrawal requests~~ - **DONE** (Phase A)
 - [ ] **REQUIRED**: Run Phase 2.2 database migration for full transaction logging:
   - `wallet_transactions.user_auth_id` column
   - `bookings.payment_status` and `bookings.payment_reference` columns
 
 ### P1 (Medium Priority)
+- [ ] Admin Panel UI for withdrawal approvals
 - [ ] Full Wallet/Earnings section UI on Stylist Dashboard
 - [ ] Notifications for booking status changes
 - [ ] Reviews & ratings system
@@ -323,6 +345,10 @@ This creates/updates:
 - Adds `escrow_balance` to `wallets` table
 - Adds `payment_reference`, `payment_status` to `bookings` table
 
+### Phase A - Withdrawal Requests (ALREADY DONE)
+The `withdrawal_requests` table and RLS policies were already created by the user in Supabase.
+Table columns: id, provider_auth_id, amount, currency, bank_name, account_name, account_number, status, note, created_at, updated_at
+
 ---
 
 ## File Structure
@@ -330,7 +356,7 @@ This creates/updates:
 ```
 /app/
 ├── backend/
-│   ├── server.py                 # Main FastAPI app (with Paystack payment APIs)
+│   ├── server.py                 # Main FastAPI app (with Paystack, wallet, withdrawal APIs)
 │   ├── service_catalog.py        # Service definitions
 │   ├── tests/
 │   │   ├── test_availability.py
@@ -338,10 +364,11 @@ This creates/updates:
 │   │   ├── test_booking_services.py     # Phase 2.2 tests
 │   │   ├── test_bookings_views.py       # Phase 2.3 tests
 │   │   ├── test_bookings_phase22.py     # Phase 2.3 extended tests
-│   │   └── test_paystack_payments.py    # Phase 2.2 Paystack tests (23 tests)
+│   │   ├── test_paystack_payments.py    # Phase 2.2 Paystack tests (23 tests)
+│   │   └── test_withdrawals.py          # Phase A withdrawal tests (14 tests)
 │   └── migrations/
 │       ├── phase19_privacy_identity.sql
-│       └── phase22_paystack_integration.sql  # NEW
+│       └── phase22_paystack_integration.sql
 └── frontend/
     └── src/
         ├── screens/
@@ -354,9 +381,9 @@ This creates/updates:
         │   ├── CustomerBookingsScreen.jsx     # Customer bookings with Pay Now
         │   ├── ProviderBookingsScreen.jsx     # Provider bookings list
         │   ├── BookingDetailsScreen.jsx       # Booking details with Pay Now
-        │   └── WalletScreen.jsx               # Wallet with top-up flow (Phase 2.2)
+        │   └── WalletScreen.jsx               # Wallet with top-up (customer) and withdraw (provider)
         ├── services/
-        │   └── api.js                         # API client (with paymentsAPI, walletsAPI)
+        │   └── api.js                         # API client (with paymentsAPI, walletsAPI, withdrawalsAPI)
         ├── components/
         │   └── BottomNavigation.jsx           # Updated with Bookings tab
         └── contexts/
@@ -366,7 +393,7 @@ This creates/updates:
 ---
 
 ## Last Updated
-- **Date**: January 19, 2026
-- **Phase**: 2.2.3 - Escrow Refund Fix (Complete)
-- **Status**: Backend 100% (55/55 tests passed)
-- **Key Fix**: Cancel/decline now properly refunds escrow to customer available balance
+- **Date**: March 1, 2026
+- **Phase**: Phase A - Provider Withdrawal Requests (Complete)
+- **Status**: Backend 100% (14/14 withdrawal tests passed)
+- **Key Feature**: Providers can request withdrawals, admin can approve/reject via protected API
