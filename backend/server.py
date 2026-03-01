@@ -18,6 +18,9 @@ import uuid
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+# Currency symbol for Nigeria
+CURRENCY = "₦"
+
 # Supabase connection
 supabase_url = os.environ['SUPABASE_URL']
 supabase_key = os.environ['SUPABASE_SERVICE_ROLE_KEY']
