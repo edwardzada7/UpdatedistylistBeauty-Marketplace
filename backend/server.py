@@ -1084,6 +1084,19 @@ async def verify_paystack_payment(reference: str = Query(..., description="Payme
                     "processed": True,
                     "processed_at": datetime.utcnow().isoformat()
                 }).eq("reference", reference).execute()
+            
+            # Create notification for wallet topup success
+            if purpose == "wallet_topup":
+                await create_notification(
+                    recipient_auth_id=user_auth_id,
+                    notification_type="wallet_topup_success",
+                    title="Wallet Top-Up Successful",
+                    message=f"Your wallet has been credited with {CURRENCY}{amount_naira:,.2f}",
+                    metadata={
+                        "amount": amount_naira,
+                        "reference": reference
+                    }
+                )
         
         return {
             "status": tx_status,
