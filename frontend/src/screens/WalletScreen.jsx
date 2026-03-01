@@ -43,9 +43,8 @@ export default function WalletScreen() {
       const walletResponse = await walletsAPI.getMyWallet(user.id);
       setWallet(walletResponse.data);
       
-      // Fetch transactions with correct role
-      const role = isProvider ? "provider" : "customer";
-      const txResponse = await walletsAPI.getTransactions(user.id, 50, role);
+      // Fetch transactions (same auth_id for both customer and provider)
+      const txResponse = await walletsAPI.getTransactions(user.id, 50);
       setTransactions(txResponse.data || []);
     } catch (error) {
       console.error("Failed to fetch wallet data:", error);
@@ -60,7 +59,7 @@ export default function WalletScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id, isProvider]);
+  }, [user?.id]);
 
   // Check for payment callback on mount
   useEffect(() => {
