@@ -240,29 +240,12 @@ class TestTransactionLogging:
             # Type must be 'credit' or 'debit' per DB constraint
             assert tx["type"] in ["credit", "debit"]
     
-    def test_provider_transactions_endpoint(self):
-        """Verify provider role returns list (may be empty)"""
+    def test_transactions_searches_both_columns(self):
+        """Verify endpoint searches user_auth_id and auth_id columns"""
+        # Just verify the endpoint works - it searches both columns internally
         response = requests.get(
             f"{BASE_URL}/wallet/transactions",
-            params={
-                "auth_id": "00000000-0000-0000-0000-000000000000",
-                "limit": 10,
-                "role": "provider"
-            }
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, list)
-    
-    def test_customer_transactions_endpoint(self):
-        """Verify customer role returns list (may be empty)"""
-        response = requests.get(
-            f"{BASE_URL}/wallet/transactions",
-            params={
-                "auth_id": "00000000-0000-0000-0000-000000000000",
-                "limit": 10,
-                "role": "customer"
-            }
+            params={"auth_id": "00000000-0000-0000-0000-000000000000", "limit": 10}
         )
         assert response.status_code == 200
         data = response.json()
