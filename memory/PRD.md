@@ -466,6 +466,6 @@ Table columns: id, provider_auth_id, amount, currency, bank_name, account_name, 
 ## Last Updated
 - **Date**: March 1, 2026
 - **Phase**: Phase 2B - In-App Notifications (Complete)
-- **Status**: Backend 100% (37+ tests passed), Frontend UI complete
-- **Key Feature**: In-app notifications for booking and withdrawal events with bell icon and unread badge
-- **Migration Required**: Run `/app/backend/migrations/phase2B_notifications.sql` in Supabase SQL Editor
+- **Status**: Backend 100% (17 notification tests + 23 withdrawal tests passed), Frontend UI complete
+- **Key Fix**: Notifications now query by `auth_id` column (uuid) correctly, returning real data
+- **Tested**: GET /api/notifications/me returns 3 notifications, unread-count returns 2, mark-read works
