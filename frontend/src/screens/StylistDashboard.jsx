@@ -297,58 +297,192 @@ const StylistDashboard = () => {
 
       {/* Main Content */}
       <div className="p-4 space-y-4">
-        {/* Wallet Section */}
-        <Card 
-          className="cursor-pointer hover:shadow-md transition-all"
-          onClick={() => navigate("/wallet")}
-        >
-          <CardContent className="p-4">
+        {/* Wallet & Earnings Section - Enhanced */}
+        <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50">
+          <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                  <Wallet className="h-6 w-6 text-blue-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">Wallet & Earnings</h3>
-                  <p className="text-sm text-gray-500">Balance: {CURRENCY}{walletBalance.toLocaleString()}</p>
-                </div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-blue-600" />
+                Wallet & Earnings
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRefreshMetrics}
+                disabled={refreshing || metricsLoading}
+                className="h-8 w-8"
+              >
+                <RefreshCcw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {metricsLoading ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
               </div>
-              <ChevronRight className="h-5 w-5 text-gray-400" />
-            </div>
-            <div className="flex gap-2 mt-3">
-              <Button 
-                size="sm" 
-                variant="outline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate("/wallet");
-                }}
-              >
-                Top Up
-              </Button>
-              <Button 
-                size="sm" 
-                variant="outline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toast.info("Payout feature coming soon!");
-                }}
-              >
-                Withdraw
-              </Button>
-              <Button 
-                size="sm" 
-                variant="outline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate("/wallet");
-                }}
-              >
-                History
-              </Button>
-            </div>
+            ) : metricsError ? (
+              <div className="text-center py-4">
+                <AlertCircle className="h-8 w-8 text-red-400 mx-auto mb-2" />
+                <p className="text-sm text-gray-600">{metricsError}</p>
+                <Button variant="outline" size="sm" onClick={handleRefreshMetrics} className="mt-2">
+                  Retry
+                </Button>
+              </div>
+            ) : (
+              <>
+                {/* Balance Cards */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-3 bg-white rounded-lg text-center shadow-sm">
+                    <p className="text-xs text-gray-500">Available</p>
+                    <p className="text-lg font-bold text-green-600">
+                      {CURRENCY}{(walletMetrics.available_balance || 0).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-white rounded-lg text-center shadow-sm">
+                    <p className="text-xs text-gray-500">In Escrow</p>
+                    <p className="text-lg font-bold text-amber-600">
+                      {CURRENCY}{(walletMetrics.escrow_balance || 0).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-white rounded-lg text-center shadow-sm">
+                    <p className="text-xs text-gray-500">Total</p>
+                    <p className="text-lg font-bold text-blue-600">
+                      {CURRENCY}{(walletMetrics.total_balance || 0).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Earnings Summary */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-3 bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg text-center">
+                    <p className="text-xs text-gray-500">All Time</p>
+                    <p className="text-sm font-bold text-green-700">
+                      {CURRENCY}{(walletMetrics.total_earnings || 0).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-lg text-center">
+                    <p className="text-xs text-gray-500">Last 7 Days</p>
+                    <p className="text-sm font-bold text-purple-700">
+                      {CURRENCY}{(walletMetrics.last_7_days_earnings || 0).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-lg text-center">
+                    <p className="text-xs text-gray-500">Last 30 Days</p>
+                    <p className="text-sm font-bold text-blue-700">
+                      {CURRENCY}{(walletMetrics.last_30_days_earnings || 0).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Pending Withdrawals */}
+                {walletMetrics.pending_withdrawals_total > 0 && (
+                  <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-amber-600" />
+                      <span className="text-sm text-amber-800">Pending Withdrawals</span>
+                    </div>
+                    <span className="font-semibold text-amber-700">
+                      {CURRENCY}{walletMetrics.pending_withdrawals_total.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex gap-2">
+                  <Button 
+                    className="flex-1 bg-blue-600 hover:bg-blue-700"
+                    onClick={() => navigate("/wallet")}
+                  >
+                    <Banknote className="h-4 w-4 mr-2" />
+                    Withdraw
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => navigate("/wallet")}
+                  >
+                    <TrendingUp className="h-4 w-4 mr-2" />
+                    View All
+                  </Button>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
+
+        {/* Recent Transactions */}
+        {!metricsLoading && !metricsError && walletMetrics.recent_transactions?.length > 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-gray-600" />
+                  Recent Transactions
+                </CardTitle>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => navigate("/wallet")}
+                  className="text-xs text-blue-600"
+                >
+                  View All <ChevronRight className="h-3 w-3 ml-1" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {walletMetrics.recent_transactions.slice(0, 5).map((tx, idx) => (
+                <div 
+                  key={tx.id || idx}
+                  className="flex items-center justify-between p-2 bg-gray-50 rounded-lg"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className={`p-1.5 rounded-full ${
+                      tx.direction === "credit" 
+                        ? "bg-green-100 text-green-600" 
+                        : "bg-red-100 text-red-600"
+                    }`}>
+                      {tx.direction === "credit" 
+                        ? <ArrowDownLeft className="h-3 w-3" />
+                        : <ArrowUpRight className="h-3 w-3" />
+                      }
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-800 truncate max-w-[150px]">
+                        {tx.description || tx.type || "Transaction"}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {tx.created_at ? new Date(tx.created_at).toLocaleDateString("en-NG", {
+                          month: "short",
+                          day: "numeric"
+                        }) : "-"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-sm font-semibold ${
+                      tx.direction === "credit" ? "text-green-600" : "text-red-600"
+                    }`}>
+                      {tx.direction === "credit" ? "+" : "-"}{CURRENCY}{(tx.amount || 0).toLocaleString()}
+                    </p>
+                    <Badge 
+                      variant="secondary" 
+                      className={`text-xs px-1.5 py-0 ${
+                        tx.status === "completed" 
+                          ? "bg-green-100 text-green-700" 
+                          : tx.status === "pending"
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      {tx.status || "done"}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
 
         {/* My Services Section */}
         <Card 
