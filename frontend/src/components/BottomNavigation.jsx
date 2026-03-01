@@ -15,6 +15,11 @@ const BottomNavigation = () => {
   const location = useLocation();
   const { isProvider } = useAuth();
 
+  // Hide navigation on admin routes
+  if (location.pathname.startsWith("/admin")) {
+    return null;
+  }
+
   // Different nav items for providers vs users - using new /user/* and /provider/* paths
   const userNavItems = [
     { path: "/user/home", icon: Home, label: "Home", legacyPaths: ["/home"] },
