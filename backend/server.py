@@ -3330,11 +3330,42 @@ async def update_booking(
                 await _release_escrow_to_provider(booking_id, provider_id, customer_auth_id)
         
         elif new_status in ["canceled", "declined"] and current_status in ["pending", "confirmed", "pending_payment"]:
-            # Refund escrow to customer (only if payment was made)
+            # Refund escrow to customer
             customer_auth_id = booking.get("customer_auth_id")
-            payment_status = booking.get("payment_status")
-            if customer_auth_id and payment_status == "paid":
-                await _refund_escrow_to_customer(booking_id, customer_auth_id)
+            if customer_auth_id:
+                # Check if there's escrow to refund by:
+                # 1. payment_status == "paid" OR
+                # 2. There's a payment record for this booking OR
+                # 3. Customer has escrow balance (fallback)
+                should_refund = False
+                payment_status = booking.get("payment_status")
+                
+                if payment_status == "paid":
+                    should_refund = True
+                elif check_table_exists("payments"):
+                    # Check for successful payment record for this booking
+                    payment_check = supabase.table("payments").select("id").eq(
+                        "booking_id", booking_id
+                    ).eq("status", "success").execute()
+                    if payment_check.data:
+                        should_refund = True
+                
+                # Final fallback: check if customer actually has escrow balance
+                if not should_refund:
+                    try:
+                        wallet_check = supabase.table("wallets").select("escrow_balance").eq(
+                            "user_auth_id", customer_auth_id
+                        ).execute()
+                        if wallet_check.data and float(wallet_check.data[0].get("escrow_balance", 0) or 0) > 0:
+                            should_refund = True
+                            logging.info(f"Booking {booking_id}: Refunding based on escrow balance presence")
+                    except Exception as e:
+                        logging.warning(f"Could not check escrow balance: {e}")
+                
+                if should_refund:
+                    await _refund_escrow_to_customer(booking_id, customer_auth_id)
+                else:
+                    logging.info(f"Booking {booking_id}: No escrow to refund (no payment record found)")
         
         # Return enriched booking
         enriched = await _enrich_booking(result.data[0], role)
