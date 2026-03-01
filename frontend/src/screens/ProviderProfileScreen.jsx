@@ -676,21 +676,29 @@ const ProviderProfileScreen = () => {
                       </Badge>
                     )}
                   </div>
-                  {provider.rating > 0 && (
+                  {/* Show rating from reviews stats if available, otherwise from provider */}
+                  {(reviewsStats.total_reviews > 0 || provider.rating > 0) && (
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-1">
                         {[...Array(5)].map((_, i) => (
                           <Star
                             key={i}
                             className={`h-4 w-4 ${
-                              i < Math.floor(provider.rating)
+                              i < Math.floor(reviewsStats.avg_rating || provider.rating)
                                 ? "fill-amber-400 text-amber-400"
                                 : "text-gray-300"
                             }`}
                           />
                         ))}
                       </div>
-                      <span className="text-sm font-medium">{provider.rating?.toFixed(1)}</span>
+                      <span className="text-sm font-medium">
+                        {(reviewsStats.avg_rating || provider.rating)?.toFixed(1)}
+                      </span>
+                      {reviewsStats.total_reviews > 0 && (
+                        <span className="text-xs text-gray-500">
+                          ({reviewsStats.total_reviews})
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
