@@ -2474,6 +2474,7 @@ async def create_notification(
     Create a notification for a user.
     Returns True if successful, False otherwise.
     Fails gracefully without raising exceptions.
+    Uses auth_id column (uuid) for recipient identification.
     """
     try:
         if not recipient_auth_id:
@@ -2484,36 +2485,36 @@ async def create_notification(
             logging.warning("Notifications table does not exist")
             return False
         
-        # Build notification data - handle both old and new schema
+        # Build notification data using auth_id column (the actual column name)
         notification_data = {
+            "auth_id": recipient_auth_id,  # Use auth_id column
             "type": notification_type,
-            "title": title,
             "message": message,
             "read": False
         }
         
-        # Try new schema first (recipient_auth_id)
+        # Add title if column exists (may not in older schemas)
+        # The DB may have 'title' column or we put it in message
         try:
-            notification_data["recipient_auth_id"] = recipient_auth_id
-            if actor_auth_id:
-                notification_data["actor_auth_id"] = actor_auth_id
-            if metadata:
-                notification_data["metadata"] = metadata
-            
+            notification_data["title"] = title
+        except Exception:
+            # If title column doesn't exist, prepend to message
+            notification_data["message"] = f"{title}: {message}"
+        
+        try:
             result = supabase.table("notifications").insert(notification_data).execute()
             
             if result.data:
                 logging.info(f"Notification created: type={notification_type}, recipient={recipient_auth_id[:8]}...")
                 return True
-        except Exception as schema_error:
-            # If new schema fails, try old schema (user_id or auth_id)
-            logging.warning(f"New schema insert failed, trying alternative: {schema_error}")
+        except Exception as insert_error:
+            logging.warning(f"Notification insert failed: {insert_error}")
+            # Try without title
             try:
                 fallback_data = {
-                    "user_id": recipient_auth_id,
+                    "auth_id": recipient_auth_id,
                     "type": notification_type,
-                    "title": title,
-                    "message": message,
+                    "message": f"{title}: {message}",
                     "read": False
                 }
                 result = supabase.table("notifications").insert(fallback_data).execute()
@@ -2521,7 +2522,7 @@ async def create_notification(
                     logging.info(f"Notification created (fallback): type={notification_type}")
                     return True
             except Exception as fallback_error:
-                logging.warning(f"Fallback schema also failed: {fallback_error}")
+                logging.warning(f"Fallback insert also failed: {fallback_error}")
         
         return False
         
