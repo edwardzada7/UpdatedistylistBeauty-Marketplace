@@ -50,6 +50,16 @@ const BookingDetailsScreen = () => {
   const [updating, setUpdating] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
 
+  // Review state
+  const [existingReview, setExistingReview] = useState(null);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [showReplyModal, setShowReplyModal] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [submittingReply, setSubmittingReply] = useState(false);
+
   const authId = userData?.auth_id;
   const role = isProvider ? "provider" : "customer";
 
