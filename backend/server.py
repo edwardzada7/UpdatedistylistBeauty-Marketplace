@@ -1717,66 +1717,47 @@ async def get_my_wallet(auth_id: str = Query(..., description="User's auth_id"))
 
 @api_router.get("/wallet/transactions")
 async def get_wallet_transactions(
-    auth_id: str = Query(..., description="User's auth_id"),
-    role: str = Query("customer", description="Role: customer or provider"),
+    auth_id: str = Query(..., description="User's auth_id (UUID)"),
     limit: int = Query(50, ge=1, le=100)
 ):
-    """Get user's wallet transaction history based on role"""
+    """Get user's wallet transaction history by auth_id"""
     try:
         if not check_table_exists("wallet_transactions"):
             return []
         
-        # Build query based on role
+        results = []
+        
+        # Try user_auth_id column first (primary storage)
         try:
-            if role == "provider":
-                # Provider transactions may be stored with:
-                # - user_auth_id = provider_auth_id (when provider is credited)
-                # - provider_auth_id field (if it exists)
-                # - auth_id field (alternate column name)
-                # We need to check all possible columns
-                
-                # First try with user_auth_id (main column)
-                response = supabase.table("wallet_transactions").select("*").eq(
-                    "user_auth_id", auth_id
+            response = supabase.table("wallet_transactions").select("*").eq(
+                "user_auth_id", auth_id
+            ).order("created_at", desc=True).limit(limit).execute()
+            results = response.data or []
+        except Exception as e:
+            logging.debug(f"user_auth_id query failed: {e}")
+        
+        # Also try auth_id column (some records may use this)
+        if len(results) < limit:
+            try:
+                auth_response = supabase.table("wallet_transactions").select("*").eq(
+                    "auth_id", auth_id
                 ).order("created_at", desc=True).limit(limit).execute()
                 
-                results = response.data or []
-                
-                # Also check auth_id column if different
-                try:
-                    auth_response = supabase.table("wallet_transactions").select("*").eq(
-                        "auth_id", auth_id
-                    ).order("created_at", desc=True).limit(limit).execute()
-                    
-                    if auth_response.data:
-                        # Merge and dedupe by id
-                        existing_ids = {r.get("id") for r in results}
-                        for tx in auth_response.data:
-                            if tx.get("id") not in existing_ids:
-                                results.append(tx)
-                except Exception:
-                    pass  # Column might not exist
-                
-                # Sort merged results by created_at desc
-                results.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-                return results[:limit]
-            else:
-                # Customer transactions - simple filter by user_auth_id
-                response = supabase.table("wallet_transactions").select("*").eq(
-                    "user_auth_id", auth_id
-                ).order("created_at", desc=True).limit(limit).execute()
-                return response.data or []
-                
-        except Exception as col_error:
-            error_str = str(col_error)
-            if "user_auth_id" in error_str:
-                logging.warning("wallet_transactions table missing user_auth_id column. Run migration.")
-                return []
-            logging.error(f"Transaction query error: {error_str}")
-            raise
+                if auth_response.data:
+                    existing_ids = {r.get("id") for r in results}
+                    for tx in auth_response.data:
+                        if tx.get("id") not in existing_ids:
+                            results.append(tx)
+            except Exception as e:
+                logging.debug(f"auth_id query failed: {e}")
+        
+        # Sort by created_at desc, fallback to id desc
+        results.sort(key=lambda x: (x.get("created_at") or "", x.get("id") or 0), reverse=True)
+        
+        return results[:limit]
+        
     except Exception as e:
         logging.error(f"Failed to fetch transactions: {str(e)}")
-        # Return empty list instead of error for better UX
         return []
 
 
