@@ -304,8 +304,27 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
   - ✅ **Security**: Admin endpoint protected by ADMIN_DASH_KEY environment variable
   - ✅ **Validation**: Account number must be 10 digits, amount must be positive and <= available_balance
   - ✅ **Idempotency**: Cannot re-process already approved/rejected requests (409 Conflict)
-  - ✅ **Testing**: 14/14 backend tests passed (test_withdrawals.py)
-  - ⚠️ **Note**: Admin panel UI not yet implemented - use API directly for now
+  - ✅ **Testing**: 17/17 backend tests passed (test_withdrawals.py)
+
+- **Phase A.1 - Admin Dashboard UI** (March 1, 2026):
+  - ✅ **Backend Endpoint Added**:
+    - `GET /api/admin/withdrawals` - List all withdrawals with status/pagination filters (protected by X-ADMIN-KEY)
+  - ✅ **Admin Login Screen** (`/admin`):
+    - Admin key input with validation
+    - Stores key in sessionStorage on successful login
+    - Auto-redirects to dashboard if already logged in
+  - ✅ **Admin Withdrawals Dashboard** (`/admin/withdrawals`):
+    - Tabs: Pending, Approved, Rejected, All
+    - Table view (desktop) / Card view (mobile)
+    - Search by ID, provider, bank name, account name
+    - Approve button (one-click, deducts balance)
+    - Reject button (opens modal requiring reason)
+    - Logout button (clears session)
+  - ✅ **Security Features**:
+    - All requests require X-ADMIN-KEY header
+    - 401 response clears session and redirects to login
+    - BottomNavigation hidden on admin routes
+  - ✅ **Testing**: UI manually tested, approve/reject working
 
 ---
 
@@ -315,12 +334,12 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 - [x] ~~Payment gateway integration (Paystack for wallet top-up)~~ - **DONE**
 - [x] ~~Wallet-based booking payments~~ - **DONE** (Phase 2.2.1)
 - [x] ~~Provider withdrawal requests~~ - **DONE** (Phase A)
+- [x] ~~Admin Panel UI for withdrawal approvals~~ - **DONE** (Phase A.1)
 - [ ] **REQUIRED**: Run Phase 2.2 database migration for full transaction logging:
   - `wallet_transactions.user_auth_id` column
   - `bookings.payment_status` and `bookings.payment_reference` columns
 
 ### P1 (Medium Priority)
-- [ ] Admin Panel UI for withdrawal approvals
 - [ ] Full Wallet/Earnings section UI on Stylist Dashboard
 - [ ] Notifications for booking status changes
 - [ ] Reviews & ratings system
