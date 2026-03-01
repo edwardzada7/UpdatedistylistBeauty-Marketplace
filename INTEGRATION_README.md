@@ -95,7 +95,7 @@ CORS_ORIGINS="*"
 
 ### Frontend Environment Variables (`/app/frontend/.env`)
 ```env
-REACT_APP_BACKEND_URL=https://istylist-payments.preview.emergentagent.com
+REACT_APP_BACKEND_URL=https://booking-chat-ui.preview.emergentagent.com
 ```
 
 ## Setup Instructions
