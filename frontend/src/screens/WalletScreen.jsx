@@ -28,12 +28,22 @@ export default function WalletScreen() {
     total_balance: 0
   });
   const [transactions, setTransactions] = useState([]);
+  const [withdrawalRequests, setWithdrawalRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState("");
   const [showTopUpModal, setShowTopUpModal] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [verifyingPayment, setVerifyingPayment] = useState(false);
+  
+  // Withdrawal state (for providers)
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [accountName, setAccountName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [withdrawNote, setWithdrawNote] = useState("");
+  const [processingWithdraw, setProcessingWithdraw] = useState(false);
 
   // Fetch wallet data function
   const fetchWalletData = useCallback(async () => {
