@@ -1208,6 +1208,14 @@ async def _release_escrow_to_provider(booking_id: int, provider_auth_id: str, cu
             if services_response.data:
                 amount = sum(float(svc.get("price", 0) or 0) for svc in services_response.data)
         
+        # Fallback to booking.total_amount
+        if amount == 0:
+            amount = float(booking.get("total_amount", 0) or 0)
+        
+        # Fallback to booking.service_price (legacy)
+        if amount == 0:
+            amount = float(booking.get("service_price", 0) or 0)
+        
         # Fallback to payment record
         if amount == 0 and check_table_exists("payments"):
             payment_response = supabase.table("payments").select("amount").eq("booking_id", booking_id).eq("status", "success").execute()
