@@ -1717,54 +1717,144 @@ async def get_my_wallet(auth_id: str = Query(..., description="User's auth_id"))
 
 @api_router.get("/wallet/transactions")
 async def get_wallet_transactions(
-    auth_id: str = Query(..., description="User's auth_id (UUID)"),
+    auth_id: str = Query(..., description="User's auth_id (UUID) - the wallet owner"),
     limit: int = Query(50, ge=1, le=100)
 ):
-    """Get user's wallet transaction history by auth_id"""
+    """
+    Get user's wallet transaction history.
+    Filters ONLY by auth_id which represents the wallet OWNER.
+    Same endpoint for both customers and providers.
+    """
     try:
         if not check_table_exists("wallet_transactions"):
             logging.info("wallet_transactions table does not exist")
             return []
         
-        results = []
-        
-        # Query by user_auth_id (primary column for transactions)
+        # Query by auth_id - the wallet owner field
+        # This is the ONLY filter needed - same for customers and providers
         try:
-            logging.info(f"Fetching transactions for auth_id: {auth_id}")
             response = supabase.table("wallet_transactions").select("*").eq(
-                "user_auth_id", auth_id
-            ).order("created_at", desc=True).limit(limit).execute()
-            results = response.data or []
-            logging.info(f"Found {len(results)} transactions via user_auth_id")
-        except Exception as e:
-            logging.warning(f"user_auth_id query failed: {e}")
-        
-        # Also try auth_id column as fallback
-        try:
-            auth_response = supabase.table("wallet_transactions").select("*").eq(
                 "auth_id", auth_id
             ).order("created_at", desc=True).limit(limit).execute()
             
-            if auth_response.data:
-                existing_ids = {r.get("id") for r in results}
-                new_count = 0
-                for tx in auth_response.data:
-                    if tx.get("id") not in existing_ids:
-                        results.append(tx)
-                        new_count += 1
-                if new_count > 0:
-                    logging.info(f"Found {new_count} additional transactions via auth_id column")
+            results = response.data or []
+            logging.info(f"Found {len(results)} transactions for auth_id: {auth_id}")
+            return results
+            
         except Exception as e:
-            logging.debug(f"auth_id column query failed (may not exist): {e}")
-        
-        # Sort by created_at desc
-        results.sort(key=lambda x: (x.get("created_at") or "", x.get("id") or 0), reverse=True)
-        
-        return results[:limit]
+            # If auth_id column fails, try user_auth_id as fallback
+            logging.warning(f"auth_id query failed, trying user_auth_id: {e}")
+            try:
+                response = supabase.table("wallet_transactions").select("*").eq(
+                    "user_auth_id", auth_id
+                ).order("created_at", desc=True).limit(limit).execute()
+                return response.data or []
+            except Exception as e2:
+                logging.error(f"Both auth_id and user_auth_id queries failed: {e2}")
+                return []
         
     except Exception as e:
         logging.error(f"Failed to fetch transactions: {str(e)}")
         return []
+
+
+@api_router.post("/wallet/transactions/backfill")
+async def backfill_transaction_auth_ids():
+    """
+    Safe backfill: Set auth_id for transactions where it's NULL.
+    Does NOT change any balances - only fills missing auth_id for history display.
+    
+    Logic:
+    - Provider credits (earnings): auth_id = provider_auth_id from booking
+    - Customer debits: auth_id = customer_auth_id from booking
+    - Customer credits (refunds): auth_id = customer_auth_id from booking
+    """
+    try:
+        if not check_table_exists("wallet_transactions"):
+            return {"status": "error", "message": "wallet_transactions table not found"}
+        
+        stats = {
+            "before": {"null_auth_id": 0, "has_auth_id": 0},
+            "after": {"null_auth_id": 0, "has_auth_id": 0},
+            "updated": 0,
+            "errors": []
+        }
+        
+        # Count before
+        all_txs = supabase.table("wallet_transactions").select("id, auth_id, user_auth_id, booking_id, direction, description").execute()
+        for tx in all_txs.data or []:
+            if tx.get("auth_id"):
+                stats["before"]["has_auth_id"] += 1
+            else:
+                stats["before"]["null_auth_id"] += 1
+        
+        # Find transactions with NULL auth_id but have booking_id
+        null_auth_txs = [tx for tx in (all_txs.data or []) if not tx.get("auth_id") and tx.get("booking_id")]
+        
+        for tx in null_auth_txs:
+            booking_id = tx.get("booking_id")
+            try:
+                # Get booking to find provider_id and customer_auth_id
+                booking = supabase.table("bookings").select("provider_id, customer_auth_id").eq("id", booking_id).execute()
+                if not booking.data:
+                    continue
+                
+                booking_data = booking.data[0]
+                provider_id = booking_data.get("provider_id")
+                customer_auth_id = booking_data.get("customer_auth_id")
+                
+                # Determine the correct auth_id based on transaction type
+                new_auth_id = None
+                description = (tx.get("description") or "").lower()
+                direction = tx.get("direction", "").lower()
+                
+                # Provider earnings: direction=credit and description contains "earnings"
+                if direction == "credit" and "earnings" in description:
+                    new_auth_id = provider_id
+                # Customer transactions (debits, escrow holds, refunds)
+                elif customer_auth_id:
+                    new_auth_id = customer_auth_id
+                # Fallback: use user_auth_id if available
+                elif tx.get("user_auth_id"):
+                    new_auth_id = tx.get("user_auth_id")
+                
+                if new_auth_id:
+                    supabase.table("wallet_transactions").update({
+                        "auth_id": new_auth_id
+                    }).eq("id", tx["id"]).execute()
+                    stats["updated"] += 1
+                    
+            except Exception as e:
+                stats["errors"].append(f"tx {tx.get('id')}: {str(e)}")
+        
+        # Also backfill from user_auth_id where auth_id is NULL
+        for tx in (all_txs.data or []):
+            if not tx.get("auth_id") and tx.get("user_auth_id"):
+                try:
+                    supabase.table("wallet_transactions").update({
+                        "auth_id": tx["user_auth_id"]
+                    }).eq("id", tx["id"]).execute()
+                    stats["updated"] += 1
+                except Exception as e:
+                    stats["errors"].append(f"tx {tx.get('id')}: {str(e)}")
+        
+        # Count after
+        all_txs_after = supabase.table("wallet_transactions").select("id, auth_id").execute()
+        for tx in all_txs_after.data or []:
+            if tx.get("auth_id"):
+                stats["after"]["has_auth_id"] += 1
+            else:
+                stats["after"]["null_auth_id"] += 1
+        
+        return {
+            "status": "success",
+            "message": f"Backfill complete. Updated {stats['updated']} rows.",
+            "stats": stats
+        }
+        
+    except Exception as e:
+        logging.error(f"Backfill failed: {str(e)}")
+        return {"status": "error", "message": str(e)}
 
 
 # ==================== PROVIDER SERVICES ENDPOINTS ====================
