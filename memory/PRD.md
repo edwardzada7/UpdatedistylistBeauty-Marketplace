@@ -326,6 +326,27 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
     - BottomNavigation hidden on admin routes
   - ✅ **Testing**: UI manually tested, approve/reject working
 
+- **Phase A.2 - Provider Dashboard Earnings UI** (March 1, 2026):
+  - ✅ **Backend Endpoint Added**:
+    - `GET /api/providers/dashboard-metrics` - Returns wallet balances, earnings summaries, pending withdrawals, and recent transactions
+  - ✅ **Dashboard Metrics Response**:
+    - `available_balance`, `escrow_balance`, `total_balance`
+    - `total_earnings` (all-time from credit transactions)
+    - `last_7_days_earnings`, `last_30_days_earnings`
+    - `pending_withdrawals_total`
+    - `recent_transactions` (last 10)
+  - ✅ **StylistDashboard.jsx Updated**:
+    - Wallet & Earnings card with balance breakdown (Available, Escrow, Total)
+    - Earnings summary cards (All Time, 7 Days, 30 Days)
+    - Pending withdrawals indicator
+    - Withdraw and View All buttons
+    - Recent Transactions list (last 5 on dashboard)
+    - Refresh button for metrics
+    - Loading and error states
+  - ✅ **API Client Updated**: `providersAPI.getDashboardMetrics(authId)`
+  - ✅ **Testing**: 23/23 backend tests passed (including 6 new dashboard metrics tests)
+  - ✅ **Performance**: Single API call for all metrics, limited transactions to 10
+
 ---
 
 ## Backlog / Future Tasks
@@ -335,12 +356,12 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 - [x] ~~Wallet-based booking payments~~ - **DONE** (Phase 2.2.1)
 - [x] ~~Provider withdrawal requests~~ - **DONE** (Phase A)
 - [x] ~~Admin Panel UI for withdrawal approvals~~ - **DONE** (Phase A.1)
+- [x] ~~Wallet/Earnings section on Stylist Dashboard~~ - **DONE** (Phase A.2)
 - [ ] **REQUIRED**: Run Phase 2.2 database migration for full transaction logging:
   - `wallet_transactions.user_auth_id` column
   - `bookings.payment_status` and `bookings.payment_reference` columns
 
 ### P1 (Medium Priority)
-- [ ] Full Wallet/Earnings section UI on Stylist Dashboard
 - [ ] Notifications for booking status changes
 - [ ] Reviews & ratings system
 
