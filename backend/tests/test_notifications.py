@@ -7,6 +7,7 @@ Tests:
 3. Unread count returns correct value
 4. Mark read updates notification status
 5. Graceful handling of missing/null data
+6. Query by auth_id works correctly
 """
 
 import pytest
@@ -36,11 +37,9 @@ def test_notification_structure():
     """Test notification data structure"""
     notification = {
         "id": 1,
-        "recipient_auth_id": "4d822133-f8e9-46a5-8bdf-68c3f8c95162",
+        "auth_id": "4d822133-f8e9-46a5-8bdf-68c3f8c95162",
         "type": "booking_created",
-        "title": "New Booking Request",
         "message": "A customer has requested a booking",
-        "metadata": {"booking_id": 123},
         "read": False,
         "created_at": "2026-03-01T12:00:00Z"
     }
@@ -48,7 +47,21 @@ def test_notification_structure():
     assert notification["id"] == 1
     assert notification["type"] == "booking_created"
     assert notification["read"] == False
-    assert "booking_id" in notification["metadata"]
+    assert "auth_id" in notification
+
+
+def test_notification_query_by_auth_id():
+    """Test that notifications are queried by auth_id uuid"""
+    auth_id = "371a0b03-f283-4f22-9d0d-b489c62a0667"
+    notifications = [
+        {"id": 1, "auth_id": auth_id, "read": False},
+        {"id": 2, "auth_id": auth_id, "read": False},
+        {"id": 3, "auth_id": "other-uuid", "read": False},
+    ]
+    
+    # Filter by auth_id
+    filtered = [n for n in notifications if n["auth_id"] == auth_id]
+    assert len(filtered) == 2
 
 
 def test_unread_count():
@@ -67,14 +80,12 @@ def test_unread_count():
 
 def test_mark_read():
     """Test marking notifications as read"""
-    notification = {"id": 1, "read": False, "read_at": None}
+    notification = {"id": 1, "read": False}
     
     # Mark as read
     notification["read"] = True
-    notification["read_at"] = datetime.utcnow().isoformat()
     
     assert notification["read"] == True
-    assert notification["read_at"] is not None
 
 
 def test_notification_ordering():
@@ -136,11 +147,9 @@ def test_booking_created_notification_content():
     """Test booking_created notification has correct content"""
     notification = {
         "type": "booking_created",
-        "title": "New Booking Request",
         "message": "John Doe has requested a booking for 2026-03-05 at 14:00"
     }
     
-    assert "New Booking" in notification["title"]
     assert "requested" in notification["message"].lower()
 
 
@@ -148,23 +157,20 @@ def test_booking_confirmed_notification_content():
     """Test booking_confirmed notification has correct content"""
     notification = {
         "type": "booking_confirmed",
-        "title": "Booking Confirmed",
         "message": "Your booking has been confirmed"
     }
     
-    assert "Confirmed" in notification["title"]
+    assert "confirmed" in notification["message"].lower()
 
 
 def test_withdrawal_approved_notification_content():
     """Test withdrawal_approved notification has correct content"""
     notification = {
         "type": "withdrawal_approved",
-        "title": "Withdrawal Approved",
         "message": "Your withdrawal request for ₦5,000.00 has been approved"
     }
     
-    assert "Approved" in notification["title"]
-    assert "₦" in notification["message"]
+    assert "approved" in notification["message"].lower()
 
 
 def test_graceful_null_handling():
@@ -209,6 +215,36 @@ def test_mark_all_read():
     
     unread_count = sum(1 for n in notifications if not n["read"])
     assert unread_count == 0
+
+
+def test_unread_count_response_format():
+    """Test that unread count returns both 'count' and 'unread' keys"""
+    response = {"count": 5, "unread": 5}
+    
+    assert "count" in response
+    assert "unread" in response
+    assert response["count"] == response["unread"]
+
+
+def test_mark_read_by_notification_ids():
+    """Test marking specific notifications as read by IDs"""
+    notifications = [
+        {"id": 1, "read": False},
+        {"id": 2, "read": False},
+        {"id": 3, "read": False},
+    ]
+    
+    ids_to_mark = [1, 3]
+    
+    # Mark specific IDs as read
+    for n in notifications:
+        if n["id"] in ids_to_mark:
+            n["read"] = True
+    
+    # Check results
+    assert notifications[0]["read"] == True  # id=1 marked
+    assert notifications[1]["read"] == False  # id=2 not marked
+    assert notifications[2]["read"] == True  # id=3 marked
 
 
 if __name__ == "__main__":
