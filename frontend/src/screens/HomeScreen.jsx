@@ -68,15 +68,18 @@ const HomeScreen = () => {
               <p className="text-xs text-gray-500">{APP_TAGLINE}</p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate("/profile")}
-            className="flex items-center gap-2"
-          >
-            <User className="h-4 w-4" />
-            <span className="hidden sm:inline">{displayName}</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/profile")}
+              className="flex items-center gap-2"
+            >
+              <User className="h-4 w-4" />
+              <span className="hidden sm:inline">{displayName}</span>
+            </Button>
+          </div>
         </div>
       </header>
 
