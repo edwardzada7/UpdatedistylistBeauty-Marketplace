@@ -3736,6 +3736,31 @@ async def create_booking(booking: BookingCreate):
                 else:
                     raise
         
+        # Create notification for provider about new booking
+        created_booking = result.data[0]
+        booking_id = created_booking.get("id")
+        booking_date = booking.booking_date or "TBD"
+        booking_time = booking.booking_time or "TBD"
+        
+        # Get customer name for notification
+        customer_name = "A customer"
+        if customer_auth_id:
+            try:
+                customer_response = supabase.table("users").select("name").eq("auth_id", customer_auth_id).execute()
+                if customer_response.data:
+                    customer_name = customer_response.data[0].get("name") or "A customer"
+            except Exception:
+                pass
+        
+        await create_notification(
+            recipient_auth_id=provider_uuid,
+            notification_type="booking_created",
+            title="New Booking Request",
+            message=f"{customer_name} has requested a booking for {booking_date} at {booking_time}",
+            actor_auth_id=customer_auth_id,
+            metadata={"booking_id": booking_id}
+        )
+        
         return result.data[0]
     except HTTPException:
         raise
