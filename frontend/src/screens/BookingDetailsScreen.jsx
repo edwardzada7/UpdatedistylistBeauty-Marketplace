@@ -69,6 +69,27 @@ const BookingDetailsScreen = () => {
     }
   }, [id]);
 
+  // Fetch review when booking is loaded
+  useEffect(() => {
+    if (booking && authId) {
+      fetchExistingReview();
+    }
+  }, [booking?.id, authId]);
+
+  const fetchExistingReview = async () => {
+    if (!booking || !authId) return;
+    try {
+      const response = await reviewsAPI.getByBooking(booking.id, authId);
+      setExistingReview(response.data);
+      if (response.data?.provider_reply) {
+        setReplyText(response.data.provider_reply);
+      }
+    } catch (error) {
+      // Review doesn't exist or error - that's fine
+      setExistingReview(null);
+    }
+  };
+
   const fetchBooking = async () => {
     try {
       setLoading(true);
