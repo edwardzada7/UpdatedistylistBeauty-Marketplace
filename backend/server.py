@@ -2410,6 +2410,155 @@ async def get_provider_dashboard_metrics(
         }
 
 
+# ==================== NOTIFICATIONS SYSTEM (Phase 2B) ====================
+
+async def create_notification(
+    recipient_auth_id: str,
+    notification_type: str,
+    title: str,
+    message: str,
+    actor_auth_id: Optional[str] = None,
+    metadata: Optional[dict] = None
+) -> bool:
+    """
+    Create a notification for a user.
+    Returns True if successful, False otherwise.
+    Fails gracefully without raising exceptions.
+    """
+    try:
+        if not recipient_auth_id:
+            logging.warning("Cannot create notification: recipient_auth_id is None")
+            return False
+        
+        if not check_table_exists("notifications"):
+            logging.warning("Notifications table does not exist")
+            return False
+        
+        notification_data = {
+            "recipient_auth_id": recipient_auth_id,
+            "type": notification_type,
+            "title": title,
+            "message": message,
+            "metadata": metadata or {},
+            "read": False
+        }
+        
+        if actor_auth_id:
+            notification_data["actor_auth_id"] = actor_auth_id
+        
+        result = supabase.table("notifications").insert(notification_data).execute()
+        
+        if result.data:
+            logging.info(f"Notification created: type={notification_type}, recipient={recipient_auth_id[:8]}...")
+            return True
+        return False
+        
+    except Exception as e:
+        logging.error(f"Failed to create notification: {str(e)}")
+        return False
+
+
+@api_router.get("/notifications/me")
+async def get_my_notifications(
+    auth_id: str = Query(..., description="User's auth_id (UUID)"),
+    unread_only: bool = Query(False, description="Filter to unread only"),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0)
+):
+    """
+    Get notifications for a user, ordered newest first.
+    """
+    try:
+        if not check_table_exists("notifications"):
+            return []
+        
+        query = supabase.table("notifications").select("*").eq(
+            "recipient_auth_id", auth_id
+        )
+        
+        if unread_only:
+            query = query.eq("read", False)
+        
+        response = query.order("created_at", desc=True).range(
+            offset, offset + limit - 1
+        ).execute()
+        
+        return response.data or []
+        
+    except Exception as e:
+        logging.error(f"Failed to fetch notifications: {str(e)}")
+        return []
+
+
+@api_router.get("/notifications/unread-count")
+async def get_unread_count(
+    auth_id: str = Query(..., description="User's auth_id (UUID)")
+):
+    """
+    Get count of unread notifications for a user.
+    """
+    try:
+        if not check_table_exists("notifications"):
+            return {"count": 0}
+        
+        response = supabase.table("notifications").select(
+            "*", count="exact"
+        ).eq("recipient_auth_id", auth_id).eq("read", False).execute()
+        
+        return {"count": response.count or 0}
+        
+    except Exception as e:
+        logging.error(f"Failed to get unread count: {str(e)}")
+        return {"count": 0}
+
+
+class MarkReadRequest(BaseModel):
+    auth_id: str
+    ids: Optional[List[int]] = None
+    mark_all: bool = False
+
+
+@api_router.post("/notifications/mark-read")
+async def mark_notifications_read(request: MarkReadRequest):
+    """
+    Mark notifications as read.
+    Either provide specific IDs or set mark_all=true.
+    """
+    try:
+        if not check_table_exists("notifications"):
+            return {"success": False, "message": "Notifications not available"}
+        
+        now = datetime.utcnow().isoformat()
+        
+        if request.mark_all:
+            # Mark all unread notifications as read
+            supabase.table("notifications").update({
+                "read": True,
+                "read_at": now
+            }).eq("recipient_auth_id", request.auth_id).eq("read", False).execute()
+            
+            return {"success": True, "message": "All notifications marked as read"}
+        
+        elif request.ids and len(request.ids) > 0:
+            # Mark specific notifications as read
+            for notification_id in request.ids:
+                supabase.table("notifications").update({
+                    "read": True,
+                    "read_at": now
+                }).eq("id", notification_id).eq(
+                    "recipient_auth_id", request.auth_id
+                ).execute()
+            
+            return {"success": True, "message": f"Marked {len(request.ids)} notifications as read"}
+        
+        else:
+            return {"success": False, "message": "Provide either 'ids' or 'mark_all'"}
+        
+    except Exception as e:
+        logging.error(f"Failed to mark notifications as read: {str(e)}")
+        return {"success": False, "message": str(e)}
+
+
 # ==================== PROVIDER SERVICES ENDPOINTS ====================
 # Using the existing 'services' table in Supabase with enhanced schema
 # Table mapping: stylist_id -> provider_id, category -> sub_service_id (composite), name -> sub_service_name
