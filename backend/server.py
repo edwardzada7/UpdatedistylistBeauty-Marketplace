@@ -2031,6 +2031,63 @@ async def get_my_withdrawal_requests(
         return []
 
 
+@api_router.get("/admin/withdrawals")
+async def admin_list_withdrawals(
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by status: pending, approved, rejected"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0)
+):
+    """
+    Admin endpoint to list all withdrawal requests.
+    Protected by X-ADMIN-KEY header.
+    """
+    try:
+        # 1. Security: Check admin key
+        admin_key = os.environ.get("ADMIN_DASH_KEY")
+        if not admin_key:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Admin service not configured. ADMIN_DASH_KEY is missing."
+            )
+        
+        if not x_admin_key or x_admin_key != admin_key:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or missing admin key"
+            )
+        
+        # 2. Check table exists
+        if not check_table_exists("withdrawal_requests"):
+            return {"withdrawals": [], "total": 0}
+        
+        # 3. Build query
+        query = supabase.table("withdrawal_requests").select("*", count="exact")
+        
+        # Apply status filter if provided
+        if status_filter and status_filter in ["pending", "approved", "rejected"]:
+            query = query.eq("status", status_filter)
+        
+        # Order and paginate
+        response = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+        
+        return {
+            "withdrawals": response.data or [],
+            "total": response.count or len(response.data or []),
+            "limit": limit,
+            "offset": offset
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Admin list withdrawals failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch withdrawals: {str(e)}"
+        )
+
+
 @api_router.put("/admin/withdrawals/{withdrawal_id}")
 async def admin_process_withdrawal(
     withdrawal_id: int,
