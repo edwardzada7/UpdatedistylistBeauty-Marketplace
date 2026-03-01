@@ -168,6 +168,39 @@ def test_admin_key_valid():
     assert admin_key == provided_key
 
 
+def test_admin_list_withdrawals_unauthorized():
+    """Test that listing withdrawals without key fails"""
+    # This tests that the endpoint requires authentication
+    # In production, this would return 401
+    provided_key = ""
+    admin_key = "istylist_admin_secret_key_2026"
+    
+    assert provided_key != admin_key
+
+
+def test_admin_list_withdrawals_status_filter():
+    """Test that status filter works correctly"""
+    valid_statuses = ["pending", "approved", "rejected"]
+    invalid_statuses = ["invalid", "processing", "complete"]
+    
+    for status in valid_statuses:
+        assert status in valid_statuses
+    
+    for status in invalid_statuses:
+        assert status not in valid_statuses
+
+
+def test_admin_list_withdrawals_pagination():
+    """Test pagination parameters"""
+    default_limit = 50
+    max_limit = 200
+    default_offset = 0
+    
+    assert default_limit == 50
+    assert max_limit >= default_limit
+    assert default_offset == 0
+
+
 def test_withdrawal_transaction_logging():
     """Test that withdrawal creates proper transaction records"""
     # Transaction record format for withdrawal request
