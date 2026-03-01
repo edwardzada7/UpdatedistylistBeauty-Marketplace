@@ -249,9 +249,24 @@ const BookingDetailsScreen = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-lg font-semibold text-gray-900">
-              {isProvider ? booking.customer_display_name : booking.provider_display_name}
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-lg font-semibold text-gray-900">
+                {isProvider ? booking.customer_display_name : booking.provider_display_name}
+              </p>
+              {/* Chat Button - Show unless canceled */}
+              {booking.status !== "canceled" && booking.status !== "declined" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate(`/bookings/${booking.id}/chat`)}
+                  className="text-purple-600 border-purple-200 hover:bg-purple-50"
+                  data-testid="chat-btn"
+                >
+                  <MessageCircle className="h-4 w-4 mr-1" />
+                  Chat
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
 
