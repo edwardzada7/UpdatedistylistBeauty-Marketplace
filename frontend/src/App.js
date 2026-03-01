@@ -26,6 +26,7 @@ import ProviderBookingsScreen from "@/screens/ProviderBookingsScreen";
 // Shared Screens
 import BookingDetailsScreen from "@/screens/BookingDetailsScreen";
 import NotificationsScreen from "@/screens/NotificationsScreen";
+import BookingChatScreen from "@/screens/BookingChatScreen";
 
 // Admin Screens
 import AdminLoginScreen from "@/screens/AdminLoginScreen";
