@@ -375,7 +375,7 @@ Table columns: id, provider_auth_id, amount, currency, bank_name, account_name, 
 ```
 /app/
 ├── backend/
-│   ├── server.py                 # Main FastAPI app (with Paystack, wallet, withdrawal APIs)
+│   ├── server.py                 # Main FastAPI app (with Paystack, wallet, withdrawal, admin APIs)
 │   ├── service_catalog.py        # Service definitions
 │   ├── tests/
 │   │   ├── test_availability.py
@@ -384,7 +384,7 @@ Table columns: id, provider_auth_id, amount, currency, bank_name, account_name, 
 │   │   ├── test_bookings_views.py       # Phase 2.3 tests
 │   │   ├── test_bookings_phase22.py     # Phase 2.3 extended tests
 │   │   ├── test_paystack_payments.py    # Phase 2.2 Paystack tests (23 tests)
-│   │   └── test_withdrawals.py          # Phase A withdrawal tests (14 tests)
+│   │   └── test_withdrawals.py          # Phase A withdrawal tests (17 tests)
 │   └── migrations/
 │       ├── phase19_privacy_identity.sql
 │       └── phase22_paystack_integration.sql
@@ -400,11 +400,13 @@ Table columns: id, provider_auth_id, amount, currency, bank_name, account_name, 
         │   ├── CustomerBookingsScreen.jsx     # Customer bookings with Pay Now
         │   ├── ProviderBookingsScreen.jsx     # Provider bookings list
         │   ├── BookingDetailsScreen.jsx       # Booking details with Pay Now
-        │   └── WalletScreen.jsx               # Wallet with top-up (customer) and withdraw (provider)
+        │   ├── WalletScreen.jsx               # Wallet with top-up (customer) and withdraw (provider)
+        │   ├── AdminLoginScreen.jsx           # Admin login (Phase A.1)
+        │   └── AdminWithdrawalsScreen.jsx     # Admin withdrawal dashboard (Phase A.1)
         ├── services/
         │   └── api.js                         # API client (with paymentsAPI, walletsAPI, withdrawalsAPI)
         ├── components/
-        │   └── BottomNavigation.jsx           # Updated with Bookings tab
+        │   └── BottomNavigation.jsx           # Updated with Bookings tab, hidden on /admin/*
         └── contexts/
             └── AuthContext.jsx                # Auth state management
 ```
@@ -413,6 +415,6 @@ Table columns: id, provider_auth_id, amount, currency, bank_name, account_name, 
 
 ## Last Updated
 - **Date**: March 1, 2026
-- **Phase**: Phase A - Provider Withdrawal Requests (Complete)
-- **Status**: Backend 100% (14/14 withdrawal tests passed)
-- **Key Feature**: Providers can request withdrawals, admin can approve/reject via protected API
+- **Phase**: Phase A.1 - Admin Dashboard UI (Complete)
+- **Status**: Backend 100% (17/17 withdrawal tests passed), Frontend UI complete
+- **Key Feature**: Admin Dashboard for reviewing and processing withdrawal requests
