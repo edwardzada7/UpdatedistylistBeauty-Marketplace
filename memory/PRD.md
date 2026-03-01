@@ -360,6 +360,6 @@ This creates/updates:
 
 ## Last Updated
 - **Date**: January 19, 2026
-- **Phase**: 2.2.1 - Wallet-Based Booking Payments (Complete)
-- **Status**: Backend 100% (30/30 tests passed), Frontend code verified
-- **Next Steps**: Run DB migration for full transaction logging
+- **Phase**: 2.2.2 - Wallet Transaction & Idempotency Fixes (Complete)
+- **Status**: Backend 100% (22/22 tests passed), No frontend changes needed
+- **Performance**: Bookings list ~0.4s (was ~25s)
