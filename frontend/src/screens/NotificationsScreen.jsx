@@ -240,7 +240,7 @@ const NotificationsScreen = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <h3 className={`font-medium text-sm ${!notification.read ? "text-gray-900" : "text-gray-700"}`}>
-                        {notification.title}
+                        {notification.title || getNotificationTitle(notification.type)}
                       </h3>
                       {markingRead === notification.id ? (
                         <Loader2 className="h-4 w-4 animate-spin text-gray-400 flex-shrink-0" />
