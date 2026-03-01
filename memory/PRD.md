@@ -348,27 +348,24 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
   - ✅ **Performance**: Single API call for all metrics, limited transactions to 10
 
 - **Phase 2B - In-App Notifications** (March 1, 2026):
-  - ✅ **Database Migration Created**: `/app/backend/migrations/phase2B_notifications.sql`
-    - Creates `notifications` table with: id, recipient_auth_id, actor_auth_id, type, title, message, metadata, read, created_at, read_at
-    - Indexes for performance (recipient+created_at, recipient+read)
-    - RLS policies for user data isolation
-  - ✅ **Backend Endpoints**:
-    - `GET /api/notifications/me` - Get user's notifications with pagination
-    - `GET /api/notifications/unread-count` - Get unread count
-    - `POST /api/notifications/mark-read` - Mark notifications as read
+  - ✅ **Database**: Uses `notifications` table with columns: id, user_id, message, type, read, created_at, auth_id (uuid)
+  - ✅ **Backend Endpoints Fixed**:
+    - `GET /api/notifications/me?auth_id=<uuid>` - Queries by `auth_id` column (uuid), not user_id
+    - `GET /api/notifications/unread-count?auth_id=<uuid>` - Returns `{count, unread}` 
+    - `POST /api/notifications/mark-read` - Accepts `notification_ids` array or `mark_all: true`
   - ✅ **Notification Events Integrated**:
     - Booking: created, confirmed, declined, canceled, completed
     - Withdrawal: requested, approved, rejected
     - Wallet: topup_success
   - ✅ **Frontend Components**:
-    - `NotificationsScreen.jsx` - Full notifications list with mark-as-read
+    - `NotificationsScreen.jsx` - Shows list with fallback title from type, handles missing title field
     - `NotificationBell.jsx` - Bell icon with unread badge count
   - ✅ **Bell Icon Added To**:
     - HomeScreen header
     - StylistDashboard header
     - ProfileScreen header
-  - ✅ **Testing**: 14/14 notification tests passed
-  - ⚠️ **NOTE**: User must run migration `/app/backend/migrations/phase2B_notifications.sql` in Supabase SQL Editor
+  - ✅ **Testing**: 17/17 notification tests passed
+  - ✅ **Debug Logging**: Backend logs auth_id and result counts for troubleshooting
 
 ---
 
@@ -380,8 +377,7 @@ ALTER TABLE stylists ADD COLUMN IF NOT EXISTS business_name VARCHAR(255);
 - [x] ~~Provider withdrawal requests~~ - **DONE** (Phase A)
 - [x] ~~Admin Panel UI for withdrawal approvals~~ - **DONE** (Phase A.1)
 - [x] ~~Wallet/Earnings section on Stylist Dashboard~~ - **DONE** (Phase A.2)
-- [x] ~~In-App Notifications~~ - **DONE** (Phase 2B) - **MIGRATION REQUIRED**
-- [ ] **REQUIRED**: Run Phase 2B notifications migration in Supabase SQL Editor
+- [x] ~~In-App Notifications~~ - **DONE** (Phase 2B)
 - [ ] **REQUIRED**: Run Phase 2.2 database migration for full transaction logging
 
 ### P1 (Medium Priority)
