@@ -251,14 +251,14 @@ export const paymentsAPI = {
 
 export const notificationsAPI = {
   // Get user's notifications
-  getAll: (authId, unreadOnly = false, limit = 20, offset = 0) => 
+  getAll: (authId, unreadOnly = false, limit = 50, offset = 0) => 
     api.get(`/notifications/me?auth_id=${authId}&unread_only=${unreadOnly}&limit=${limit}&offset=${offset}`),
   
   // Get unread count
   getUnreadCount: (authId) => api.get(`/notifications/unread-count?auth_id=${authId}`),
   
   // Mark notifications as read
-  markRead: (authId, ids) => api.post("/notifications/mark-read", { auth_id: authId, ids }),
+  markRead: (authId, ids) => api.post("/notifications/mark-read", { auth_id: authId, notification_ids: ids }),
   
   // Mark all as read
   markAllRead: (authId) => api.post("/notifications/mark-read", { auth_id: authId, mark_all: true }),
