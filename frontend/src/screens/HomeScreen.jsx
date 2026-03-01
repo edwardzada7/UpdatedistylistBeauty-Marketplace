@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { APP_NAME, APP_TAGLINE, CURRENCY, SERVICE_CATEGORIES } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import NotificationBell from "@/components/NotificationBell";
 
 const HomeScreen = () => {
   const navigate = useNavigate();
