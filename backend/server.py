@@ -2534,51 +2534,47 @@ async def create_notification(
 async def get_my_notifications(
     auth_id: str = Query(..., description="User's auth_id (UUID)"),
     unread_only: bool = Query(False, description="Filter to unread only"),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0)
 ):
     """
     Get notifications for a user, ordered newest first.
+    Uses auth_id (uuid) column to filter.
     """
     try:
         if not check_table_exists("notifications"):
+            logging.warning("Notifications table does not exist")
             return []
         
-        # Try new schema (recipient_auth_id) first
-        try:
-            query = supabase.table("notifications").select("*").eq(
-                "recipient_auth_id", auth_id
-            )
-            
-            if unread_only:
-                query = query.eq("read", False)
-            
-            response = query.order("created_at", desc=True).range(
-                offset, offset + limit - 1
-            ).execute()
-            
-            return response.data or []
-        except Exception:
-            # Fallback to old schema (user_id)
+        # Debug logging
+        logging.info(f"Fetching notifications for auth_id={auth_id}, unread_only={unread_only}, limit={limit}, offset={offset}")
+        
+        # Query using auth_id column (the actual column name in DB)
+        query = supabase.table("notifications").select("*").eq("auth_id", auth_id)
+        
+        if unread_only:
+            query = query.eq("read", False)
+        
+        response = query.order("created_at", desc=True).range(
+            offset, offset + limit - 1
+        ).execute()
+        
+        result = response.data or []
+        
+        # Debug: log count for this auth_id
+        if not result:
             try:
-                query = supabase.table("notifications").select("*").eq(
-                    "user_id", auth_id
-                )
-                
-                if unread_only:
-                    query = query.eq("read", False)
-                
-                response = query.order("created_at", desc=True).range(
-                    offset, offset + limit - 1
-                ).execute()
-                
-                return response.data or []
-            except Exception as e:
-                logging.warning(f"Fallback notification query failed: {e}")
-                return []
+                count_resp = supabase.table("notifications").select("id", count="exact").eq("auth_id", auth_id).execute()
+                logging.info(f"Notifications for auth_id={auth_id}: found {count_resp.count} total in DB but returned {len(result)}")
+            except Exception as count_err:
+                logging.warning(f"Count check failed: {count_err}")
+        else:
+            logging.info(f"Returning {len(result)} notifications for auth_id={auth_id}")
+        
+        return result
         
     except Exception as e:
-        logging.error(f"Failed to fetch notifications: {str(e)}")
+        logging.error(f"Failed to fetch notifications for auth_id={auth_id}: {str(e)}")
         return []
 
 
@@ -2591,34 +2587,26 @@ async def get_unread_count(
     """
     try:
         if not check_table_exists("notifications"):
-            return {"count": 0}
+            return {"count": 0, "unread": 0}
         
-        # Try new schema first
-        try:
-            response = supabase.table("notifications").select(
-                "*", count="exact"
-            ).eq("recipient_auth_id", auth_id).eq("read", False).execute()
-            
-            return {"count": response.count or 0}
-        except Exception:
-            # Fallback to old schema
-            try:
-                response = supabase.table("notifications").select(
-                    "*", count="exact"
-                ).eq("user_id", auth_id).eq("read", False).execute()
-                
-                return {"count": response.count or 0}
-            except Exception:
-                return {"count": 0}
+        response = supabase.table("notifications").select(
+            "id", count="exact"
+        ).eq("auth_id", auth_id).eq("read", False).execute()
+        
+        count = response.count or 0
+        logging.info(f"Unread count for auth_id={auth_id}: {count}")
+        
+        return {"count": count, "unread": count}
         
     except Exception as e:
-        logging.error(f"Failed to get unread count: {str(e)}")
-        return {"count": 0}
+        logging.error(f"Failed to get unread count for auth_id={auth_id}: {str(e)}")
+        return {"count": 0, "unread": 0}
 
 
 class MarkReadRequest(BaseModel):
     auth_id: str
     ids: Optional[List[int]] = None
+    notification_ids: Optional[List[int]] = None  # Alternative field name
     mark_all: bool = False
 
 
@@ -2634,51 +2622,34 @@ async def mark_notifications_read(request: MarkReadRequest):
         
         now = datetime.utcnow().isoformat()
         
-        # Determine which column to use (try new schema first)
-        auth_column = "recipient_auth_id"
-        try:
-            # Test if new schema works
-            supabase.table("notifications").select("recipient_auth_id").limit(1).execute()
-        except Exception:
-            auth_column = "user_id"
+        # Support both 'ids' and 'notification_ids' field names
+        notification_ids = request.ids or request.notification_ids or []
         
         if request.mark_all:
             # Mark all unread notifications as read
-            update_data = {"read": True}
-            # Try adding read_at if column exists
             try:
                 supabase.table("notifications").update({
-                    "read": True,
-                    "read_at": now
-                }).eq(auth_column, request.auth_id).eq("read", False).execute()
-            except Exception:
-                supabase.table("notifications").update({
                     "read": True
-                }).eq(auth_column, request.auth_id).eq("read", False).execute()
+                }).eq("auth_id", request.auth_id).eq("read", False).execute()
+            except Exception as e:
+                logging.warning(f"Mark all read failed: {e}")
             
             return {"success": True, "message": "All notifications marked as read"}
         
-        elif request.ids and len(request.ids) > 0:
+        elif notification_ids and len(notification_ids) > 0:
             # Mark specific notifications as read
-            for notification_id in request.ids:
+            for notification_id in notification_ids:
                 try:
                     supabase.table("notifications").update({
-                        "read": True,
-                        "read_at": now
-                    }).eq("id", notification_id).eq(
-                        auth_column, request.auth_id
-                    ).execute()
-                except Exception:
-                    supabase.table("notifications").update({
                         "read": True
-                    }).eq("id", notification_id).eq(
-                        auth_column, request.auth_id
-                    ).execute()
+                    }).eq("id", notification_id).eq("auth_id", request.auth_id).execute()
+                except Exception as e:
+                    logging.warning(f"Failed to mark notification {notification_id} as read: {e}")
             
-            return {"success": True, "message": f"Marked {len(request.ids)} notifications as read"}
+            return {"success": True, "message": f"Marked {len(notification_ids)} notifications as read"}
         
         else:
-            return {"success": False, "message": "Provide either 'ids' or 'mark_all'"}
+            return {"success": False, "message": "Provide either 'ids', 'notification_ids', or 'mark_all'"}
         
     except Exception as e:
         logging.error(f"Failed to mark notifications as read: {str(e)}")
