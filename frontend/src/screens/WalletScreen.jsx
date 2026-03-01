@@ -57,6 +57,17 @@ export default function WalletScreen() {
       // Fetch transactions (same auth_id for both customer and provider)
       const txResponse = await walletsAPI.getTransactions(user.id, 50);
       setTransactions(txResponse.data || []);
+      
+      // For providers, also fetch withdrawal requests
+      if (isProvider) {
+        try {
+          const withdrawalResponse = await withdrawalsAPI.getMyRequests(user.id, 20);
+          setWithdrawalRequests(withdrawalResponse.data || []);
+        } catch (err) {
+          console.error("Failed to fetch withdrawal requests:", err);
+          setWithdrawalRequests([]);
+        }
+      }
     } catch (error) {
       console.error("Failed to fetch wallet data:", error);
       // Set default values on error
@@ -66,11 +77,12 @@ export default function WalletScreen() {
         total_balance: 0
       });
       setTransactions([]);
+      setWithdrawalRequests([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id]);
+  }, [user?.id, isProvider]);
 
   // Check for payment callback on mount
   useEffect(() => {
