@@ -1884,6 +1884,333 @@ async def backfill_transaction_auth_ids():
         return {"status": "error", "message": str(e)}
 
 
+# ==================== WITHDRAWAL REQUEST ENDPOINTS (Phase A) ====================
+
+@api_router.post("/withdrawals/request")
+async def request_withdrawal(
+    request_data: WithdrawalRequestCreate,
+    auth_id: str = Query(..., description="Provider's auth_id (UUID)")
+):
+    """
+    Provider requests a withdrawal from their available balance.
+    - Creates withdrawal_request row with status='pending'
+    - Logs a wallet_transaction (NO balance deduction yet)
+    - Admin will approve/reject later
+    """
+    try:
+        # 1. Validate the withdrawal_requests table exists
+        if not check_table_exists("withdrawal_requests"):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Withdrawal service not available. Please contact support."
+            )
+        
+        # 2. Get provider's wallet
+        wallet_response = supabase.table("wallets").select("*").eq("user_auth_id", auth_id).execute()
+        
+        if not wallet_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Wallet not found. Please ensure you have a wallet set up."
+            )
+        
+        wallet = wallet_response.data[0]
+        # Use available_balance if exists, fallback to balance
+        available_balance = float(wallet.get("available_balance") or wallet.get("balance") or 0)
+        
+        # 3. Validate amount
+        if request_data.amount <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Withdrawal amount must be greater than 0"
+            )
+        
+        if available_balance < request_data.amount:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "Insufficient balance",
+                    "available": available_balance,
+                    "requested": request_data.amount,
+                    "shortfall": request_data.amount - available_balance
+                }
+            )
+        
+        # 4. Validate account number (10 digits for Nigerian banks)
+        if not request_data.account_number.isdigit() or len(request_data.account_number) != 10:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Account number must be exactly 10 digits"
+            )
+        
+        # 5. Create withdrawal request
+        withdrawal_ref = f"withdraw_req_{uuid.uuid4().hex[:12]}"
+        withdrawal_data = {
+            "provider_auth_id": auth_id,
+            "amount": request_data.amount,
+            "currency": "NGN",
+            "bank_name": request_data.bank_name.strip(),
+            "account_name": request_data.account_name.strip(),
+            "account_number": request_data.account_number,
+            "status": "pending",
+            "note": request_data.note
+        }
+        
+        withdrawal_result = supabase.table("withdrawal_requests").insert(withdrawal_data).execute()
+        
+        if not withdrawal_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create withdrawal request"
+            )
+        
+        withdrawal_record = withdrawal_result.data[0]
+        
+        # 6. Log transaction (NO balance change - just for history)
+        if check_table_exists("wallet_transactions"):
+            try:
+                supabase.table("wallet_transactions").insert({
+                    "user_auth_id": auth_id,
+                    "auth_id": auth_id,
+                    "type": "debit",  # Will be a debit when approved
+                    "direction": "debit",
+                    "amount": request_data.amount,
+                    "reference": withdrawal_ref,
+                    "description": f"Withdrawal request submitted - {CURRENCY}{request_data.amount:,.2f}",
+                    "status": "pending",
+                    "created_at": datetime.utcnow().isoformat(),
+                    "metadata": {
+                        "withdrawal_request_id": withdrawal_record["id"],
+                        "bank_name": request_data.bank_name,
+                        "account_number_last4": request_data.account_number[-4:]
+                    }
+                }).execute()
+            except Exception as tx_error:
+                logging.warning(f"Failed to log withdrawal request transaction: {tx_error}")
+        
+        logging.info(f"Withdrawal request created: {withdrawal_record['id']} for provider {auth_id}, amount {request_data.amount}")
+        
+        return {
+            "ok": True,
+            "withdrawal_request_id": withdrawal_record["id"],
+            "status": "pending",
+            "message": "Withdrawal request submitted successfully. Admin will review shortly."
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Withdrawal request failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create withdrawal request: {str(e)}"
+        )
+
+
+@api_router.get("/withdrawals/me")
+async def get_my_withdrawal_requests(
+    auth_id: str = Query(..., description="Provider's auth_id (UUID)"),
+    limit: int = Query(50, ge=1, le=100)
+):
+    """
+    Get provider's withdrawal requests history.
+    Returns requests ordered by created_at desc.
+    """
+    try:
+        if not check_table_exists("withdrawal_requests"):
+            return []
+        
+        response = supabase.table("withdrawal_requests").select("*").eq(
+            "provider_auth_id", auth_id
+        ).order("created_at", desc=True).limit(limit).execute()
+        
+        return response.data or []
+        
+    except Exception as e:
+        logging.error(f"Failed to fetch withdrawal requests: {str(e)}")
+        return []
+
+
+@api_router.put("/admin/withdrawals/{withdrawal_id}")
+async def admin_process_withdrawal(
+    withdrawal_id: int,
+    action_data: AdminWithdrawalAction,
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY")
+):
+    """
+    Admin endpoint to approve or reject withdrawal requests.
+    Protected by X-ADMIN-KEY header.
+    
+    - approve: Deducts from provider wallet and marks as approved
+    - reject: Marks as rejected (no balance change)
+    """
+    try:
+        # 1. Security: Check admin key
+        admin_key = os.environ.get("ADMIN_DASH_KEY")
+        if not admin_key:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Admin service not configured. ADMIN_DASH_KEY is missing."
+            )
+        
+        if not x_admin_key or x_admin_key != admin_key:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or missing admin key"
+            )
+        
+        # 2. Get withdrawal request
+        if not check_table_exists("withdrawal_requests"):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Withdrawal service not available"
+            )
+        
+        withdrawal_response = supabase.table("withdrawal_requests").select("*").eq(
+            "id", withdrawal_id
+        ).execute()
+        
+        if not withdrawal_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Withdrawal request not found"
+            )
+        
+        withdrawal = withdrawal_response.data[0]
+        
+        # 3. Validate status is pending
+        if withdrawal.get("status") != "pending":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Withdrawal request is already {withdrawal.get('status')}. Cannot process again."
+            )
+        
+        provider_auth_id = withdrawal.get("provider_auth_id")
+        amount = float(withdrawal.get("amount", 0))
+        
+        if action_data.action == "approve":
+            # 4a. APPROVE: Deduct from provider wallet
+            
+            # Get provider wallet
+            wallet_response = supabase.table("wallets").select("*").eq(
+                "user_auth_id", provider_auth_id
+            ).execute()
+            
+            if not wallet_response.data:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Provider wallet not found"
+                )
+            
+            wallet = wallet_response.data[0]
+            available_balance = float(wallet.get("available_balance") or wallet.get("balance") or 0)
+            
+            # Re-check balance
+            if available_balance < amount:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Insufficient balance. Available: {available_balance}, Requested: {amount}"
+                )
+            
+            # Deduct from wallet
+            new_balance = available_balance - amount
+            
+            # Update wallet - handle both column names
+            update_data = {"available_balance": new_balance}
+            if wallet.get("balance") is not None:
+                # Also update legacy balance column for consistency
+                update_data["balance"] = new_balance
+            
+            supabase.table("wallets").update(update_data).eq("id", wallet["id"]).execute()
+            
+            # Update withdrawal request status
+            supabase.table("withdrawal_requests").update({
+                "status": "approved",
+                "note": action_data.note or withdrawal.get("note"),
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("id", withdrawal_id).execute()
+            
+            # Log transaction
+            withdrawal_paid_ref = f"withdraw_paid_{uuid.uuid4().hex[:12]}"
+            if check_table_exists("wallet_transactions"):
+                supabase.table("wallet_transactions").insert({
+                    "user_auth_id": provider_auth_id,
+                    "auth_id": provider_auth_id,
+                    "type": "debit",
+                    "direction": "debit",
+                    "amount": amount,
+                    "reference": withdrawal_paid_ref,
+                    "description": f"Withdrawal approved - {CURRENCY}{amount:,.2f} paid",
+                    "status": "completed",
+                    "created_at": datetime.utcnow().isoformat(),
+                    "metadata": {
+                        "withdrawal_request_id": withdrawal_id,
+                        "bank_name": withdrawal.get("bank_name"),
+                        "account_number_last4": withdrawal.get("account_number", "")[-4:]
+                    }
+                }).execute()
+            
+            logging.info(f"Withdrawal {withdrawal_id} APPROVED. Amount: {amount}, Provider: {provider_auth_id}")
+            
+            return {
+                "ok": True,
+                "status": "approved",
+                "message": f"Withdrawal approved. {CURRENCY}{amount:,.2f} deducted from provider wallet.",
+                "withdrawal_id": withdrawal_id
+            }
+            
+        elif action_data.action == "reject":
+            # 4b. REJECT: Just update status (no balance change)
+            
+            supabase.table("withdrawal_requests").update({
+                "status": "rejected",
+                "note": action_data.note or withdrawal.get("note"),
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("id", withdrawal_id).execute()
+            
+            # Log transaction as failed
+            if check_table_exists("wallet_transactions"):
+                supabase.table("wallet_transactions").insert({
+                    "user_auth_id": provider_auth_id,
+                    "auth_id": provider_auth_id,
+                    "type": "debit",
+                    "direction": "debit",
+                    "amount": amount,
+                    "reference": f"withdraw_rejected_{withdrawal_id}",
+                    "description": f"Withdrawal rejected - {action_data.note or 'No reason provided'}",
+                    "status": "failed",
+                    "created_at": datetime.utcnow().isoformat(),
+                    "metadata": {
+                        "withdrawal_request_id": withdrawal_id,
+                        "admin_note": action_data.note
+                    }
+                }).execute()
+            
+            logging.info(f"Withdrawal {withdrawal_id} REJECTED. Amount: {amount}, Provider: {provider_auth_id}")
+            
+            return {
+                "ok": True,
+                "status": "rejected",
+                "message": "Withdrawal request rejected.",
+                "withdrawal_id": withdrawal_id
+            }
+        
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid action. Use 'approve' or 'reject'."
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Admin withdrawal processing failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process withdrawal: {str(e)}"
+        )
+
+
 # ==================== PROVIDER SERVICES ENDPOINTS ====================
 # Using the existing 'services' table in Supabase with enhanced schema
 # Table mapping: stylist_id -> provider_id, category -> sub_service_id (composite), name -> sub_service_name
