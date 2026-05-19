@@ -473,12 +473,34 @@ metadata:
 
 test_plan:
   current_focus: 
-    - "Wallet & Earnings Accuracy Fix - Frontend Regression Testing Complete"
+    - "Notifications: Clickable + Booking Reminders"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "main"
+    message: "NOTIFICATIONS EXTENSION (clickable + booking reminders). Additive, no schema changes. Changes: 1) Fixed create_notification() in server.py to actually persist metadata JSONB and actor_auth_id columns (was previously dropping them silently); progressive fallbacks if columns missing. 2) NEW /app/backend/booking_reminders.py with scan_and_create_reminders() that: queries today/tomorrow confirmed/accepted bookings, computes minutes-until-appointment in Africa/Lagos TZ, creates 2 reminder types: booking_reminder_2h (~120m before, +/-5m window) and booking_reminder_30m (~30m before, +/-5m window), for both customer (customer_auth_id) and provider (provider_id UUID). Idempotency via JSONB metadata->>booking_id check (with safe LIKE fallback). 3) APScheduler AsyncIOScheduler started in @app.on_event('startup'), runs every 5 min with coalesce=True, max_instances=1, misfire_grace=300s, Africa/Lagos TZ. Stopped on shutdown event. 4) NEW POST /api/admin/booking-reminders/run (X-ADMIN-KEY) for manual triggering / testing. 5) Frontend NotificationsScreen.jsx: extended handleNotificationClick to support chat_message -> /bookings/:id/chat, review_received -> /profile, withdrawal types -> /wallet, all booking_* and reminder types -> /bookings/:id. Added icons (AlarmClock, MessageCircle, Star) + titles + colors for new types. PLEASE TEST: a) create_notification now persists metadata (insert chat_message via existing chat endpoint and verify metadata.booking_id appears in GET /notifications/me), b) POST /api/admin/booking-reminders/run with correct X-ADMIN-KEY returns stats; 401 without key, c) Idempotency: calling reminders endpoint twice does not create duplicates, d) APScheduler is running (logs show 'reminder_scheduler started'), e) Backward compat: existing /notifications/me, /notifications/unread-count, /notifications/mark-read still work."
+  
+  - agent: "testing"
+    message: "NOTIFICATIONS EXTENSION TESTING COMPLETE: ❌ CRITICAL FAILURE - Metadata persistence is NOT working. Database schema issue: notifications table is MISSING required columns (metadata JSONB, actor_auth_id UUID, title TEXT). The create_notification function has progressive fallbacks and successfully falls back to minimal schema, but this means metadata is NOT being persisted, which is the PRIMARY requirement of this feature. Verified by direct testing: created notification with metadata={'booking_id': 999}, but saved notification has NO metadata column. ✅ PASS (12/14 tests): Booking reminders admin endpoint working perfectly (authentication, stats, idempotency), APScheduler confirmed running in logs, all backward compatibility tests passed. ❌ FAIL: Cannot test E2E reminder creation (no confirmed bookings, bookings schema mismatch). REQUIRED ACTION: Run database migration to add: ALTER TABLE notifications ADD COLUMN metadata JSONB, ADD COLUMN actor_auth_id UUID, ADD COLUMN title TEXT. Without this migration, the clickable notifications feature cannot work as designed."
+
+  - task: "Notifications: Clickable + Booking Reminders"
+    implemented: true
+    working: false
+    file: "/app/backend/server.py, /app/backend/booking_reminders.py, /app/frontend/src/screens/NotificationsScreen.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Additive extension: 1) Fixed create_notification to actually persist metadata + actor_auth_id (with progressive fallbacks). 2) NEW booking_reminders.py with 2h and 30m reminder logic (idempotent via JSONB metadata->>booking_id check). 3) APScheduler runs every 5 min (coalesce=true, max_instances=1, Africa/Lagos TZ). 4) POST /api/admin/booking-reminders/run for manual trigger (X-ADMIN-KEY). 5) Frontend handles chat_message->chat, review_received->profile, withdrawal->wallet, all booking types/reminders->booking details. NO schema changes, no existing endpoints modified."
+      - working: false
+        agent: "testing"
+        comment: "TESTED: ❌ CRITICAL FAILURE - Metadata persistence NOT working. The notifications table is MISSING required columns: 'metadata' (JSONB), 'actor_auth_id' (UUID), and 'title' (TEXT). The create_notification function falls back to minimal schema and does NOT persist metadata. This is a CRITICAL requirement failure. ✅ PASS: POST /api/admin/booking-reminders/run endpoint working correctly (401 without key, 401 with wrong key, 200 with correct key, returns proper stats, idempotent). ✅ PASS: APScheduler is running (confirmed in logs: '[reminder_scheduler] started' and 'Scheduler started'). ✅ PASS: All backward compatibility tests passed (GET /notifications/me, GET /notifications/unread-count, POST /notifications/mark-read, GET /wallet/transactions, GET /providers/dashboard-metrics). ❌ FAIL: Cannot test reminder creation E2E because no confirmed bookings exist and bookings table schema doesn't match (no total_amount column). REQUIRED ACTION: Database migration needed to add metadata (JSONB), actor_auth_id (UUID), and title (TEXT) columns to notifications table."
+
+
   - agent: "main"
     message: "WALLET & EARNINGS ACCURACY FIX - Made additive, safe improvements without breaking existing flow. Changes: 1) Added /app/backend/wallet_helpers.py with categorize_transaction(), normalize_transaction(), compute_wallet_balance_from_tx(), compute_provider_earnings(). Categories: TOPUP, ESCROW_HOLD, ESCROW_RELEASE, REFUND, WITHDRAWAL, PAYOUT, ADJUSTMENT. 2) Updated GET /api/wallet/transactions to return normalized response (type=category, direction in UPPER, includes booking_id, reference, status, raw_type). Added optional ?category= filter. 3) Fixed earnings calculation in GET /api/providers/dashboard-metrics - now ONLY counts ESCROW_RELEASE+credit+completed transactions (was incorrectly counting all credits including TOPUPs). 4) Added new GET /api/wallet/me/computed - diagnostic endpoint comparing stored vs computed balance. 5) Added new POST /api/admin/wallet/recalculate (X-ADMIN-KEY protected) - admin tool to recompute wallet from transactions, supports dry-run (apply=false). Frontend WalletScreen.jsx updated: fixed direction casing bug (was 'CREDIT' check against lowercase 'credit'), added Earnings Summary card for providers (All Time / 30d / 7d / Pending Withdrawals), improved transaction list rendering with semantic icons/colors per category. PLEASE TEST: a) GET /api/wallet/transactions normalized response shape, b) Earnings calculation correctness in /api/providers/dashboard-metrics (should NOT count TOPUPs), c) New endpoints /api/wallet/me/computed and /api/admin/wallet/recalculate, d) Backward compatibility: existing booking/payment/escrow/withdrawal flows must still work."
 

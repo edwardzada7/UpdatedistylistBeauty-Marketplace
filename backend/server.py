@@ -27,6 +27,9 @@ from wallet_helpers import (
     CATEGORY_ESCROW_HOLD,
 )
 
+# Booking reminders - lightweight in-app reminder scheduler
+from booking_reminders import scan_and_create_reminders
+
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -2714,6 +2717,8 @@ async def create_notification(
     Returns True if successful, False otherwise.
     Fails gracefully without raising exceptions.
     Uses auth_id column (uuid) for recipient identification.
+
+    Persists optional `actor_auth_id` and `metadata` (JSONB) when columns exist.
     """
     try:
         if not recipient_auth_id:
@@ -2724,44 +2729,68 @@ async def create_notification(
             logging.warning("Notifications table does not exist")
             return False
         
-        # Build notification data using auth_id column (the actual column name)
+        # Build notification data - full payload first
         notification_data = {
-            "auth_id": recipient_auth_id,  # Use auth_id column
+            "auth_id": recipient_auth_id,
             "type": notification_type,
+            "title": title,
             "message": message,
-            "read": False
+            "read": False,
         }
-        
-        # Add title if column exists (may not in older schemas)
-        # The DB may have 'title' column or we put it in message
-        try:
-            notification_data["title"] = title
-        except Exception:
-            # If title column doesn't exist, prepend to message
-            notification_data["message"] = f"{title}: {message}"
-        
+        if actor_auth_id:
+            notification_data["actor_auth_id"] = actor_auth_id
+        if metadata is not None:
+            # metadata column should be JSONB; supabase client serializes dict
+            notification_data["metadata"] = metadata
+
         try:
             result = supabase.table("notifications").insert(notification_data).execute()
-            
             if result.data:
-                logging.info(f"Notification created: type={notification_type}, recipient={recipient_auth_id[:8]}...")
+                logging.info(
+                    f"Notification created: type={notification_type}, "
+                    f"recipient={recipient_auth_id[:8]}..., has_meta={metadata is not None}"
+                )
                 return True
         except Exception as insert_error:
-            logging.warning(f"Notification insert failed: {insert_error}")
-            # Try without title
+            logging.warning(f"Notification insert with full payload failed: {insert_error}")
+
+            # Progressive fallback 1: drop metadata if column missing
             try:
-                fallback_data = {
+                fb1 = dict(notification_data)
+                fb1.pop("metadata", None)
+                result = supabase.table("notifications").insert(fb1).execute()
+                if result.data:
+                    logging.info(f"Notification created (no metadata): type={notification_type}")
+                    return True
+            except Exception as e1:
+                logging.warning(f"Fallback (no metadata) failed: {e1}")
+
+            # Progressive fallback 2: drop actor_auth_id
+            try:
+                fb2 = dict(notification_data)
+                fb2.pop("metadata", None)
+                fb2.pop("actor_auth_id", None)
+                result = supabase.table("notifications").insert(fb2).execute()
+                if result.data:
+                    logging.info(f"Notification created (no actor/meta): type={notification_type}")
+                    return True
+            except Exception as e2:
+                logging.warning(f"Fallback (no actor/meta) failed: {e2}")
+
+            # Progressive fallback 3: drop title (older schema)
+            try:
+                fb3 = {
                     "auth_id": recipient_auth_id,
                     "type": notification_type,
                     "message": f"{title}: {message}",
-                    "read": False
+                    "read": False,
                 }
-                result = supabase.table("notifications").insert(fallback_data).execute()
+                result = supabase.table("notifications").insert(fb3).execute()
                 if result.data:
-                    logging.info(f"Notification created (fallback): type={notification_type}")
+                    logging.info(f"Notification created (minimal): type={notification_type}")
                     return True
-            except Exception as fallback_error:
-                logging.warning(f"Fallback insert also failed: {fallback_error}")
+            except Exception as e3:
+                logging.warning(f"Minimal fallback failed: {e3}")
         
         return False
         
@@ -5367,6 +5396,29 @@ async def backfill_customer_auth_ids():
         )
 
 
+# ====================================================================
+# BOOKING REMINDERS - manual trigger (admin-protected)
+# ====================================================================
+
+@api_router.post("/admin/booking-reminders/run")
+async def admin_run_booking_reminders(
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY")
+):
+    """
+    Manually trigger the booking-reminder scan. Useful for testing and ops.
+
+    Protected by X-ADMIN-KEY (uses ADMIN_DASH_KEY env var).
+    """
+    admin_key = os.environ.get("ADMIN_DASH_KEY")
+    if not admin_key:
+        raise HTTPException(status_code=503, detail="ADMIN_DASH_KEY not configured")
+    if not x_admin_key or x_admin_key != admin_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+
+    stats = await scan_and_create_reminders(supabase, create_notification)
+    return {"success": True, "stats": stats}
+
+
 # Include the router in the main app
 app.include_router(api_router)
 
@@ -5384,3 +5436,59 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+# ====================================================================
+# APSCHEDULER - lightweight in-app reminder automation
+# ====================================================================
+# Runs scan_and_create_reminders() every 5 minutes.
+# coalesce=True: if multiple runs are missed (e.g., during restart), only one
+#   make-up run is executed.
+# max_instances=1: never run two scans concurrently.
+# misfire_grace_time: still run within grace if job was delayed.
+
+_reminder_scheduler = None
+
+
+@app.on_event("startup")
+async def _start_reminder_scheduler():
+    """Start APScheduler on app startup. Reminder job runs every 5 minutes."""
+    global _reminder_scheduler
+    try:
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+        if _reminder_scheduler is not None:
+            logger.info("[reminder_scheduler] already running, skipping start")
+            return
+
+        scheduler = AsyncIOScheduler(timezone="Africa/Lagos")
+        # Run every 5 minutes (lightweight, low resource)
+        scheduler.add_job(
+            scan_and_create_reminders,
+            "interval",
+            minutes=5,
+            args=[supabase, create_notification],
+            id="booking_reminders_job",
+            coalesce=True,
+            max_instances=1,
+            misfire_grace_time=300,
+            replace_existing=True,
+        )
+        scheduler.start()
+        _reminder_scheduler = scheduler
+        logger.info("[reminder_scheduler] started - booking reminders run every 5 minutes")
+    except Exception as e:
+        logger.warning(f"[reminder_scheduler] failed to start: {e}")
+
+
+@app.on_event("shutdown")
+async def _stop_reminder_scheduler():
+    """Stop APScheduler cleanly on shutdown."""
+    global _reminder_scheduler
+    try:
+        if _reminder_scheduler is not None:
+            _reminder_scheduler.shutdown(wait=False)
+            _reminder_scheduler = None
+            logger.info("[reminder_scheduler] stopped")
+    except Exception as e:
+        logger.warning(f"[reminder_scheduler] error during shutdown: {e}")

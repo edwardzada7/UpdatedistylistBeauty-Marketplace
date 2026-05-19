@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
   ArrowLeft, Bell, BellOff, Check, CheckCheck, RefreshCcw, 
   Calendar, Wallet, CreditCard, Clock, Loader2,
-  ChevronRight
+  ChevronRight, MessageCircle, Star, AlarmClock
 } from "lucide-react";
 import { toast } from "sonner";
 import { notificationsAPI } from "@/services/api";
@@ -79,18 +79,51 @@ const NotificationsScreen = () => {
 
     // Navigate based on notification type and metadata
     const { metadata, type } = notification;
-    
-    if (metadata?.booking_id) {
-      navigate(`/bookings/${metadata.booking_id}`);
-    } else if (metadata?.withdrawal_id) {
+    const meta = metadata || {};
+    const bookingId = meta.booking_id;
+
+    // 1) Chat messages → BookingChatScreen
+    if (type === "chat_message" && bookingId) {
+      navigate(`/bookings/${bookingId}/chat`);
+      return;
+    }
+
+    // 2) Review received → provider's own profile (reviews section)
+    if (type === "review_received") {
+      navigate("/profile");
+      return;
+    }
+
+    // 3) Withdrawals → wallet (provider) or admin (admin)
+    if (
+      type === "withdrawal_approved" ||
+      type === "withdrawal_rejected" ||
+      type === "withdrawal_requested"
+    ) {
       if (isProvider) {
         navigate("/wallet");
-      } else {
+      } else if (meta.withdrawal_id) {
         navigate("/admin/withdrawals");
+      } else {
+        navigate("/wallet");
       }
-    } else if (type === "wallet_topup_success") {
-      navigate("/wallet");
+      return;
     }
+
+    // 4) Wallet top-up success → wallet
+    if (type === "wallet_topup_success") {
+      navigate("/wallet");
+      return;
+    }
+
+    // 5) Booking-related (created/confirmed/cancelled/completed/declined/reminders)
+    //    → BookingDetailsScreen if we have a booking_id
+    if (bookingId) {
+      navigate(`/bookings/${bookingId}`);
+      return;
+    }
+
+    // 6) Fallback: stay on the notifications screen
   };
 
   const getNotificationIcon = (type) => {
@@ -99,8 +132,16 @@ const NotificationsScreen = () => {
       case "booking_confirmed":
       case "booking_declined":
       case "booking_canceled":
+      case "booking_cancelled":
       case "booking_completed":
         return <Calendar className="h-5 w-5" />;
+      case "booking_reminder_2h":
+      case "booking_reminder_30m":
+        return <AlarmClock className="h-5 w-5" />;
+      case "chat_message":
+        return <MessageCircle className="h-5 w-5" />;
+      case "review_received":
+        return <Star className="h-5 w-5" />;
       case "withdrawal_requested":
       case "withdrawal_approved":
       case "withdrawal_rejected":
@@ -121,9 +162,18 @@ const NotificationsScreen = () => {
       case "booking_declined":
         return "Booking Declined";
       case "booking_canceled":
-        return "Booking Canceled";
+      case "booking_cancelled":
+        return "Booking Cancelled";
       case "booking_completed":
         return "Service Completed";
+      case "booking_reminder_2h":
+        return "Appointment in 2 hours";
+      case "booking_reminder_30m":
+        return "Appointment in 30 minutes";
+      case "chat_message":
+        return "New Message";
+      case "review_received":
+        return "New Review";
       case "withdrawal_requested":
         return "Withdrawal Requested";
       case "withdrawal_approved":
@@ -148,8 +198,16 @@ const NotificationsScreen = () => {
         return "bg-green-100 text-green-600";
       case "booking_declined":
       case "booking_canceled":
+      case "booking_cancelled":
       case "withdrawal_rejected":
         return "bg-red-100 text-red-600";
+      case "booking_reminder_2h":
+      case "booking_reminder_30m":
+        return "bg-orange-100 text-orange-600";
+      case "chat_message":
+        return "bg-indigo-100 text-indigo-600";
+      case "review_received":
+        return "bg-yellow-100 text-yellow-600";
       case "withdrawal_requested":
         return "bg-amber-100 text-amber-600";
       default:
@@ -276,12 +334,30 @@ const NotificationsScreen = () => {
                     <p className="text-sm text-gray-600 mt-0.5 line-clamp-2">
                       {notification.message}
                     </p>
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
                       <Clock className="h-3 w-3 text-gray-400" />
                       <span className="text-xs text-gray-400">
                         {formatTimeAgo(notification.created_at)}
                       </span>
-                      {notification.metadata?.booking_id && (
+                      {notification.type === "chat_message" && notification.metadata?.booking_id && (
+                        <span className="text-xs text-indigo-600 flex items-center gap-1">
+                          Open chat <ChevronRight className="h-3 w-3" />
+                        </span>
+                      )}
+                      {notification.type === "review_received" && (
+                        <span className="text-xs text-yellow-700 flex items-center gap-1">
+                          View review <ChevronRight className="h-3 w-3" />
+                        </span>
+                      )}
+                      {(notification.type === "wallet_topup_success" ||
+                        notification.type === "withdrawal_approved" ||
+                        notification.type === "withdrawal_rejected") && (
+                        <span className="text-xs text-green-700 flex items-center gap-1">
+                          Open wallet <ChevronRight className="h-3 w-3" />
+                        </span>
+                      )}
+                      {notification.metadata?.booking_id &&
+                        notification.type !== "chat_message" && (
                         <span className="text-xs text-purple-600 flex items-center gap-1">
                           View booking <ChevronRight className="h-3 w-3" />
                         </span>
