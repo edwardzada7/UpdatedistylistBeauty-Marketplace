@@ -9,7 +9,7 @@ import json
 import sys
 
 # Backend URL from frontend .env
-BACKEND_URL = "https://booking-chat-ui.preview.emergentagent.com/api"
+BACKEND_URL = "https://postgres-api.preview.emergentagent.com/api"
 
 def test_provider_services_toggle_persistence():
     """Test Provider Services Toggle and Persistence functionality as specified in review request"""

@@ -14,7 +14,7 @@ import requests
 import os
 import uuid
 
-API_URL = os.getenv("REACT_APP_BACKEND_URL", "https://booking-chat-ui.preview.emergentagent.com")
+API_URL = os.getenv("REACT_APP_BACKEND_URL", "https://postgres-api.preview.emergentagent.com")
 BASE_URL = f"{API_URL}/api"
 
 # Test auth_id from review request
