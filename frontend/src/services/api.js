@@ -233,8 +233,15 @@ export const walletsAPI = {
   delete: (id) => api.delete(`/wallets/${id}`),
   // Phase 2.2 - Enhanced wallet endpoints
   getMyWallet: (authId) => api.get(`/wallet/me?auth_id=${authId}`),
-  getTransactions: (authId, limit = 50) => 
-    api.get(`/wallet/transactions?auth_id=${authId}&limit=${limit}`),
+  getTransactions: (authId, limit = 50, category = null) => {
+    const qp = new URLSearchParams();
+    qp.append("auth_id", authId);
+    qp.append("limit", String(limit));
+    if (category) qp.append("category", category);
+    return api.get(`/wallet/transactions?${qp.toString()}`);
+  },
+  // Diagnostic: compare stored balance vs computed-from-transactions
+  getMyWalletComputed: (authId) => api.get(`/wallet/me/computed?auth_id=${authId}`),
 };
 
 // ==================== WITHDRAWALS API (Phase A) ====================

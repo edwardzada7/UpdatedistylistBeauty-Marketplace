@@ -14,6 +14,19 @@ import hmac
 import hashlib
 import uuid
 
+# Wallet helpers - additive, safe; never mutates DB on its own
+from wallet_helpers import (
+    categorize_transaction,
+    normalize_transaction,
+    compute_wallet_balance_from_tx,
+    compute_provider_earnings,
+    CATEGORY_ESCROW_RELEASE,
+    CATEGORY_TOPUP,
+    CATEGORY_REFUND,
+    CATEGORY_WITHDRAWAL,
+    CATEGORY_ESCROW_HOLD,
+)
+
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -1758,44 +1771,263 @@ async def get_my_wallet(auth_id: str = Query(..., description="User's auth_id"))
 @api_router.get("/wallet/transactions")
 async def get_wallet_transactions(
     auth_id: str = Query(..., description="User's auth_id (UUID) - the wallet owner"),
-    limit: int = Query(50, ge=1, le=100)
+    limit: int = Query(50, ge=1, le=100),
+    category: Optional[str] = Query(None, description="Optional filter by category: TOPUP, ESCROW_HOLD, ESCROW_RELEASE, REFUND, WITHDRAWAL, PAYOUT")
 ):
     """
-    Get user's wallet transaction history.
-    Filters ONLY by auth_id which represents the wallet OWNER.
-    Same endpoint for both customers and providers.
+    Get user's wallet transaction history (normalized, newest first).
+
+    Same endpoint for both customers and providers. Returns normalized fields:
+    id, type, direction (UPPER), amount, description, created_at, booking_id,
+    reference, status, raw_type.
     """
     try:
         if not check_table_exists("wallet_transactions"):
             logging.info("wallet_transactions table does not exist")
             return []
-        
-        # Query by auth_id - the wallet owner field
-        # This is the ONLY filter needed - same for customers and providers
+
+        # Query by auth_id - the wallet owner field.
+        # We fetch a bit more than `limit` in case the auth_id column is sparse
+        # and we need to fall back to user_auth_id.
+        raw_rows = []
         try:
             response = supabase.table("wallet_transactions").select("*").eq(
                 "auth_id", auth_id
             ).order("created_at", desc=True).limit(limit).execute()
-            
-            results = response.data or []
-            logging.info(f"Found {len(results)} transactions for auth_id: {auth_id}")
-            return results
-            
+            raw_rows = response.data or []
+            logging.info(f"Found {len(raw_rows)} transactions for auth_id: {auth_id}")
         except Exception as e:
-            # If auth_id column fails, try user_auth_id as fallback
             logging.warning(f"auth_id query failed, trying user_auth_id: {e}")
+
+        if not raw_rows:
             try:
                 response = supabase.table("wallet_transactions").select("*").eq(
                     "user_auth_id", auth_id
                 ).order("created_at", desc=True).limit(limit).execute()
-                return response.data or []
+                raw_rows = response.data or []
             except Exception as e2:
                 logging.error(f"Both auth_id and user_auth_id queries failed: {e2}")
                 return []
-        
+
+        # Normalize each row to a stable response shape
+        normalized = [normalize_transaction(r) for r in raw_rows]
+
+        # Optional category filter
+        if category:
+            cat_upper = category.upper()
+            normalized = [t for t in normalized if t.get("type") == cat_upper]
+
+        # Ensure sort newest-first (defensive; DB already orders)
+        normalized.sort(key=lambda t: t.get("created_at") or "", reverse=True)
+        return normalized
+
     except Exception as e:
         logging.error(f"Failed to fetch transactions: {str(e)}")
         return []
+
+
+@api_router.get("/wallet/me/computed")
+async def get_my_wallet_computed(auth_id: str = Query(..., description="User's auth_id (UUID)")):
+    """
+    Diagnostic endpoint: returns wallet balance computed from wallet_transactions.
+    Does NOT modify any stored balance.
+
+    Useful for verifying that stored balances match transaction history.
+    Returns both the stored values and the computed values for comparison.
+    """
+    try:
+        # Stored values
+        stored = {"available_balance": 0.0, "escrow_balance": 0.0}
+        try:
+            wallet_response = supabase.table("wallets").select("*").eq(
+                "user_auth_id", auth_id
+            ).execute()
+            if wallet_response.data:
+                w = wallet_response.data[0]
+                stored["available_balance"] = float(
+                    w.get("available_balance") if w.get("available_balance") is not None else (w.get("balance") or 0)
+                )
+                stored["escrow_balance"] = float(w.get("escrow_balance") or 0)
+        except Exception as e:
+            logging.warning(f"Failed to fetch stored wallet for {auth_id}: {e}")
+
+        # Compute from transactions
+        computed = {"available_balance": 0.0, "escrow_balance": 0.0, "total_credits": 0.0, "total_debits": 0.0}
+        if check_table_exists("wallet_transactions"):
+            rows = []
+            try:
+                resp = supabase.table("wallet_transactions").select("*").eq(
+                    "auth_id", auth_id
+                ).execute()
+                rows = resp.data or []
+            except Exception:
+                pass
+            if not rows:
+                try:
+                    resp = supabase.table("wallet_transactions").select("*").eq(
+                        "user_auth_id", auth_id
+                    ).execute()
+                    rows = resp.data or []
+                except Exception:
+                    pass
+
+            computed = compute_wallet_balance_from_tx(rows)
+
+        delta_available = round(stored["available_balance"] - computed["available_balance"], 2)
+        delta_escrow = round(stored["escrow_balance"] - computed["escrow_balance"], 2)
+
+        return {
+            "auth_id": auth_id,
+            "stored": {
+                "available_balance": round(stored["available_balance"], 2),
+                "escrow_balance": round(stored["escrow_balance"], 2),
+                "total_balance": round(stored["available_balance"] + stored["escrow_balance"], 2),
+            },
+            "computed": computed,
+            "delta": {
+                "available_balance": delta_available,
+                "escrow_balance": delta_escrow,
+                "in_sync": delta_available == 0 and delta_escrow == 0,
+            }
+        }
+    except Exception as e:
+        logging.error(f"Wallet computed check failed for {auth_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to compute wallet: {str(e)}"
+        )
+
+
+@api_router.post("/admin/wallet/recalculate")
+async def admin_recalculate_wallet(
+    auth_id: str = Query(..., description="User's auth_id (UUID) to recalc"),
+    apply: bool = Query(False, description="Set true to apply changes; false = dry-run"),
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY")
+):
+    """
+    Admin tool: recompute wallet balance from wallet_transactions and (optionally)
+    update the stored wallet row. Protected by X-ADMIN-KEY.
+
+    - apply=false (default): dry-run, returns proposed values, no DB writes.
+    - apply=true: updates wallets row to match computed values.
+
+    Safety:
+      * Only touches the single wallet identified by auth_id.
+      * Never deletes transactions.
+      * Logs an ADJUSTMENT wallet_transactions row when applying changes,
+        so the audit trail stays intact.
+    """
+    try:
+        admin_key = os.environ.get("ADMIN_DASH_KEY")
+        if not admin_key:
+            raise HTTPException(status_code=503, detail="ADMIN_DASH_KEY not configured")
+        if not x_admin_key or x_admin_key != admin_key:
+            raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+
+        # Load stored wallet
+        wallet_response = supabase.table("wallets").select("*").eq(
+            "user_auth_id", auth_id
+        ).execute()
+        if not wallet_response.data:
+            raise HTTPException(status_code=404, detail="Wallet not found")
+        wallet = wallet_response.data[0]
+
+        stored_available = float(
+            wallet.get("available_balance") if wallet.get("available_balance") is not None else (wallet.get("balance") or 0)
+        )
+        stored_escrow = float(wallet.get("escrow_balance") or 0)
+
+        # Compute from transactions
+        if not check_table_exists("wallet_transactions"):
+            raise HTTPException(status_code=503, detail="wallet_transactions table not found")
+
+        rows = []
+        try:
+            resp = supabase.table("wallet_transactions").select("*").eq(
+                "auth_id", auth_id
+            ).execute()
+            rows = resp.data or []
+        except Exception:
+            pass
+        if not rows:
+            try:
+                resp = supabase.table("wallet_transactions").select("*").eq(
+                    "user_auth_id", auth_id
+                ).execute()
+                rows = resp.data or []
+            except Exception:
+                pass
+
+        computed = compute_wallet_balance_from_tx(rows)
+        new_available = computed["available_balance"]
+        new_escrow = computed["escrow_balance"]
+
+        delta_available = round(new_available - stored_available, 2)
+        delta_escrow = round(new_escrow - stored_escrow, 2)
+
+        result = {
+            "auth_id": auth_id,
+            "stored": {
+                "available_balance": round(stored_available, 2),
+                "escrow_balance": round(stored_escrow, 2),
+            },
+            "computed": computed,
+            "delta": {
+                "available_balance": delta_available,
+                "escrow_balance": delta_escrow,
+            },
+            "applied": False,
+        }
+
+        if not apply:
+            return result
+
+        if delta_available == 0 and delta_escrow == 0:
+            result["applied"] = True
+            result["message"] = "Already in sync; no changes applied"
+            return result
+
+        # Apply changes - update wallet row
+        update_data = {}
+        if wallet.get("available_balance") is not None:
+            update_data["available_balance"] = new_available
+        # Always update legacy `balance` column too if it exists
+        if "balance" in wallet:
+            update_data["balance"] = new_available
+        if wallet.get("escrow_balance") is not None or new_escrow > 0:
+            update_data["escrow_balance"] = new_escrow
+
+        supabase.table("wallets").update(update_data).eq("id", wallet["id"]).execute()
+
+        # Audit trail: insert an ADJUSTMENT transaction if there was a delta
+        try:
+            if delta_available != 0:
+                supabase.table("wallet_transactions").insert({
+                    "user_auth_id": auth_id,
+                    "auth_id": auth_id,
+                    "type": "credit" if delta_available > 0 else "debit",
+                    "direction": "credit" if delta_available > 0 else "debit",
+                    "amount": abs(delta_available),
+                    "reference": f"adjust_{uuid.uuid4().hex[:12]}",
+                    "description": f"Admin wallet recalc adjustment (available): {CURRENCY}{delta_available:+,.2f}",
+                    "status": "completed",
+                    "created_at": datetime.utcnow().isoformat(),
+                    "metadata": {"category": "ADJUSTMENT", "reason": "admin_recalculate"}
+                }).execute()
+        except Exception as audit_err:
+            logging.warning(f"Failed to log adjustment transaction: {audit_err}")
+
+        result["applied"] = True
+        result["message"] = f"Wallet recalculated. Available {stored_available:.2f} -> {new_available:.2f}, Escrow {stored_escrow:.2f} -> {new_escrow:.2f}"
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Admin wallet recalculate failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Recalc failed: {str(e)}")
+
+
 
 
 @api_router.post("/wallet/transactions/backfill")
@@ -2373,73 +2605,80 @@ async def get_provider_dashboard_metrics(
         # 3. Get transactions and calculate earnings
         if check_table_exists("wallet_transactions"):
             try:
-                # Get recent transactions - try auth_id first, fallback to user_auth_id
-                tx_response = None
+                # Fetch ALL transactions for this provider (we filter in Python).
+                # Try auth_id first; fall back to user_auth_id if empty.
+                all_tx_rows = []
                 try:
                     tx_response = supabase.table("wallet_transactions").select(
-                        "id, type, direction, amount, status, description, reference, created_at"
-                    ).eq("auth_id", auth_id).order("created_at", desc=True).limit(10).execute()
+                        "id, type, direction, amount, status, description, reference, booking_id, metadata, created_at"
+                    ).eq("auth_id", auth_id).order("created_at", desc=True).execute()
+                    all_tx_rows = tx_response.data or []
                 except Exception:
                     pass
-                
-                if not tx_response or not tx_response.data:
+
+                if not all_tx_rows:
                     try:
                         tx_response = supabase.table("wallet_transactions").select(
-                            "id, type, direction, amount, status, description, reference, created_at"
-                        ).eq("user_auth_id", auth_id).order("created_at", desc=True).limit(10).execute()
+                            "id, type, direction, amount, status, description, reference, booking_id, metadata, created_at"
+                        ).eq("user_auth_id", auth_id).order("created_at", desc=True).execute()
+                        all_tx_rows = tx_response.data or []
                     except Exception:
                         pass
-                
-                if tx_response and tx_response.data:
-                    result["recent_transactions"] = tx_response.data
-                
-                # Calculate earnings from credit transactions
-                # Get all credit transactions for this provider to sum total earnings
-                try:
-                    earnings_response = supabase.table("wallet_transactions").select(
-                        "amount, created_at"
-                    ).eq("auth_id", auth_id).eq("direction", "credit").eq("status", "completed").execute()
-                    
-                    if not earnings_response.data:
-                        # Fallback to user_auth_id
-                        earnings_response = supabase.table("wallet_transactions").select(
-                            "amount, created_at"
-                        ).eq("user_auth_id", auth_id).eq("direction", "credit").eq("status", "completed").execute()
-                    
-                    if earnings_response.data:
-                        now = datetime.utcnow()
-                        seven_days_ago = now - timedelta(days=7)
-                        thirty_days_ago = now - timedelta(days=30)
-                        
-                        total = 0
-                        last_7 = 0
-                        last_30 = 0
-                        
-                        for tx in earnings_response.data:
-                            amount = float(tx.get("amount") or 0)
-                            total += amount
-                            
-                            created_str = tx.get("created_at")
-                            if created_str:
-                                try:
-                                    # Parse ISO format with timezone
-                                    created_at = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
-                                    created_at = created_at.replace(tzinfo=None)  # Make naive for comparison
-                                    
-                                    if created_at >= seven_days_ago:
-                                        last_7 += amount
-                                    if created_at >= thirty_days_ago:
-                                        last_30 += amount
-                                except Exception as parse_err:
-                                    logging.debug(f"Date parse error: {parse_err}")
-                                    last_30 += amount  # Include in 30-day if we can't parse
-                        
-                        result["total_earnings"] = total
-                        result["last_7_days_earnings"] = last_7
-                        result["last_30_days_earnings"] = last_30
-                except Exception as e:
-                    logging.warning(f"Failed to calculate earnings for {auth_id}: {e}")
-                    
+
+                # Recent transactions: top 10, normalized for UI
+                result["recent_transactions"] = [
+                    normalize_transaction(r) for r in all_tx_rows[:10]
+                ]
+
+                # ========================================================
+                # EARNINGS = SUM(ESCROW_RELEASE credit, status=completed)
+                # This is the single source of truth for provider earnings.
+                # Prevents double counting from TOPUPs, refunds, adjustments.
+                # ========================================================
+                now = datetime.utcnow()
+                seven_days_ago = now - timedelta(days=7)
+                thirty_days_ago = now - timedelta(days=30)
+
+                total = 0.0
+                last_7 = 0.0
+                last_30 = 0.0
+
+                for tx in all_tx_rows:
+                    # Only count completed escrow release credits
+                    if (tx.get("status") or "completed").lower() != "completed":
+                        continue
+                    if (tx.get("direction") or "").lower() != "credit":
+                        continue
+                    if categorize_transaction(tx) != CATEGORY_ESCROW_RELEASE:
+                        continue
+
+                    try:
+                        amount = float(tx.get("amount") or 0)
+                    except (TypeError, ValueError):
+                        continue
+                    if amount <= 0:
+                        continue
+
+                    total += amount
+
+                    created_str = tx.get("created_at")
+                    if created_str:
+                        try:
+                            created_at = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+                            created_at = created_at.replace(tzinfo=None)
+                            if created_at >= seven_days_ago:
+                                last_7 += amount
+                            if created_at >= thirty_days_ago:
+                                last_30 += amount
+                        except Exception as parse_err:
+                            logging.debug(f"Date parse error: {parse_err}")
+                            # If we can't parse the date, fall back to including it in 30d window
+                            last_30 += amount
+
+                result["total_earnings"] = round(total, 2)
+                result["last_7_days_earnings"] = round(last_7, 2)
+                result["last_30_days_earnings"] = round(last_30, 2)
+
             except Exception as e:
                 logging.warning(f"Failed to fetch transactions for {auth_id}: {e}")
         

@@ -10,12 +10,48 @@ import {
   Lock, TrendingUp, CreditCard, Banknote, Building2, AlertCircle
 } from "lucide-react";
 import { toast } from "sonner";
-import { walletsAPI, paymentsAPI, withdrawalsAPI } from "@/services/api";
+import { walletsAPI, paymentsAPI, withdrawalsAPI, providersAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { CURRENCY, QUICK_TOPUP_AMOUNTS } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
+
+// ====================================================================
+// Transaction display helpers (Phase: Wallet & Earnings Fix)
+// Backend now returns normalized `type` (TOPUP, ESCROW_HOLD, ESCROW_RELEASE,
+// REFUND, WITHDRAWAL, PAYOUT, ADJUSTMENT) and uppercase `direction` (CREDIT/DEBIT).
+// ====================================================================
+const TX_LABELS = {
+  TOPUP: "Wallet Top-Up",
+  ESCROW_HOLD: "Escrow Hold",
+  ESCROW_RELEASE: "Escrow Release",
+  REFUND: "Refund",
+  WITHDRAWAL: "Withdrawal",
+  PAYOUT: "Payout",
+  ADJUSTMENT: "Adjustment",
+};
+
+const TX_ICON = (type, direction) => {
+  if (type === "ESCROW_RELEASE") return <TrendingUp className="h-4 w-4" />;
+  if (type === "ESCROW_HOLD") return <Lock className="h-4 w-4" />;
+  if (type === "WITHDRAWAL" || type === "PAYOUT") return <Banknote className="h-4 w-4" />;
+  if (type === "REFUND") return <ArrowDownLeft className="h-4 w-4" />;
+  if (type === "TOPUP") return <Plus className="h-4 w-4" />;
+  return (direction || "").toUpperCase() === "CREDIT"
+    ? <ArrowDownLeft className="h-4 w-4" />
+    : <ArrowUpRight className="h-4 w-4" />;
+};
+
+const TX_COLOR = (type, direction) => {
+  const dir = (direction || "").toUpperCase();
+  if (type === "ESCROW_RELEASE") return "bg-emerald-100 text-emerald-700";
+  if (type === "TOPUP" || type === "REFUND") return "bg-green-100 text-green-700";
+  if (type === "ESCROW_HOLD") return "bg-amber-100 text-amber-700";
+  if (type === "WITHDRAWAL" || type === "PAYOUT") return "bg-indigo-100 text-indigo-700";
+  if (type === "ADJUSTMENT") return "bg-gray-100 text-gray-700";
+  return dir === "CREDIT" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700";
+};
 
 export default function WalletScreen() {
   const navigate = useNavigate();
@@ -29,6 +65,13 @@ export default function WalletScreen() {
   });
   const [transactions, setTransactions] = useState([]);
   const [withdrawalRequests, setWithdrawalRequests] = useState([]);
+  // Provider earnings summary (only used when isProvider)
+  const [earnings, setEarnings] = useState({
+    total_earnings: 0,
+    last_7_days_earnings: 0,
+    last_30_days_earnings: 0,
+    pending_withdrawals_total: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState("");
@@ -58,7 +101,7 @@ export default function WalletScreen() {
       const txResponse = await walletsAPI.getTransactions(user.id, 50);
       setTransactions(txResponse.data || []);
       
-      // For providers, also fetch withdrawal requests
+      // For providers, also fetch withdrawal requests + earnings summary
       if (isProvider) {
         try {
           const withdrawalResponse = await withdrawalsAPI.getMyRequests(user.id, 20);
@@ -66,6 +109,25 @@ export default function WalletScreen() {
         } catch (err) {
           console.error("Failed to fetch withdrawal requests:", err);
           setWithdrawalRequests([]);
+        }
+
+        try {
+          const metricsResp = await providersAPI.getDashboardMetrics(user.id);
+          const m = metricsResp.data || {};
+          setEarnings({
+            total_earnings: Number(m.total_earnings) || 0,
+            last_7_days_earnings: Number(m.last_7_days_earnings) || 0,
+            last_30_days_earnings: Number(m.last_30_days_earnings) || 0,
+            pending_withdrawals_total: Number(m.pending_withdrawals_total) || 0,
+          });
+        } catch (err) {
+          console.error("Failed to fetch earnings metrics:", err);
+          setEarnings({
+            total_earnings: 0,
+            last_7_days_earnings: 0,
+            last_30_days_earnings: 0,
+            pending_withdrawals_total: 0,
+          });
         }
       }
     } catch (error) {
@@ -251,36 +313,14 @@ export default function WalletScreen() {
     }
   };
 
-  const getTransactionIcon = (type, direction) => {
-    if (type === "TOPUP" || type === "ESCROW_REFUND") {
-      return <ArrowDownLeft className="h-4 w-4" />;
-    }
-    if (type === "EARNINGS") {
-      return <TrendingUp className="h-4 w-4" />;
-    }
-    if (type === "ESCROW_HOLD" || type === "ESCROW_RELEASE") {
-      return <Lock className="h-4 w-4" />;
-    }
-    if (direction === "CREDIT") {
-      return <ArrowDownLeft className="h-4 w-4" />;
-    }
-    return <ArrowUpRight className="h-4 w-4" />;
-  };
+  const getTransactionIcon = (type, direction) => TX_ICON(type, direction);
 
-  const getTransactionColor = (type, direction) => {
-    if (type === "TOPUP" || type === "EARNINGS" || type === "ESCROW_REFUND") {
-      return "bg-green-100 text-green-600";
-    }
-    if (type === "ESCROW_HOLD") {
-      return "bg-amber-100 text-amber-600";
-    }
-    if (type === "ESCROW_RELEASE") {
-      return "bg-blue-100 text-blue-600";
-    }
-    if (direction === "CREDIT") {
-      return "bg-green-100 text-green-600";
-    }
-    return "bg-red-100 text-red-600";
+  const getTransactionColor = (type, direction) => TX_COLOR(type, direction);
+
+  const getTransactionLabel = (tx) => {
+    const label = TX_LABELS[tx?.type] || "Transaction";
+    if (tx?.booking_id) return `${label} • Booking #${tx.booking_id}`;
+    return label;
   };
 
   const formatDate = (dateString) => {
@@ -401,6 +441,64 @@ export default function WalletScreen() {
           </CardContent>
         </Card>
 
+        {/* Provider Earnings Summary (only for providers) */}
+        {isProvider && (
+          <Card data-testid="earnings-summary-card">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-emerald-600" />
+                Earnings Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-emerald-50 rounded-lg p-3" data-testid="earnings-total">
+                  <p className="text-[11px] text-emerald-700 font-medium uppercase tracking-wide">All Time</p>
+                  <p className="text-base sm:text-lg font-bold text-emerald-700 truncate">
+                    {CURRENCY}{(earnings.total_earnings || 0).toLocaleString()}
+                  </p>
+                </div>
+                <div className="bg-indigo-50 rounded-lg p-3" data-testid="earnings-30d">
+                  <p className="text-[11px] text-indigo-700 font-medium uppercase tracking-wide">30 Days</p>
+                  <p className="text-base sm:text-lg font-bold text-indigo-700 truncate">
+                    {CURRENCY}{(earnings.last_30_days_earnings || 0).toLocaleString()}
+                  </p>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-3" data-testid="earnings-7d">
+                  <p className="text-[11px] text-purple-700 font-medium uppercase tracking-wide">7 Days</p>
+                  <p className="text-base sm:text-lg font-bold text-purple-700 truncate">
+                    {CURRENCY}{(earnings.last_7_days_earnings || 0).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              {/* Secondary row: escrow + pending withdrawals */}
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                {(wallet.escrow_balance || 0) > 0 && (
+                  <div className="flex items-center justify-between bg-amber-50 rounded-lg p-2.5" data-testid="provider-escrow">
+                    <span className="flex items-center gap-1.5 text-xs font-medium text-amber-800">
+                      <Lock className="h-3 w-3" /> In Escrow
+                    </span>
+                    <span className="text-sm font-bold text-amber-800">
+                      {CURRENCY}{(wallet.escrow_balance || 0).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+                {(earnings.pending_withdrawals_total || 0) > 0 && (
+                  <div className="flex items-center justify-between bg-blue-50 rounded-lg p-2.5" data-testid="pending-withdrawals">
+                    <span className="flex items-center gap-1.5 text-xs font-medium text-blue-800">
+                      <Clock className="h-3 w-3" /> Pending Withdrawal
+                    </span>
+                    <span className="text-sm font-bold text-blue-800">
+                      {CURRENCY}{(earnings.pending_withdrawals_total || 0).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Quick Top Up (for customers) */}
         {!isProvider && (
           <Card>
@@ -487,31 +585,45 @@ export default function WalletScreen() {
               />
             ) : (
               <div className="space-y-3">
-                {transactions.map((tx, idx) => (
-                  <div
-                    key={tx.id || idx}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                    data-testid={`transaction-${idx}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-full ${getTransactionColor(tx.type, tx.direction)}`}>
-                        {getTransactionIcon(tx.type, tx.direction)}
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm">{tx.description || tx.type}</p>
-                        <div className="flex items-center gap-1 text-xs text-gray-500">
-                          <Clock className="h-3 w-3" />
-                          {formatDate(tx.created_at)}
+                {transactions.map((tx, idx) => {
+                  const dir = (tx.direction || "").toUpperCase();
+                  const isCredit = dir === "CREDIT";
+                  return (
+                    <div
+                      key={tx.id || idx}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                      data-testid={`transaction-${idx}`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`p-2 rounded-full flex-shrink-0 ${getTransactionColor(tx.type, dir)}`}>
+                          {getTransactionIcon(tx.type, dir)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">
+                            {getTransactionLabel(tx)}
+                          </p>
+                          {tx.description && (
+                            <p className="text-xs text-gray-500 truncate">{tx.description}</p>
+                          )}
+                          <div className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
+                            <Clock className="h-3 w-3" />
+                            {formatDate(tx.created_at)}
+                            {tx.status && tx.status !== "completed" && (
+                              <span className="ml-2 px-1.5 py-0.5 text-[10px] rounded bg-amber-50 text-amber-700 uppercase">
+                                {tx.status}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
+                      <p className={`font-semibold whitespace-nowrap ${
+                        isCredit ? "text-green-600" : "text-red-600"
+                      }`}>
+                        {isCredit ? "+" : "-"}{CURRENCY}{(tx.amount || 0).toLocaleString()}
+                      </p>
                     </div>
-                    <p className={`font-semibold ${
-                      tx.direction === "CREDIT" ? "text-green-600" : "text-red-600"
-                    }`}>
-                      {tx.direction === "CREDIT" ? "+" : "-"}{CURRENCY}{(tx.amount || 0).toLocaleString()}
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
