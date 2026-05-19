@@ -219,6 +219,16 @@ export const bookingsAPI = {
   // Mark chat messages as read
   markChatRead: (bookingId, authId) => 
     api.post(`/bookings/${bookingId}/chat/mark-read`, { auth_id: authId }),
+
+  // ==================== NO-SHOW HYBRID FLOW ====================
+  reportNoShow: (bookingId, authId, reason = null) =>
+    api.post(`/bookings/${bookingId}/no-show/report`, { auth_id: authId, reason }),
+
+  confirmNoShow: (bookingId, authId) =>
+    api.post(`/bookings/${bookingId}/no-show/confirm`, { auth_id: authId }),
+
+  disputeNoShow: (bookingId, authId, reason = null) =>
+    api.post(`/bookings/${bookingId}/no-show/dispute`, { auth_id: authId, reason }),
 };
 
 // ==================== WALLETS API ====================

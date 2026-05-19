@@ -30,6 +30,20 @@ from wallet_helpers import (
 # Booking reminders - lightweight in-app reminder scheduler
 from booking_reminders import scan_and_create_reminders
 
+# No-show automation helpers
+from no_show_helpers import (
+    finalize_expired_no_shows,
+    grace_period_minutes,
+    compute_deadline,
+    STATUS_NO_SHOW_PENDING,
+    STATUS_USER_NO_SHOW,
+    STATUS_PROVIDER_NO_SHOW,
+    STATUS_DISPUTED,
+    ELIGIBLE_REPORT_STATUSES,
+    ROLE_CUSTOMER,
+    ROLE_PROVIDER,
+)
+
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -4949,6 +4963,370 @@ async def update_booking(
         )
 
 
+# ====================================================================
+# NO-SHOW HYBRID FLOW
+# - Additive endpoints, no existing routes modified.
+# - Uses existing escrow helpers; never touches wallet logic directly.
+# ====================================================================
+
+class NoShowReportBody(BaseModel):
+    auth_id: str
+    reason: Optional[str] = None
+
+
+class NoShowResponseBody(BaseModel):
+    auth_id: str
+    reason: Optional[str] = None
+
+
+def _booking_role_of(booking: Dict[str, Any], auth_id: str) -> Optional[str]:
+    """Return 'customer' / 'provider' / None based on the auth_id's role on this booking."""
+    if not auth_id:
+        return None
+    if booking.get("provider_id") == auth_id:
+        return ROLE_PROVIDER
+    if booking.get("customer_auth_id") == auth_id:
+        return ROLE_CUSTOMER
+    return None
+
+
+@api_router.post("/bookings/{booking_id}/no-show/report")
+async def report_no_show(booking_id: int, body: NoShowReportBody):
+    """
+    Either party reports the other party as a no-show.
+    Booking moves to status='no_show_pending' with a grace deadline.
+    Opposite party is notified.
+    """
+    try:
+        resp = supabase.table("bookings").select("*").eq("id", booking_id).limit(1).execute()
+        if not resp.data:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        booking = resp.data[0]
+
+        reporter_role = _booking_role_of(booking, body.auth_id)
+        if reporter_role not in (ROLE_CUSTOMER, ROLE_PROVIDER):
+            raise HTTPException(status_code=403, detail="You are not a participant in this booking")
+
+        current_status = (booking.get("status") or "").lower()
+        if current_status not in ELIGIBLE_REPORT_STATUSES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot report no-show for a booking with status '{current_status}'"
+            )
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        deadline_iso = compute_deadline().isoformat()
+
+        update_data = {
+            "status": STATUS_NO_SHOW_PENDING,
+            "no_show_reported_by": body.auth_id,
+            "no_show_reporter_role": reporter_role,
+            "no_show_reported_at": now_iso,
+            "no_show_reason": (body.reason or "")[:500] or None,
+            "no_show_deadline": deadline_iso,
+            "dispute_opened": False,
+        }
+
+        try:
+            upd = (
+                supabase.table("bookings")
+                .update(update_data)
+                .eq("id", booking_id)
+                .in_("status", list(ELIGIBLE_REPORT_STATUSES))
+                .execute()
+            )
+        except Exception as schema_err:
+            logging.warning(f"[no_show] update failed (schema?): {schema_err}")
+            raise HTTPException(
+                status_code=503,
+                detail="No-show columns missing on bookings table. Apply phase_no_show.sql migration."
+            )
+
+        if not upd.data:
+            raise HTTPException(
+                status_code=409,
+                detail="Booking status changed; please refresh and try again"
+            )
+
+        provider_auth_id = booking.get("provider_id")
+        customer_auth_id = booking.get("customer_auth_id")
+        opposite_auth_id = provider_auth_id if reporter_role == ROLE_CUSTOMER else customer_auth_id
+
+        grace = grace_period_minutes()
+        meta = {
+            "booking_id": booking_id,
+            "reporter_role": reporter_role,
+            "deadline": deadline_iso,
+            "grace_minutes": grace,
+        }
+
+        if opposite_auth_id:
+            if reporter_role == ROLE_PROVIDER:
+                await create_notification(
+                    recipient_auth_id=opposite_auth_id,
+                    notification_type="no_show_reported",
+                    title="Provider reported you as no-show",
+                    message=(
+                        f"Your provider reports that you did not show up. "
+                        f"You have {grace} minutes to confirm or dispute, otherwise "
+                        f"the booking will be finalized as a no-show."
+                    ),
+                    actor_auth_id=body.auth_id,
+                    metadata={**meta, "role": "customer"},
+                )
+            else:
+                await create_notification(
+                    recipient_auth_id=opposite_auth_id,
+                    notification_type="no_show_reported",
+                    title="Customer reported you as no-show",
+                    message=(
+                        f"Your customer reports that you did not show up. "
+                        f"You have {grace} minutes to confirm or dispute, otherwise "
+                        f"the booking will be finalized as a no-show."
+                    ),
+                    actor_auth_id=body.auth_id,
+                    metadata={**meta, "role": "provider"},
+                )
+
+        await create_notification(
+            recipient_auth_id=body.auth_id,
+            notification_type="no_show_reported",
+            title="No-show report submitted",
+            message=(
+                f"We've notified the other party. If they don't respond within "
+                f"{grace} minutes, the booking will be finalized automatically."
+            ),
+            metadata={**meta, "role": reporter_role, "self_report": True},
+        )
+
+        return {
+            "success": True,
+            "booking_id": booking_id,
+            "status": STATUS_NO_SHOW_PENDING,
+            "no_show_deadline": deadline_iso,
+            "grace_minutes": grace,
+            "reporter_role": reporter_role,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"[no_show] report failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to report no-show: {str(e)}")
+
+
+@api_router.post("/bookings/{booking_id}/no-show/confirm")
+async def confirm_no_show(booking_id: int, body: NoShowResponseBody):
+    """Opposite party confirms the no-show. Booking is finalized immediately."""
+    try:
+        resp = supabase.table("bookings").select("*").eq("id", booking_id).limit(1).execute()
+        if not resp.data:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        booking = resp.data[0]
+
+        if (booking.get("status") or "").lower() != STATUS_NO_SHOW_PENDING:
+            raise HTTPException(status_code=400, detail="Booking is not awaiting a no-show response")
+
+        actor_role = _booking_role_of(booking, body.auth_id)
+        if actor_role not in (ROLE_CUSTOMER, ROLE_PROVIDER):
+            raise HTTPException(status_code=403, detail="You are not a participant in this booking")
+
+        reporter_role = (booking.get("no_show_reporter_role") or "").lower()
+        if actor_role == reporter_role:
+            raise HTTPException(status_code=403, detail="Only the opposite party can confirm or dispute")
+
+        if reporter_role == ROLE_PROVIDER:
+            final_status = STATUS_USER_NO_SHOW
+            escrow = "release_to_provider"
+        else:
+            final_status = STATUS_PROVIDER_NO_SHOW
+            escrow = "refund_to_customer"
+
+        upd = (
+            supabase.table("bookings")
+            .update({"status": final_status})
+            .eq("id", booking_id)
+            .eq("status", STATUS_NO_SHOW_PENDING)
+            .execute()
+        )
+        if not upd.data:
+            raise HTTPException(status_code=409, detail="Booking already finalized")
+
+        provider_auth_id = booking.get("provider_id")
+        customer_auth_id = booking.get("customer_auth_id")
+
+        try:
+            if escrow == "release_to_provider" and provider_auth_id and customer_auth_id:
+                await _release_escrow_to_provider(booking_id, provider_auth_id, customer_auth_id)
+            elif escrow == "refund_to_customer" and customer_auth_id:
+                await _refund_escrow_to_customer(booking_id, customer_auth_id)
+        except Exception as e:
+            logging.warning(f"[no_show] confirm: escrow action failed for booking {booking_id}: {e}")
+
+        meta = {"booking_id": booking_id, "outcome": final_status}
+        if customer_auth_id:
+            msg_cust = (
+                "You were confirmed as a no-show. The booking is now closed."
+                if final_status == STATUS_USER_NO_SHOW
+                else "Your provider's no-show has been confirmed. Refund processed."
+            )
+            await create_notification(
+                recipient_auth_id=customer_auth_id,
+                notification_type="no_show_finalized",
+                title="Booking closed",
+                message=msg_cust,
+                metadata={**meta, "role": "customer"},
+            )
+        if provider_auth_id:
+            msg_prov = (
+                "Your customer's no-show was confirmed. Payment released."
+                if final_status == STATUS_USER_NO_SHOW
+                else "Your no-show has been confirmed. Booking is now closed."
+            )
+            await create_notification(
+                recipient_auth_id=provider_auth_id,
+                notification_type="no_show_finalized",
+                title="Booking closed",
+                message=msg_prov,
+                metadata={**meta, "role": "provider"},
+            )
+
+        return {"success": True, "booking_id": booking_id, "status": final_status}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"[no_show] confirm failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to confirm no-show: {str(e)}")
+
+
+@api_router.post("/bookings/{booking_id}/no-show/dispute")
+async def dispute_no_show(booking_id: int, body: NoShowResponseBody):
+    """Opposite party disputes the no-show. Auto-finalization stops; admin review required."""
+    try:
+        resp = supabase.table("bookings").select("*").eq("id", booking_id).limit(1).execute()
+        if not resp.data:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        booking = resp.data[0]
+
+        if (booking.get("status") or "").lower() != STATUS_NO_SHOW_PENDING:
+            raise HTTPException(status_code=400, detail="Booking is not awaiting a no-show response")
+
+        actor_role = _booking_role_of(booking, body.auth_id)
+        if actor_role not in (ROLE_CUSTOMER, ROLE_PROVIDER):
+            raise HTTPException(status_code=403, detail="You are not a participant in this booking")
+
+        reporter_role = (booking.get("no_show_reporter_role") or "").lower()
+        if actor_role == reporter_role:
+            raise HTTPException(status_code=403, detail="Only the opposite party can dispute")
+
+        upd = (
+            supabase.table("bookings")
+            .update({
+                "status": STATUS_DISPUTED,
+                "dispute_opened": True,
+                "dispute_reason": (body.reason or "")[:500] or None,
+                "dispute_opened_at": datetime.now(timezone.utc).isoformat(),
+                "dispute_opened_by": body.auth_id,
+            })
+            .eq("id", booking_id)
+            .eq("status", STATUS_NO_SHOW_PENDING)
+            .execute()
+        )
+        if not upd.data:
+            raise HTTPException(status_code=409, detail="Booking already finalized or updated")
+
+        reporter_auth_id = booking.get("no_show_reported_by")
+        meta = {"booking_id": booking_id, "actor_role": actor_role}
+
+        if reporter_auth_id:
+            await create_notification(
+                recipient_auth_id=reporter_auth_id,
+                notification_type="dispute_opened",
+                title="Your no-show report was disputed",
+                message=(
+                    "The other party disputes your no-show report. "
+                    "Our team will review the case shortly. No automatic action will be taken."
+                ),
+                actor_auth_id=body.auth_id,
+                metadata=meta,
+            )
+
+        await create_notification(
+            recipient_auth_id=body.auth_id,
+            notification_type="dispute_opened",
+            title="Dispute submitted",
+            message="Your dispute has been recorded. Our team will review the case shortly.",
+            metadata={**meta, "self_dispute": True},
+        )
+
+        return {"success": True, "booking_id": booking_id, "status": STATUS_DISPUTED}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"[no_show] dispute failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to dispute no-show: {str(e)}")
+
+
+@api_router.get("/admin/no-show/cases")
+async def admin_list_no_show_cases(
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+    include_resolved: bool = Query(False, description="Include user_no_show / provider_no_show too"),
+):
+    """Admin tool to list pending no-show / disputed bookings. Protected by X-ADMIN-KEY."""
+    admin_key = os.environ.get("ADMIN_DASH_KEY")
+    if not admin_key:
+        raise HTTPException(status_code=503, detail="ADMIN_DASH_KEY not configured")
+    if not x_admin_key or x_admin_key != admin_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+
+    statuses = [STATUS_NO_SHOW_PENDING, STATUS_DISPUTED]
+    if include_resolved:
+        statuses = statuses + [STATUS_USER_NO_SHOW, STATUS_PROVIDER_NO_SHOW]
+
+    try:
+        resp = (
+            supabase.table("bookings")
+            .select("*")
+            .in_("status", statuses)
+            .order("no_show_reported_at", desc=True)
+            .limit(200)
+            .execute()
+        )
+        rows = resp.data or []
+        return {"count": len(rows), "cases": rows}
+    except Exception as e:
+        logging.error(f"[no_show] admin list failed: {e}")
+        try:
+            resp = supabase.table("bookings").select("*").in_("status", statuses).limit(200).execute()
+            return {"count": len(resp.data or []), "cases": resp.data or []}
+        except Exception as e2:
+            raise HTTPException(status_code=500, detail=f"Failed to list cases: {str(e2)}")
+
+
+@api_router.post("/admin/no-show/run")
+async def admin_run_no_show_finalization(
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY")
+):
+    """Manually trigger the no-show finalization scan. Protected by X-ADMIN-KEY."""
+    admin_key = os.environ.get("ADMIN_DASH_KEY")
+    if not admin_key:
+        raise HTTPException(status_code=503, detail="ADMIN_DASH_KEY not configured")
+    if not x_admin_key or x_admin_key != admin_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+
+    stats = await finalize_expired_no_shows(
+        supabase,
+        _release_escrow_to_provider,
+        _refund_escrow_to_customer,
+        create_notification,
+    )
+    return {"success": True, "stats": stats}
+
+
+
+
 # ==================== REVIEWS MODELS (Phase 3) ====================
 
 class ReviewCreate(BaseModel):
@@ -5462,7 +5840,7 @@ async def _start_reminder_scheduler():
             return
 
         scheduler = AsyncIOScheduler(timezone="Africa/Lagos")
-        # Run every 5 minutes (lightweight, low resource)
+        # Run booking reminders every 5 minutes
         scheduler.add_job(
             scan_and_create_reminders,
             "interval",
@@ -5474,9 +5852,21 @@ async def _start_reminder_scheduler():
             misfire_grace_time=300,
             replace_existing=True,
         )
+        # Run no-show finalization every 5 minutes (lightweight, idempotent)
+        scheduler.add_job(
+            finalize_expired_no_shows,
+            "interval",
+            minutes=5,
+            args=[supabase, _release_escrow_to_provider, _refund_escrow_to_customer, create_notification],
+            id="no_show_finalize_job",
+            coalesce=True,
+            max_instances=1,
+            misfire_grace_time=300,
+            replace_existing=True,
+        )
         scheduler.start()
         _reminder_scheduler = scheduler
-        logger.info("[reminder_scheduler] started - booking reminders run every 5 minutes")
+        logger.info("[scheduler] started - booking reminders + no-show finalization (every 5 min)")
     except Exception as e:
         logger.warning(f"[reminder_scheduler] failed to start: {e}")
 
