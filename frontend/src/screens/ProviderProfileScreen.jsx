@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Star, CheckCircle2, MapPin, Calendar, Clock, Store, Home, Car, ShoppingCart, User, Loader2, ChevronLeft, ChevronRight, Wallet, AlertCircle, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
-import { providersAPI, bookingsAPI, paymentsAPI, walletsAPI, reviewsAPI } from "@/services/api";
+import { providersAPI, bookingsAPI, paymentsAPI, walletsAPI, reviewsAPI, staffAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { CURRENCY } from "@/utils/constants";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -29,7 +29,7 @@ const ProviderProfileScreen = () => {
   const [loadingWallet, setLoadingWallet] = useState(false);
   
   // Booking flow state - Phase 2.1
-  const [bookingStep, setBookingStep] = useState('services'); // 'services' | 'datetime' | 'confirm' | 'payment'
+  const [bookingStep, setBookingStep] = useState('services'); // 'services' | 'staff' | 'datetime' | 'confirm' | 'payment'
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedSlot, setSelectedSlot] = useState('');
   const [availableSlots, setAvailableSlots] = useState([]);
@@ -38,6 +38,10 @@ const ProviderProfileScreen = () => {
   const [submittingBooking, setSubmittingBooking] = useState(false);
   const [pendingBookingId, setPendingBookingId] = useState(null);
   const [processingWalletPayment, setProcessingWalletPayment] = useState(false);
+
+  // Phase 4 - Multi-staff state (only relevant when provider has staff)
+  const [staffList, setStaffList] = useState([]);
+  const [selectedStaffId, setSelectedStaffId] = useState(null); // null => "Any available"
 
   // Reviews state - Phase 3
   const [reviews, setReviews] = useState([]);
@@ -61,6 +65,19 @@ const ProviderProfileScreen = () => {
 
   useEffect(() => {
     fetchProviderProfile();
+  }, [userId]);
+
+  // Phase 4 - Load staff for this provider (only relevant for business providers)
+  useEffect(() => {
+    if (!userId) return;
+    (async () => {
+      try {
+        const res = await staffAPI.listForProvider(userId, true);
+        setStaffList(res.data?.staff || []);
+      } catch {
+        setStaffList([]);
+      }
+    })();
   }, [userId]);
 
   // Fetch reviews when provider data is available
@@ -121,16 +138,21 @@ const ProviderProfileScreen = () => {
   const totalPrice = selectedServicesList.reduce((sum, s) => sum + (s.price || 0), 0);
   const totalDuration = selectedServicesList.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
 
-  // Fetch available slots when date changes
+  // Fetch available slots when date changes (Phase 4: staff-scoped if a staff is picked)
   const fetchAvailableSlots = async (date) => {
     if (!date || totalDuration <= 0) return;
-    
+
     setLoadingSlots(true);
     setAvailableSlots([]);
     setSelectedSlot('');
-    
+
     try {
-      const response = await providersAPI.getAvailableSlots(userId, date, totalDuration);
+      let response;
+      if (selectedStaffId) {
+        response = await staffAPI.getStaffSlots(selectedStaffId, date, totalDuration);
+      } else {
+        response = await providersAPI.getAvailableSlots(userId, date, totalDuration);
+      }
       setAvailableSlots(response.data?.slots || []);
     } catch (error) {
       console.error("Failed to fetch slots:", error);
@@ -149,12 +171,21 @@ const ProviderProfileScreen = () => {
     }
   };
 
-  // Proceed to date/time selection
+  // Proceed to next step after services. If provider has staff, route through staff picker first.
   const handleProceedToDateTime = () => {
     if (selectedServicesList.length === 0) {
       toast.error("Please select at least one service");
       return;
     }
+    if (staffList.length > 0) {
+      setBookingStep('staff');
+    } else {
+      setBookingStep('datetime');
+    }
+  };
+
+  // From staff step → datetime
+  const handleProceedFromStaff = () => {
     setBookingStep('datetime');
   };
 
@@ -165,6 +196,15 @@ const ProviderProfileScreen = () => {
     setSelectedSlot('');
     setAvailableSlots([]);
     setPendingBookingId(null);
+  };
+
+  // From datetime back to staff (or services if no staff)
+  const handleBackFromDateTime = () => {
+    if (staffList.length > 0) {
+      setBookingStep('staff');
+    } else {
+      handleBackToServices();
+    }
   };
 
   // Go back to datetime from payment
@@ -192,7 +232,9 @@ const ProviderProfileScreen = () => {
         service_ids: selectedServicesList.map(s => s.id),
         service_duration_minutes: totalDuration,
         notes: bookingNotes || null,
-        status: "pending_payment"
+        status: "pending_payment",
+        // Phase 4 - Multi-staff: include if user picked a specific staff member
+        ...(selectedStaffId ? { staff_id: selectedStaffId } : {}),
       };
       
       const bookingResponse = await bookingsAPI.create(bookingData);
@@ -251,6 +293,7 @@ const ProviderProfileScreen = () => {
         setSelectedSlot('');
         setBookingNotes('');
         setPendingBookingId(null);
+        setSelectedStaffId(null);
         
         navigate("/bookings");
       }
@@ -322,6 +365,114 @@ const ProviderProfileScreen = () => {
     ? Math.min(...provider.services.map(s => s.price || 0))
     : 0;
 
+  // Phase 4 - Render staff picker step (only when provider has staff)
+  if (bookingStep === 'staff') {
+    const selectedStaff = staffList.find(s => s.id === selectedStaffId) || null;
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <header className="bg-white shadow-sm border-b">
+          <div className="container mx-auto px-4 py-4 flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleBackToServices}
+              data-testid="back-to-services-from-staff-btn"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <h1 className="text-xl font-bold">Choose Staff</h1>
+          </div>
+        </header>
+
+        <div className="container mx-auto px-4 py-6 pb-40 md:pb-32">
+          <div className="max-w-lg mx-auto space-y-3" data-testid="staff-picker">
+            <Card className="bg-purple-50 border-purple-200">
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-600 mb-2">
+                  Pick a staff member for your appointment or let the salon assign one.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Any available option */}
+            <div
+              className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
+                selectedStaffId === null
+                  ? 'border-purple-500 bg-purple-50'
+                  : 'border-gray-200 hover:border-purple-300'
+              }`}
+              onClick={() => setSelectedStaffId(null)}
+              data-testid="staff-option-any"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
+                  <User className="h-6 w-6 text-purple-600" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-gray-900">Any available staff</h4>
+                  <p className="text-xs text-gray-500">The salon will assign someone</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Individual staff cards */}
+            {staffList.map((s) => (
+              <div
+                key={s.id}
+                className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
+                  selectedStaffId === s.id
+                    ? 'border-purple-500 bg-purple-50'
+                    : 'border-gray-200 hover:border-purple-300'
+                }`}
+                onClick={() => setSelectedStaffId(s.id)}
+                data-testid={`staff-option-${s.id}`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center overflow-hidden">
+                    {s.photo_url ? (
+                      <img src={s.photo_url} alt={s.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="h-6 w-6 text-purple-600" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-gray-900 truncate">{s.name}</h4>
+                    {s.role && <p className="text-xs text-gray-500 truncate">{s.role}</p>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Fixed Booking Bar */}
+        <div className="fixed bottom-20 md:bottom-4 left-0 right-0 bg-white border-t shadow-lg p-4 z-40">
+          <div className="max-w-lg mx-auto flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-gray-600">
+                {selectedStaff ? `Selected: ${selectedStaff.name}` : "Any available staff"}
+              </p>
+              <p className="text-xl font-bold text-purple-600">
+                {CURRENCY}{totalPrice.toLocaleString()}
+              </p>
+            </div>
+            <Button
+              size="lg"
+              onClick={handleProceedFromStaff}
+              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+              data-testid="proceed-from-staff-btn"
+            >
+              <Calendar className="mr-2 h-5 w-5" />
+              Choose Date & Time
+            </Button>
+          </div>
+        </div>
+
+        <BottomNavigation />
+      </div>
+    );
+  }
+
   // Render Date/Time selection step
   if (bookingStep === 'datetime') {
     return (
@@ -331,7 +482,7 @@ const ProviderProfileScreen = () => {
             <Button 
               variant="ghost" 
               size="sm" 
-              onClick={handleBackToServices}
+              onClick={handleBackFromDateTime}
               data-testid="back-to-services-btn"
             >
               <ChevronLeft className="h-4 w-4" />

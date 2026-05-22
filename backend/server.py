@@ -3774,7 +3774,8 @@ def check_table_exists(table_name: str) -> bool:
         supabase.table(table_name).select("*").limit(1).execute()
         return True
     except Exception as e:
-        if "does not exist" in str(e).lower() or "42P01" in str(e):
+        es = str(e).lower()
+        if "does not exist" in es or "42p01" in es or "pgrst205" in es or "could not find the table" in es:
             return False
         # Table exists but might have other issues
         return True
@@ -4025,9 +4026,17 @@ async def set_provider_rules(provider_id: int, request: BookingRules):
 async def _get_available_slots_internal(
     provider_id: int,
     requested_date: str,
-    service_duration: int
+    service_duration: int,
+    staff_id: Optional[int] = None
 ) -> dict:
-    """Internal function to get available booking slots - no FastAPI dependencies"""
+    """Internal function to get available booking slots - no FastAPI dependencies.
+
+    Phase 4 - Multi-staff:
+      When ``staff_id`` is provided, slots/conflicts/max-sessions are computed
+      against THAT staff member only, using the staff's own weekly availability
+      (falling back to provider availability if no staff schedule is set).
+      When ``staff_id`` is None, behavior is unchanged from before.
+    """
     # Get the provider's auth_id (UUID)
     provider_uuid = await get_provider_auth_id(provider_id)
     if not provider_uuid:
@@ -4075,6 +4084,25 @@ async def _get_available_slots_internal(
             working_start = working_start[:5]
         if working_end and len(working_end) > 5:
             working_end = working_end[:5]
+
+    # Phase 4 - Multi-staff: if a staff_id is supplied AND staff has its own
+    # weekly availability row for this day, that overrides the provider's window.
+    if staff_id and check_table_exists("staff_availability"):
+        try:
+            sa_resp = supabase.table("staff_availability").select("*").eq(
+                "staff_id", staff_id
+            ).eq("day_of_week", day_of_week).execute()
+            if sa_resp.data:
+                sa = sa_resp.data[0]
+                is_available = bool(sa.get("is_available", False))
+                if sa.get("start_time"):
+                    s = sa["start_time"]
+                    working_start = s[:5] if len(s) > 5 else s
+                if sa.get("end_time"):
+                    e = sa["end_time"]
+                    working_end = e[:5] if len(e) > 5 else e
+        except Exception as ex:
+            logging.warning(f"staff_availability lookup failed: {ex}")
     
     if not is_available:
         return {"date": requested_date, "slots": [], "timezone": "UTC"}
@@ -4118,11 +4146,20 @@ async def _get_available_slots_internal(
     existing_bookings = []
     if check_table_exists("bookings"):
         # Bookings table uses UUID for provider_id
-        bookings_response = supabase.table("bookings").select("*").eq(
+        bq = supabase.table("bookings").select("*").eq(
             "provider_id", provider_uuid
         ).eq("booking_date", requested_date).in_(
             "status", ["pending", "confirmed"]
-        ).execute()
+        )
+        # Phase 4: if staff_id provided, only count conflicts for that staff member.
+        # Bookings with NULL staff_id under a business with multiple staff are
+        # treated as provider-wide and DO conflict with any staff slot.
+        if staff_id:
+            try:
+                bq = bq.or_(f"staff_id.eq.{staff_id},staff_id.is.null")
+            except Exception:
+                pass
+        bookings_response = bq.execute()
         existing_bookings = bookings_response.data or []
     
     # Check max sessions limit
@@ -4184,11 +4221,15 @@ async def _get_available_slots_internal(
 async def get_available_slots(
     provider_id: int,
     date: str = Query(..., description="Date in YYYY-MM-DD format"),
-    service_duration: int = Query(..., ge=10, description="Service duration in minutes")
+    service_duration: int = Query(..., ge=10, description="Service duration in minutes"),
+    staff_id: Optional[int] = Query(None, description="Optional staff member id (Phase 4)")
 ):
-    """Get available booking slots for a provider on a specific date"""
+    """Get available booking slots for a provider on a specific date.
+
+    If ``staff_id`` is given, slots are computed for that staff member only.
+    """
     try:
-        return await _get_available_slots_internal(provider_id, date, service_duration)
+        return await _get_available_slots_internal(provider_id, date, service_duration, staff_id)
     except HTTPException:
         raise
     except Exception as e:
@@ -4211,6 +4252,9 @@ class BookingCreate(BaseModel):
     service_duration_minutes: Optional[int] = None
     notes: Optional[str] = None
     status: str = "pending"
+    # Phase 4 - Multi-staff: which staff member is assigned (business providers only).
+    # Optional & nullable - existing single-provider bookings continue to work unchanged.
+    staff_id: Optional[int] = None
 
 @api_router.post("/bookings", status_code=status.HTTP_201_CREATED)
 async def create_booking(booking: BookingCreate):
@@ -4223,7 +4267,34 @@ async def create_booking(booking: BookingCreate):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Provider not found"
             )
-        
+
+        # Phase 4 - Multi-staff: validate staff_id belongs to this provider and is active
+        if booking.staff_id is not None:
+            if not check_table_exists("staff"):
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="staff table does not exist. Please run the multi-staff migration."
+                )
+            staff_check = supabase.table("staff").select("id, business_auth_id, is_active").eq(
+                "id", booking.staff_id
+            ).execute()
+            if not staff_check.data:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Staff member {booking.staff_id} not found"
+                )
+            srow = staff_check.data[0]
+            if srow.get("business_auth_id") != provider_uuid:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Staff member does not belong to this provider"
+                )
+            if not srow.get("is_active", True):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Selected staff member is not available"
+                )
+
         # Determine customer_auth_id - prefer direct UUID, fallback to lookup
         customer_auth_id = booking.customer_auth_id
         if not customer_auth_id and booking.customer_id:
@@ -4231,7 +4302,7 @@ async def create_booking(booking: BookingCreate):
             user_response = supabase.table("users").select("auth_id").eq("id", booking.customer_id).execute()
             if user_response.data:
                 customer_auth_id = user_response.data[0].get("auth_id")
-        
+
         # If booking_date and booking_time are provided, validate availability
         if booking.booking_date and booking.booking_time:
             # Validate time format
@@ -4240,7 +4311,7 @@ async def create_booking(booking: BookingCreate):
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="booking_time must be in HH:MM format"
                 )
-            
+
             # Get service duration (from request or calculate from services)
             # Note: service_ids are actually services.id values (the services table used by providers)
             service_duration = booking.service_duration_minutes
@@ -4251,16 +4322,17 @@ async def create_booking(booking: BookingCreate):
                 ).execute()
                 if services_response.data:
                     service_duration = sum(s.get("duration", 60) or 60 for s in services_response.data)
-            
+
             service_duration = service_duration or 60  # Default to 60 minutes
-            
-            # Check if the slot is available
+
+            # Check if the slot is available (staff-scoped if staff_id supplied)
             slots_response = await _get_available_slots_internal(
                 provider_id=booking.provider_id,
                 requested_date=booking.booking_date,
-                service_duration=service_duration
+                service_duration=service_duration,
+                staff_id=booking.staff_id
             )
-            
+
             if booking.booking_time not in slots_response["slots"]:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
@@ -4294,6 +4366,9 @@ async def create_booking(booking: BookingCreate):
             booking_data["booking_date"] = booking.booking_date
         if booking.booking_time:
             booking_data["booking_time"] = booking.booking_time
+        # Phase 4 - Multi-staff: persist staff_id when provided
+        if booking.staff_id is not None:
+            booking_data["staff_id"] = booking.staff_id
         
         # Insert booking
         result = supabase.table("bookings").insert(booking_data).execute()
@@ -4708,7 +4783,20 @@ async def _enrich_booking(booking: dict, role: Optional[str] = None) -> dict:
         except:
             pass
     enriched["customer_display_name"] = customer_display_name
-    
+
+    # Phase 4 - Multi-staff: attach staff info if booking has a staff_id
+    enriched["staff_id"] = booking.get("staff_id")
+    enriched["staff"] = None
+    if booking.get("staff_id") and check_table_exists("staff"):
+        try:
+            st = supabase.table("staff").select(
+                "id, name, role, photo_url, is_active"
+            ).eq("id", booking["staff_id"]).execute()
+            if st.data:
+                enriched["staff"] = st.data[0]
+        except Exception as e:
+            logging.warning(f"Could not load staff for booking {booking.get('id')}: {e}")
+
     return enriched
 
 
@@ -5795,6 +5883,348 @@ async def admin_run_booking_reminders(
 
     stats = await scan_and_create_reminders(supabase, create_notification)
     return {"success": True, "stats": stats}
+
+
+# ====================================================================
+# PHASE 4 - MULTI-STAFF (Salons / Business Providers)
+# --------------------------------------------------------------------
+# Fully additive. Staff entries are profile-only records owned by an
+# existing provider's Supabase Auth account (business_auth_id). No new
+# authentication is introduced.
+# Requires migration: /app/backend/migrations/phase4_multi_staff.sql
+# ====================================================================
+
+class StaffCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    role: Optional[str] = Field(None, max_length=100)
+    photo_url: Optional[str] = None
+    bio: Optional[str] = None
+    is_active: bool = True
+    display_order: int = 0
+    service_ids: Optional[List[int]] = None  # services from the business catalog
+
+class StaffUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    role: Optional[str] = Field(None, max_length=100)
+    photo_url: Optional[str] = None
+    bio: Optional[str] = None
+    is_active: Optional[bool] = None
+    display_order: Optional[int] = None
+
+class StaffServicesUpdate(BaseModel):
+    service_ids: List[int] = Field(default_factory=list)
+
+class StaffWeeklyDay(BaseModel):
+    day_of_week: int = Field(..., ge=0, le=6)
+    is_available: bool = False
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+
+    @validator('start_time', 'end_time', pre=True)
+    def _val_time(cls, v):
+        if v is None or v == "":
+            return None
+        if not re.match(r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$', v):
+            raise ValueError('Time must be in HH:MM format')
+        return v
+
+class StaffAvailabilityUpdate(BaseModel):
+    weekly: List[StaffWeeklyDay]
+
+
+def _require_staff_table():
+    if not check_table_exists("staff"):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Multi-staff is not enabled. Run migration phase4_multi_staff.sql in Supabase."
+        )
+
+
+def _load_staff_or_404(staff_id: int) -> dict:
+    _require_staff_table()
+    res = supabase.table("staff").select("*").eq("id", staff_id).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    return res.data[0]
+
+
+def _assert_staff_owner(staff_row: dict, auth_id: str):
+    if not auth_id:
+        raise HTTPException(status_code=401, detail="auth_id required")
+    if staff_row.get("business_auth_id") != auth_id:
+        raise HTTPException(status_code=403, detail="You do not own this staff member")
+
+
+def _get_staff_service_ids(staff_id: int) -> List[int]:
+    if not check_table_exists("staff_services"):
+        return []
+    try:
+        res = supabase.table("staff_services").select("service_id").eq("staff_id", staff_id).execute()
+        return [row["service_id"] for row in (res.data or [])]
+    except Exception:
+        return []
+
+
+def _get_staff_weekly(staff_id: int) -> List[dict]:
+    if not check_table_exists("staff_availability"):
+        return []
+    try:
+        res = supabase.table("staff_availability").select("*").eq("staff_id", staff_id).execute()
+        return res.data or []
+    except Exception:
+        return []
+
+
+@api_router.post("/staff", status_code=status.HTTP_201_CREATED)
+async def create_staff(payload: StaffCreate, auth_id: str = Query(..., description="Business owner's auth_id (UUID)")):
+    """Create a staff member under the requester's business account."""
+    _require_staff_table()
+    try:
+        row = {
+            "business_auth_id": auth_id,
+            "name": payload.name,
+            "role": payload.role,
+            "photo_url": payload.photo_url,
+            "bio": payload.bio,
+            "is_active": payload.is_active,
+            "display_order": payload.display_order,
+        }
+        res = supabase.table("staff").insert(row).execute()
+        if not res.data:
+            raise HTTPException(status_code=500, detail="Failed to create staff")
+        created = res.data[0]
+        staff_id = created["id"]
+
+        # Optionally link services
+        if payload.service_ids:
+            links = [{"staff_id": staff_id, "service_id": sid} for sid in payload.service_ids]
+            try:
+                supabase.table("staff_services").insert(links).execute()
+            except Exception as ex:
+                logging.warning(f"Failed to link services to staff {staff_id}: {ex}")
+
+        created["service_ids"] = _get_staff_service_ids(staff_id)
+        created["weekly"] = []
+        return created
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"create_staff failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create staff: {e}")
+
+
+@api_router.get("/staff/me")
+async def list_my_staff(
+    auth_id: str = Query(..., description="Business owner's auth_id (UUID)"),
+    include_inactive: bool = Query(True)
+):
+    """List all staff under the requester's business account."""
+    _require_staff_table()
+    try:
+        q = supabase.table("staff").select("*").eq("business_auth_id", auth_id)
+        if not include_inactive:
+            q = q.eq("is_active", True)
+        q = q.order("display_order", desc=False).order("id", desc=False)
+        res = q.execute()
+        staff_list = res.data or []
+        # Attach service_ids per staff member (small N expected per business)
+        for s in staff_list:
+            s["service_ids"] = _get_staff_service_ids(s["id"])
+        return {"staff": staff_list, "total": len(staff_list)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"list_my_staff failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list staff: {e}")
+
+
+@api_router.get("/staff/{staff_id}")
+async def get_staff_detail(staff_id: int):
+    """Get full detail for a single staff member (public-safe fields)."""
+    row = _load_staff_or_404(staff_id)
+    row["service_ids"] = _get_staff_service_ids(staff_id)
+    row["weekly"] = _get_staff_weekly(staff_id)
+    return row
+
+
+@api_router.put("/staff/{staff_id}")
+async def update_staff(
+    staff_id: int,
+    payload: StaffUpdate,
+    auth_id: str = Query(..., description="Business owner's auth_id (UUID)")
+):
+    """Update a staff member's profile (owner only)."""
+    row = _load_staff_or_404(staff_id)
+    _assert_staff_owner(row, auth_id)
+    try:
+        update_data = {k: v for k, v in payload.dict(exclude_unset=True).items()}
+        if not update_data:
+            return row
+        res = supabase.table("staff").update(update_data).eq("id", staff_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=500, detail="Failed to update staff")
+        out = res.data[0]
+        out["service_ids"] = _get_staff_service_ids(staff_id)
+        out["weekly"] = _get_staff_weekly(staff_id)
+        return out
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"update_staff failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update staff: {e}")
+
+
+@api_router.delete("/staff/{staff_id}", status_code=status.HTTP_200_OK)
+async def delete_staff(
+    staff_id: int,
+    auth_id: str = Query(..., description="Business owner's auth_id (UUID)"),
+    hard: bool = Query(False, description="If true, hard-delete (will fail if bookings reference this staff)")
+):
+    """Soft-delete (set is_active=False) by default. Pass hard=true to delete row."""
+    row = _load_staff_or_404(staff_id)
+    _assert_staff_owner(row, auth_id)
+    try:
+        if hard:
+            supabase.table("staff").delete().eq("id", staff_id).execute()
+            return {"success": True, "hard_deleted": True}
+        supabase.table("staff").update({"is_active": False}).eq("id", staff_id).execute()
+        return {"success": True, "hard_deleted": False}
+    except Exception as e:
+        logging.error(f"delete_staff failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete staff: {e}")
+
+
+@api_router.put("/staff/{staff_id}/services")
+async def set_staff_services(
+    staff_id: int,
+    payload: StaffServicesUpdate,
+    auth_id: str = Query(..., description="Business owner's auth_id (UUID)")
+):
+    """Replace the set of services a staff member offers."""
+    row = _load_staff_or_404(staff_id)
+    _assert_staff_owner(row, auth_id)
+    if not check_table_exists("staff_services"):
+        raise HTTPException(status_code=503, detail="staff_services table missing - run migration.")
+    try:
+        # Replace strategy: delete all then insert new
+        supabase.table("staff_services").delete().eq("staff_id", staff_id).execute()
+        if payload.service_ids:
+            # Deduplicate
+            unique = list({int(s) for s in payload.service_ids})
+            rows = [{"staff_id": staff_id, "service_id": sid} for sid in unique]
+            supabase.table("staff_services").insert(rows).execute()
+        return {"staff_id": staff_id, "service_ids": _get_staff_service_ids(staff_id)}
+    except Exception as e:
+        logging.error(f"set_staff_services failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to set staff services: {e}")
+
+
+@api_router.put("/staff/{staff_id}/availability")
+async def set_staff_availability(
+    staff_id: int,
+    payload: StaffAvailabilityUpdate,
+    auth_id: str = Query(..., description="Business owner's auth_id (UUID)")
+):
+    """Set weekly availability for a staff member (replaces all 7 days)."""
+    row = _load_staff_or_404(staff_id)
+    _assert_staff_owner(row, auth_id)
+    if not check_table_exists("staff_availability"):
+        raise HTTPException(status_code=503, detail="staff_availability table missing - run migration.")
+    try:
+        # Validate time pairs
+        for d in payload.weekly:
+            if d.is_available:
+                if not d.start_time or not d.end_time:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"day_of_week={d.day_of_week}: start_time and end_time required when is_available=true"
+                    )
+                if not validate_time_range(d.start_time, d.end_time):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"day_of_week={d.day_of_week}: start_time must be before end_time"
+                    )
+
+        # Replace all 7 days
+        supabase.table("staff_availability").delete().eq("staff_id", staff_id).execute()
+        rows = []
+        for d in payload.weekly:
+            rows.append({
+                "staff_id": staff_id,
+                "day_of_week": d.day_of_week,
+                "is_available": d.is_available,
+                "start_time": d.start_time,
+                "end_time": d.end_time,
+            })
+        if rows:
+            supabase.table("staff_availability").insert(rows).execute()
+
+        return {"staff_id": staff_id, "weekly": _get_staff_weekly(staff_id)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"set_staff_availability failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to set availability: {e}")
+
+
+@api_router.get("/providers/{provider_id}/staff")
+async def list_provider_staff_public(provider_id: int, active_only: bool = Query(True)):
+    """Public list of staff for a provider (for customer booking picker).
+
+    ``provider_id`` is the legacy integer user id (consistent with other public provider endpoints).
+    """
+    if not check_table_exists("staff"):
+        return {"staff": [], "total": 0}
+    provider_uuid = await get_provider_auth_id(provider_id)
+    if not provider_uuid:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    try:
+        q = supabase.table("staff").select(
+            "id, name, role, photo_url, bio, is_active, display_order"
+        ).eq("business_auth_id", provider_uuid)
+        if active_only:
+            q = q.eq("is_active", True)
+        q = q.order("display_order", desc=False).order("id", desc=False)
+        res = q.execute()
+        staff_list = res.data or []
+        for s in staff_list:
+            s["service_ids"] = _get_staff_service_ids(s["id"])
+        return {"staff": staff_list, "total": len(staff_list)}
+    except Exception as e:
+        logging.error(f"list_provider_staff_public failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list staff: {e}")
+
+
+@api_router.get("/staff/{staff_id}/available-slots")
+async def get_staff_available_slots(
+    staff_id: int,
+    date: str = Query(..., description="Date in YYYY-MM-DD format"),
+    service_duration: int = Query(..., ge=10, description="Service duration in minutes")
+):
+    """Get available booking slots for a specific staff member."""
+    row = _load_staff_or_404(staff_id)
+    # Find the staff owner's integer provider_id
+    business_auth_id = row.get("business_auth_id")
+    user_res = supabase.table("users").select("id").eq("auth_id", business_auth_id).execute()
+    if not user_res.data:
+        raise HTTPException(status_code=404, detail="Owner user not found")
+    provider_int_id = user_res.data[0]["id"]
+    try:
+        return await _get_available_slots_internal(
+            provider_id=provider_int_id,
+            requested_date=date,
+            service_duration=service_duration,
+            staff_id=staff_id
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get staff slots: {e}")
+
+
+# ====================================================================
+# END PHASE 4 - MULTI-STAFF
+# ====================================================================
 
 
 # Include the router in the main app

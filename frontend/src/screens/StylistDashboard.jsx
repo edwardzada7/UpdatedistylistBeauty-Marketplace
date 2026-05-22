@@ -564,6 +564,32 @@ const StylistDashboard = () => {
           </CardContent>
         </Card>
 
+        {/* Manage Staff Section - Phase 4 (Multi-Staff) */}
+        {providerData?.provider_type === "business" && (
+          <Card
+            className="cursor-pointer hover:shadow-md transition-all border-amber-200 bg-amber-50/50"
+            onClick={() => navigate("/provider/staff")}
+            data-testid="manage-staff-card"
+          >
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
+                    <User className="h-6 w-6 text-amber-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Manage Staff</h3>
+                    <p className="text-sm text-gray-500">
+                      Add stylists or barbers who work at your salon
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="h-5 w-5 text-gray-400" />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Bookings Section */}
         <Card>
           <CardHeader className="pb-2">

@@ -482,6 +482,18 @@ const BookingDetailsScreen = () => {
               <Clock className="h-5 w-5 text-purple-600" />
               <span className="font-medium">{formatTime(booking.booking_time)}</span>
             </div>
+            {/* Phase 4 - Multi-staff: show assigned staff if any */}
+            {booking.staff && (
+              <div className="flex items-center gap-3 pt-1" data-testid="booking-staff">
+                <User className="h-5 w-5 text-purple-600" />
+                <span className="font-medium">
+                  Staff: {booking.staff.name}
+                  {booking.staff.role && (
+                    <span className="text-sm text-gray-500"> · {booking.staff.role}</span>
+                  )}
+                </span>
+              </div>
+            )}
           </CardContent>
         </Card>
 

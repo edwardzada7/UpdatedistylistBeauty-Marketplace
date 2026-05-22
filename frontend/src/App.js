@@ -22,6 +22,7 @@ import StylistDashboard from "@/screens/StylistDashboard";
 import ProviderServicesScreen from "@/screens/ProviderServicesScreen";
 import ProviderAvailabilityScreen from "@/screens/ProviderAvailabilityScreen";
 import ProviderBookingsScreen from "@/screens/ProviderBookingsScreen";
+import ProviderStaffScreen from "@/screens/ProviderStaffScreen";
 
 // Shared Screens
 import BookingDetailsScreen from "@/screens/BookingDetailsScreen";
@@ -213,6 +214,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <ProviderBookingsScreen />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/provider/staff"
+        element={
+          <ProtectedRoute>
+            <ProviderStaffScreen />
           </ProtectedRoute>
         }
       />

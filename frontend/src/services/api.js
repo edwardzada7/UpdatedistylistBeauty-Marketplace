@@ -332,4 +332,27 @@ export const utilityAPI = {
   getInfo: () => api.get("/"),
 };
 
+// ==================== STAFF API (Phase 4 - Multi-Staff) ====================
+
+export const staffAPI = {
+  // Owner-side
+  listMine: (authId, includeInactive = true) =>
+    api.get(`/staff/me?auth_id=${authId}&include_inactive=${includeInactive}`),
+  create: (authId, data) => api.post(`/staff?auth_id=${authId}`, data),
+  update: (staffId, authId, data) => api.put(`/staff/${staffId}?auth_id=${authId}`, data),
+  remove: (staffId, authId, hard = false) =>
+    api.delete(`/staff/${staffId}?auth_id=${authId}&hard=${hard}`),
+  setServices: (staffId, authId, serviceIds) =>
+    api.put(`/staff/${staffId}/services?auth_id=${authId}`, { service_ids: serviceIds }),
+  setAvailability: (staffId, authId, weekly) =>
+    api.put(`/staff/${staffId}/availability?auth_id=${authId}`, { weekly }),
+  // Detail (used by both owner UI and customer profile)
+  get: (staffId) => api.get(`/staff/${staffId}`),
+  // Public-facing
+  listForProvider: (providerId, activeOnly = true) =>
+    api.get(`/providers/${providerId}/staff?active_only=${activeOnly}`),
+  getStaffSlots: (staffId, date, serviceDuration) =>
+    api.get(`/staff/${staffId}/available-slots?date=${date}&service_duration=${serviceDuration}`),
+};
+
 export default api;
