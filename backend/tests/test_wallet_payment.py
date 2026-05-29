@@ -11,7 +11,7 @@ import pytest
 import requests
 import os
 
-API_URL = os.getenv("REACT_APP_BACKEND_URL", "https://postgres-api.preview.emergentagent.com")
+API_URL = os.getenv("REACT_APP_BACKEND_URL", "https://db-integration-26.preview.emergentagent.com")
 BASE_URL = f"{API_URL}/api"
 
 

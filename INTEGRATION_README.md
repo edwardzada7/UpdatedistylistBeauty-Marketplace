@@ -95,7 +95,7 @@ CORS_ORIGINS="*"
 
 ### Frontend Environment Variables (`/app/frontend/.env`)
 ```env
-REACT_APP_BACKEND_URL=https://postgres-api.preview.emergentagent.com
+REACT_APP_BACKEND_URL=https://db-integration-26.preview.emergentagent.com
 ```
 
 ## Setup Instructions
