@@ -2,21 +2,24 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Scissors, Wallet, User, Star, CheckCircle2, TrendingUp, Grid3X3, Sparkles } from "lucide-react";
+import { Scissors, Wallet, User, Star, CheckCircle2, TrendingUp, Grid3X3, Sparkles, Heart } from "lucide-react";
 import { toast } from "sonner";
-import { stylistsAPI } from "@/services/api";
+import { stylistsAPI, feedAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { APP_NAME, APP_TAGLINE, CURRENCY, SERVICE_CATEGORIES } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import NotificationBell from "@/components/NotificationBell";
+import { timeAgoShort } from "@/utils/timeAgo";
 
 const HomeScreen = () => {
   const navigate = useNavigate();
-  const { displayName, isProvider } = useAuth();
+  const { displayName, isProvider, userData } = useAuth();
   const [topProviders, setTopProviders] = useState([]);
   const [stats, setStats] = useState({ totalProviders: 0, verified: 0, premium: 0 });
   const [loading, setLoading] = useState(true);
+  const [feedPreview, setFeedPreview] = useState([]);
+  const [loadingFeed, setLoadingFeed] = useState(true);
 
   // Redirect providers to dashboard
   useEffect(() => {
@@ -27,6 +30,7 @@ const HomeScreen = () => {
 
   useEffect(() => {
     fetchTopProviders();
+    fetchFeedPreview();
   }, []);
 
   const fetchTopProviders = async () => {
@@ -47,6 +51,20 @@ const HomeScreen = () => {
       console.error("Failed to fetch providers:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Phase 4 - lightweight feed preview (top 4 newest posts). Fails silently
+  // if the social-feed migration hasn't been applied.
+  const fetchFeedPreview = async () => {
+    try {
+      const res = await feedAPI.list(userData?.auth_id, 4, 0);
+      setFeedPreview(res.data?.posts || []);
+    } catch (err) {
+      // 503 = migration not applied; silently ignore
+      setFeedPreview([]);
+    } finally {
+      setLoadingFeed(false);
     }
   };
 
@@ -256,6 +274,64 @@ const HomeScreen = () => {
                     )}
                   </CardContent>
                 </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Phase 4 - Discovery Feed Preview */}
+        <div className="max-w-4xl mx-auto mt-8">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-pink-500" />
+              Discovery Feed
+            </h3>
+            <Button
+              variant="link"
+              onClick={() => navigate("/feed")}
+              size="sm"
+              data-testid="home-feed-view-all"
+            >
+              View All →
+            </Button>
+          </div>
+
+          {loadingFeed ? (
+            <LoadingSpinner message="Loading feed..." />
+          ) : feedPreview.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-gray-500">
+                <Sparkles className="h-10 w-10 mx-auto text-gray-300 mb-2" />
+                <p className="text-sm">No posts yet — be the first to discover new looks soon.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {feedPreview.map((post) => (
+                <button
+                  key={post.id}
+                  type="button"
+                  onClick={() => navigate("/feed")}
+                  className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 hover:opacity-90 active:scale-95 transition"
+                  data-testid={`home-feed-tile-${post.id}`}
+                >
+                  <img
+                    src={post.image_url}
+                    alt={post.caption || "Post"}
+                    className="absolute inset-0 w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 text-left">
+                    <p className="text-white text-xs font-medium truncate">
+                      {post.provider?.display_name || "Provider"}
+                    </p>
+                    <p className="text-white/80 text-[10px] flex items-center gap-1">
+                      <Heart className="h-3 w-3" />
+                      {post.likes_count || 0}
+                      <span className="ml-auto">{timeAgoShort(post.created_at)}</span>
+                    </p>
+                  </div>
+                </button>
               ))}
             </div>
           )}

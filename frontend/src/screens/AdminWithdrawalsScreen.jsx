@@ -284,6 +284,14 @@ export default function AdminWithdrawalsScreen() {
           </div>
           <div className="flex items-center gap-2">
             <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/admin/dashboard")}
+              data-testid="goto-admin-dashboard-btn"
+            >
+              ← Dashboard
+            </Button>
+            <Button
               variant="ghost"
               size="icon"
               onClick={handleRefresh}

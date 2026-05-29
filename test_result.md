@@ -104,6 +104,67 @@
 
 user_problem_statement: "Beauty Stylist Marketplace App with Supabase integration - Phase 1 with authentication"
 
+
+# ============================================================================
+# Phase 4 - Continue Build (Social Feed Lite + Admin Dashboard Foundation)
+# ============================================================================
+# Multi-Staff Lite was already 100% implemented in a previous session.
+# Phase 4 was extended with:
+#   - Social Feed Lite (provider posts + likes)
+#   - Admin Dashboard Foundation (stats + tabs over bookings/payments/no-shows/providers)
+# All changes are strictly additive. No existing tables/columns/endpoints renamed or refactored.
+
+backend:
+  - task: "Phase 4 - Social Feed endpoints (posts CRUD + like/unlike)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added /api/feed/posts (list/get/create/update/delete), /api/feed/posts/by-provider/{provider_id}, and /api/feed/posts/{id}/like (POST/DELETE). Endpoints fail gracefully with 503 if migration missing. Idempotent like/unlike, viewer-aware liked_by_me flag, provider info enrichment. Migration phase4_social_feed.sql applied to Supabase (provider_posts + provider_post_likes tables, unique index on (post_id, user_auth_id)). 5/5 smoke tests pass."
+
+  - task: "Phase 4 - Admin Dashboard endpoints (stats, recent bookings/payments/no-shows, providers)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added 5 admin endpoints protected by existing X-ADMIN-KEY header. /admin/stats aggregates users/providers/bookings/wallets/withdrawals/feed/reviews. /admin/recent-bookings, /admin/recent-payments, /admin/reported-no-shows, /admin/providers (with search). Existing /admin/withdrawals untouched. 6/6 admin tests pass."
+
+frontend:
+  - task: "Phase 4 - FeedScreen with composer + like/unlike + portfolio integration"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/screens/FeedScreen.jsx, /app/frontend/src/components/PostComposerModal.jsx, /app/frontend/src/utils/timeAgo.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "FeedScreen with newest-first feed, optimistic like toggling, owner soft-delete via dropdown, load-more pagination, provider FAB to open composer. PostComposerModal supports file upload (base64 up to 4MB) OR URL paste. Routes: /feed and /user/feed. Wired into HomeScreen (Discovery preview grid - 4 newest), ProviderProfileScreen (Portfolio grid), StylistDashboard (Portfolio & Feed entry). Not yet tested via browser."
+
+  - task: "Phase 4 - AdminDashboardScreen with stats + tabs"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/screens/AdminDashboardScreen.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Created /admin/dashboard with 6 stat cards (users/bookings/pending/escrow/payouts/posts) + 4 tabs (Recent Bookings, Payments, No-Shows, Providers with name search). Reuses sessionStorage ADMIN_KEY. AdminLoginScreen redirects to /admin/dashboard on login. AdminWithdrawalsScreen has a Dashboard button back to the new hub. Not yet tested via browser."
+
+
 backend:
   - task: "Users CRUD API"
     implemented: true

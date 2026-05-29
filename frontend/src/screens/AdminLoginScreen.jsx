@@ -19,7 +19,7 @@ export default function AdminLoginScreen() {
   useEffect(() => {
     const storedKey = sessionStorage.getItem(ADMIN_KEY_STORAGE);
     if (storedKey) {
-      navigate("/admin/withdrawals", { replace: true });
+      navigate("/admin/dashboard", { replace: true });
     }
   }, [navigate]);
 
@@ -56,7 +56,7 @@ export default function AdminLoginScreen() {
       // Store key and redirect
       sessionStorage.setItem(ADMIN_KEY_STORAGE, adminKey.trim());
       toast.success("Login successful");
-      navigate("/admin/withdrawals", { replace: true });
+      navigate("/admin/dashboard", { replace: true });
       
     } catch (err) {
       console.error("Admin login error:", err);

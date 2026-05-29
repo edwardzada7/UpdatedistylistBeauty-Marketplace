@@ -332,6 +332,75 @@ export const utilityAPI = {
   getInfo: () => api.get("/"),
 };
 
+// ==================== FEED API (Phase 4 - Social Feed Lite) ====================
+
+export const feedAPI = {
+  // Public listing (newest first). authId optional → enables liked_by_me flag.
+  list: (authId, limit = 20, offset = 0) => {
+    const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (authId) qs.append("auth_id", authId);
+    return api.get(`/feed/posts?${qs.toString()}`);
+  },
+
+  // Posts for a single provider (for portfolio section)
+  listByProvider: (providerId, authId, limit = 20, offset = 0) => {
+    const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (authId) qs.append("auth_id", authId);
+    return api.get(`/feed/posts/by-provider/${providerId}?${qs.toString()}`);
+  },
+
+  get: (postId, authId) =>
+    api.get(`/feed/posts/${postId}${authId ? `?auth_id=${authId}` : ""}`),
+
+  // Provider creates a post (image_url + optional caption)
+  create: (authId, data) => api.post(`/feed/posts?auth_id=${authId}`, data),
+
+  // Owner updates caption / soft-deletes
+  update: (postId, authId, data) =>
+    api.put(`/feed/posts/${postId}?auth_id=${authId}`, data),
+
+  remove: (postId, authId, hard = false) =>
+    api.delete(`/feed/posts/${postId}?auth_id=${authId}&hard=${hard}`),
+
+  like: (postId, authId) =>
+    api.post(`/feed/posts/${postId}/like?auth_id=${authId}`),
+
+  unlike: (postId, authId) =>
+    api.delete(`/feed/posts/${postId}/like?auth_id=${authId}`),
+};
+
+// ==================== ADMIN API (Phase 4 - Admin Dashboard) ====================
+// All requests must include `X-ADMIN-KEY` header (read from sessionStorage in
+// admin screens). We pass headers per-call so we never mutate the global axios.
+
+const withAdminKey = (adminKey) => ({
+  headers: { "X-ADMIN-KEY": adminKey },
+});
+
+export const adminAPI = {
+  stats: (adminKey) => api.get("/admin/stats", withAdminKey(adminKey)),
+  recentBookings: (adminKey, limit = 20, statusFilter = null) => {
+    const qs = new URLSearchParams({ limit: String(limit) });
+    if (statusFilter) qs.append("status", statusFilter);
+    return api.get(`/admin/recent-bookings?${qs.toString()}`, withAdminKey(adminKey));
+  },
+  recentPayments: (adminKey, limit = 20) =>
+    api.get(`/admin/recent-payments?limit=${limit}`, withAdminKey(adminKey)),
+  reportedNoShows: (adminKey, limit = 20) =>
+    api.get(`/admin/reported-no-shows?limit=${limit}`, withAdminKey(adminKey)),
+  providers: (adminKey, limit = 50, offset = 0, search = "") => {
+    const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (search) qs.append("search", search);
+    return api.get(`/admin/providers?${qs.toString()}`, withAdminKey(adminKey));
+  },
+  // Existing endpoint (kept for reuse from the new dashboard)
+  withdrawals: (adminKey, statusFilter = null, limit = 50, offset = 0) => {
+    const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (statusFilter) qs.append("status", statusFilter);
+    return api.get(`/admin/withdrawals?${qs.toString()}`, withAdminKey(adminKey));
+  },
+};
+
 // ==================== STAFF API (Phase 4 - Multi-Staff) ====================
 
 export const staffAPI = {

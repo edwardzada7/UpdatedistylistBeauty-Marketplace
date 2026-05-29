@@ -590,6 +590,30 @@ const StylistDashboard = () => {
           </Card>
         )}
 
+        {/* Discovery Feed / Portfolio - Phase 4 (Social Feed) */}
+        <Card
+          className="cursor-pointer hover:shadow-md transition-all border-pink-200 bg-pink-50/50"
+          onClick={() => navigate("/feed")}
+          data-testid="manage-feed-card"
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-pink-100 rounded-full flex items-center justify-center">
+                  <Sparkles className="h-6 w-6 text-pink-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Portfolio & Feed</h3>
+                  <p className="text-sm text-gray-500">
+                    Post photos of your work to attract bookings
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-gray-400" />
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Bookings Section */}
         <Card>
           <CardHeader className="pb-2">

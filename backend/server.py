@@ -6227,6 +6227,712 @@ async def get_staff_available_slots(
 # ====================================================================
 
 
+# ====================================================================
+# PHASE 4 - SOCIAL FEED LITE
+# ====================================================================
+# Requires migration: /app/backend/migrations/phase4_social_feed.sql
+# Tables: provider_posts, provider_post_likes
+# All endpoints fail gracefully with 503 if tables are missing.
+# ====================================================================
+
+# Models
+class FeedPostCreate(BaseModel):
+    image_url: str = Field(..., min_length=1)
+    caption: Optional[str] = Field(None, max_length=2000)
+
+    @validator("image_url")
+    def _val_image_url(cls, v):
+        if not v:
+            raise ValueError("image_url is required")
+        # Accept http(s) URLs or data URLs (base64 inline images). Reject anything else
+        # to avoid accidentally storing JS / other schemes.
+        v = v.strip()
+        if v.startswith("http://") or v.startswith("https://") or v.startswith("data:image/"):
+            # Soft size cap on data URLs to keep DB sane (~ 6 MB raw → ~8MB base64).
+            if v.startswith("data:image/") and len(v) > 9_000_000:
+                raise ValueError("image too large (data URL > ~6MB)")
+            return v
+        raise ValueError("image_url must be http(s) or a data:image URL")
+
+
+class FeedPostUpdate(BaseModel):
+    caption: Optional[str] = Field(None, max_length=2000)
+    is_active: Optional[bool] = None
+
+
+def _require_feed_tables():
+    """Fail gracefully (503) if the social-feed tables are missing."""
+    if not check_table_exists("provider_posts"):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Social feed not enabled. Run migration phase4_social_feed.sql in Supabase."
+        )
+
+
+async def _get_user_by_auth_id(auth_id: str) -> Optional[dict]:
+    """Helper to load a users row by auth_id (UUID). Returns None on failure."""
+    try:
+        res = supabase.table("users").select("id, auth_id, name, role").eq("auth_id", auth_id).limit(1).execute()
+        if res.data:
+            return res.data[0]
+    except Exception:
+        pass
+    return None
+
+
+def _enrich_post(post: dict, viewer_auth_id: Optional[str] = None) -> dict:
+    """Attach provider info + viewer-specific liked flag to a post row."""
+    enriched = dict(post)
+    provider_id = post.get("provider_id")
+    provider_auth_id = post.get("provider_auth_id")
+
+    # Provider name / photo from users + stylists tables (best-effort)
+    provider_name = None
+    provider_photo = None
+    provider_business_name = None
+    provider_type = None
+    provider_city = None
+    try:
+        if provider_auth_id:
+            u_res = supabase.table("users").select(
+                "id, name, city, country"
+            ).eq("auth_id", provider_auth_id).limit(1).execute()
+            if u_res.data:
+                provider_name = u_res.data[0].get("name")
+                provider_city = u_res.data[0].get("city")
+                # capture int id for stylists lookup if we don't have it
+                if not provider_id:
+                    provider_id = u_res.data[0].get("id")
+        if provider_id:
+            s_res = supabase.table("stylists").select(
+                "user_id, business_name, provider_type, photo_url"
+            ).eq("user_id", provider_id).limit(1).execute()
+            if s_res.data:
+                provider_business_name = s_res.data[0].get("business_name")
+                provider_type = s_res.data[0].get("provider_type")
+                provider_photo = s_res.data[0].get("photo_url")
+    except Exception as ex:
+        logging.warning(f"_enrich_post lookup failed for post {post.get('id')}: {ex}")
+
+    display_name = provider_business_name if (provider_type == "business" and provider_business_name) else provider_name
+    enriched["provider"] = {
+        "id": provider_id,
+        "auth_id": provider_auth_id,
+        "name": provider_name,
+        "business_name": provider_business_name,
+        "provider_type": provider_type,
+        "photo_url": provider_photo,
+        "city": provider_city,
+        "display_name": display_name or "Provider",
+    }
+
+    # Has the viewer liked this post?
+    enriched["liked_by_me"] = False
+    if viewer_auth_id and check_table_exists("provider_post_likes"):
+        try:
+            like_res = supabase.table("provider_post_likes").select("id").eq(
+                "post_id", post["id"]
+            ).eq("user_auth_id", viewer_auth_id).limit(1).execute()
+            enriched["liked_by_me"] = bool(like_res.data)
+        except Exception:
+            pass
+
+    return enriched
+
+
+@api_router.post("/feed/posts", status_code=status.HTTP_201_CREATED)
+async def create_feed_post(
+    payload: FeedPostCreate,
+    auth_id: str = Query(..., description="Provider auth_id (UUID)")
+):
+    """Create a feed post. Only providers (role='stylist') may post."""
+    _require_feed_tables()
+    user = await _get_user_by_auth_id(auth_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found for auth_id")
+    if user.get("role") != "stylist":
+        raise HTTPException(status_code=403, detail="Only providers can create feed posts")
+
+    try:
+        row = {
+            "provider_id": user["id"],
+            "provider_auth_id": auth_id,
+            "caption": (payload.caption or "").strip() or None,
+            "image_url": payload.image_url,
+            "likes_count": 0,
+            "comments_count": 0,
+            "is_active": True,
+        }
+        res = supabase.table("provider_posts").insert(row).execute()
+        if not res.data:
+            raise HTTPException(status_code=500, detail="Failed to create post")
+        return _enrich_post(res.data[0], viewer_auth_id=auth_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"create_feed_post failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create post: {e}")
+
+
+@api_router.get("/feed/posts")
+async def list_feed_posts(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    auth_id: Optional[str] = Query(None, description="Viewer auth_id (used to compute liked_by_me)"),
+    provider_id: Optional[int] = Query(None, description="Filter to a single provider"),
+):
+    """Public feed listing, newest first. Inactive posts excluded."""
+    _require_feed_tables()
+    try:
+        q = supabase.table("provider_posts").select("*", count="exact").eq("is_active", True)
+        if provider_id is not None:
+            q = q.eq("provider_id", provider_id)
+        q = q.order("created_at", desc=True).range(offset, offset + limit - 1)
+        res = q.execute()
+        posts = res.data or []
+        enriched = [_enrich_post(p, viewer_auth_id=auth_id) for p in posts]
+        return {
+            "posts": enriched,
+            "total": res.count if res.count is not None else len(enriched),
+            "limit": limit,
+            "offset": offset,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"list_feed_posts failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list posts: {e}")
+
+
+@api_router.get("/feed/posts/by-provider/{provider_id}")
+async def list_feed_posts_by_provider(
+    provider_id: int,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    auth_id: Optional[str] = Query(None),
+):
+    """Posts for a single provider (for the portfolio section on profile)."""
+    _require_feed_tables()
+    try:
+        res = supabase.table("provider_posts").select("*", count="exact").eq(
+            "provider_id", provider_id
+        ).eq("is_active", True).order("created_at", desc=True).range(
+            offset, offset + limit - 1
+        ).execute()
+        posts = res.data or []
+        enriched = [_enrich_post(p, viewer_auth_id=auth_id) for p in posts]
+        return {
+            "posts": enriched,
+            "total": res.count if res.count is not None else len(enriched),
+            "limit": limit,
+            "offset": offset,
+        }
+    except Exception as e:
+        logging.error(f"list_feed_posts_by_provider failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list posts: {e}")
+
+
+@api_router.get("/feed/posts/{post_id}")
+async def get_feed_post(
+    post_id: int,
+    auth_id: Optional[str] = Query(None)
+):
+    _require_feed_tables()
+    try:
+        res = supabase.table("provider_posts").select("*").eq("id", post_id).limit(1).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Post not found")
+        post = res.data[0]
+        if not post.get("is_active", True):
+            raise HTTPException(status_code=404, detail="Post not found")
+        return _enrich_post(post, viewer_auth_id=auth_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"get_feed_post failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get post: {e}")
+
+
+@api_router.put("/feed/posts/{post_id}")
+async def update_feed_post(
+    post_id: int,
+    payload: FeedPostUpdate,
+    auth_id: str = Query(..., description="Owner auth_id (UUID)")
+):
+    """Update caption / soft-delete (is_active=False). Owner only."""
+    _require_feed_tables()
+    res = supabase.table("provider_posts").select("*").eq("id", post_id).limit(1).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Post not found")
+    post = res.data[0]
+    if post.get("provider_auth_id") != auth_id:
+        raise HTTPException(status_code=403, detail="You do not own this post")
+    try:
+        update_data = {k: v for k, v in payload.dict(exclude_unset=True).items()}
+        if not update_data:
+            return _enrich_post(post, viewer_auth_id=auth_id)
+        upd = supabase.table("provider_posts").update(update_data).eq("id", post_id).execute()
+        if not upd.data:
+            raise HTTPException(status_code=500, detail="Failed to update post")
+        return _enrich_post(upd.data[0], viewer_auth_id=auth_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"update_feed_post failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update post: {e}")
+
+
+@api_router.delete("/feed/posts/{post_id}")
+async def delete_feed_post(
+    post_id: int,
+    auth_id: str = Query(..., description="Owner auth_id (UUID)"),
+    hard: bool = Query(False)
+):
+    """Soft-delete by default (is_active=False). Pass hard=true to fully delete."""
+    _require_feed_tables()
+    res = supabase.table("provider_posts").select("*").eq("id", post_id).limit(1).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Post not found")
+    post = res.data[0]
+    if post.get("provider_auth_id") != auth_id:
+        raise HTTPException(status_code=403, detail="You do not own this post")
+    try:
+        if hard:
+            # Cleanup likes first (no FK constraint, but keeps things tidy)
+            try:
+                supabase.table("provider_post_likes").delete().eq("post_id", post_id).execute()
+            except Exception:
+                pass
+            supabase.table("provider_posts").delete().eq("id", post_id).execute()
+            return {"success": True, "hard_deleted": True}
+        supabase.table("provider_posts").update({"is_active": False}).eq("id", post_id).execute()
+        return {"success": True, "hard_deleted": False}
+    except Exception as e:
+        logging.error(f"delete_feed_post failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete post: {e}")
+
+
+@api_router.post("/feed/posts/{post_id}/like")
+async def like_feed_post(
+    post_id: int,
+    auth_id: str = Query(..., description="Liker auth_id (UUID)")
+):
+    """Like a post. Idempotent — repeated calls keep state at 'liked' without
+    inflating the count."""
+    _require_feed_tables()
+    if not check_table_exists("provider_post_likes"):
+        raise HTTPException(status_code=503, detail="provider_post_likes table missing - run migration.")
+
+    # Validate post exists & active
+    post_res = supabase.table("provider_posts").select("id, likes_count, is_active").eq("id", post_id).limit(1).execute()
+    if not post_res.data:
+        raise HTTPException(status_code=404, detail="Post not found")
+    post = post_res.data[0]
+    if not post.get("is_active", True):
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    try:
+        # Idempotency check
+        existing = supabase.table("provider_post_likes").select("id").eq(
+            "post_id", post_id
+        ).eq("user_auth_id", auth_id).limit(1).execute()
+        if existing.data:
+            return {
+                "liked": True,
+                "post_id": post_id,
+                "likes_count": post.get("likes_count", 0),
+                "already": True,
+            }
+
+        # Insert like (unique index will prevent dupes under race)
+        try:
+            supabase.table("provider_post_likes").insert({
+                "post_id": post_id,
+                "user_auth_id": auth_id,
+            }).execute()
+        except Exception as ex:
+            # Duplicate (unique violation) → treat as already liked
+            if "duplicate" in str(ex).lower() or "unique" in str(ex).lower() or "23505" in str(ex):
+                return {
+                    "liked": True,
+                    "post_id": post_id,
+                    "likes_count": post.get("likes_count", 0),
+                    "already": True,
+                }
+            raise
+
+        # Increment counter (best-effort)
+        new_count = (post.get("likes_count") or 0) + 1
+        try:
+            supabase.table("provider_posts").update({"likes_count": new_count}).eq("id", post_id).execute()
+        except Exception as ex:
+            logging.warning(f"likes_count update failed for post {post_id}: {ex}")
+        return {"liked": True, "post_id": post_id, "likes_count": new_count, "already": False}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"like_feed_post failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to like post: {e}")
+
+
+@api_router.delete("/feed/posts/{post_id}/like")
+async def unlike_feed_post(
+    post_id: int,
+    auth_id: str = Query(..., description="Liker auth_id (UUID)")
+):
+    """Remove a like. Idempotent — returns liked=False whether or not a like existed."""
+    _require_feed_tables()
+    if not check_table_exists("provider_post_likes"):
+        raise HTTPException(status_code=503, detail="provider_post_likes table missing - run migration.")
+
+    try:
+        existing = supabase.table("provider_post_likes").select("id").eq(
+            "post_id", post_id
+        ).eq("user_auth_id", auth_id).limit(1).execute()
+        if not existing.data:
+            # Already not liked
+            post_res = supabase.table("provider_posts").select("likes_count").eq("id", post_id).limit(1).execute()
+            cnt = (post_res.data or [{}])[0].get("likes_count", 0) if post_res.data else 0
+            return {"liked": False, "post_id": post_id, "likes_count": cnt, "already": True}
+
+        supabase.table("provider_post_likes").delete().eq(
+            "post_id", post_id
+        ).eq("user_auth_id", auth_id).execute()
+
+        # Decrement counter (best-effort, never below 0)
+        post_res = supabase.table("provider_posts").select("likes_count").eq("id", post_id).limit(1).execute()
+        if post_res.data:
+            cnt = max(0, (post_res.data[0].get("likes_count") or 0) - 1)
+            try:
+                supabase.table("provider_posts").update({"likes_count": cnt}).eq("id", post_id).execute()
+            except Exception:
+                pass
+        else:
+            cnt = 0
+        return {"liked": False, "post_id": post_id, "likes_count": cnt, "already": False}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"unlike_feed_post failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to unlike post: {e}")
+
+
+# ====================================================================
+# END PHASE 4 - SOCIAL FEED LITE
+# ====================================================================
+
+
+# ====================================================================
+# PHASE 4 - ADMIN DASHBOARD FOUNDATION
+# ====================================================================
+# Lightweight operational admin endpoints. Protected by X-ADMIN-KEY header
+# (same as existing admin/withdrawals endpoints). All endpoints degrade
+# gracefully if optional tables are missing.
+# ====================================================================
+
+def _require_admin_key(x_admin_key: Optional[str]):
+    admin_key = os.environ.get("ADMIN_DASH_KEY")
+    if not admin_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Admin service not configured. ADMIN_DASH_KEY is missing."
+        )
+    if not x_admin_key or x_admin_key != admin_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing admin key"
+        )
+
+
+def _safe_count(table: str, filters: Optional[List[tuple]] = None) -> int:
+    """Return COUNT of rows in `table`. Returns 0 if table missing or any error."""
+    try:
+        if not check_table_exists(table):
+            return 0
+        q = supabase.table(table).select("id", count="exact").limit(1)
+        if filters:
+            for col, val in filters:
+                q = q.eq(col, val)
+        res = q.execute()
+        return res.count or 0
+    except Exception as ex:
+        logging.warning(f"_safe_count({table}) failed: {ex}")
+        return 0
+
+
+def _safe_sum_amount(table: str, column: str, filters: Optional[List[tuple]] = None) -> float:
+    """Sum a numeric column with eq filters. 0.0 on any error."""
+    try:
+        if not check_table_exists(table):
+            return 0.0
+        q = supabase.table(table).select(column)
+        if filters:
+            for col, val in filters:
+                q = q.eq(col, val)
+        res = q.execute()
+        total = 0.0
+        for row in (res.data or []):
+            v = row.get(column)
+            if v is None:
+                continue
+            try:
+                total += float(v)
+            except Exception:
+                continue
+        return round(total, 2)
+    except Exception as ex:
+        logging.warning(f"_safe_sum_amount({table}.{column}) failed: {ex}")
+        return 0.0
+
+
+@api_router.get("/admin/stats")
+async def admin_stats(
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY")
+):
+    """High-level platform stats for the admin dashboard."""
+    _require_admin_key(x_admin_key)
+
+    total_users = _safe_count("users")
+    total_providers = _safe_count("users", filters=[("role", "stylist")])
+    total_bookings = _safe_count("bookings")
+    completed_bookings = _safe_count("bookings", filters=[("status", "completed")])
+    pending_bookings = _safe_count("bookings", filters=[("status", "pending")])
+    confirmed_bookings = _safe_count("bookings", filters=[("status", "confirmed")])
+    canceled_bookings = _safe_count("bookings", filters=[("status", "canceled")])
+    pending_withdrawals = _safe_count("withdrawal_requests", filters=[("status", "pending")])
+
+    # Total escrow held = sum of wallets.escrow_balance (provider side)
+    total_escrow = _safe_sum_amount("wallets", "escrow_balance")
+    total_available = _safe_sum_amount("wallets", "available_balance")
+
+    # Pending withdrawal amount (best-effort, treats missing column as 0)
+    pending_withdrawal_amount = _safe_sum_amount(
+        "withdrawal_requests", "amount", filters=[("status", "pending")]
+    )
+
+    # Feed metrics (lite, only if migration applied)
+    total_posts = _safe_count("provider_posts", filters=[("is_active", True)])
+
+    # Reviews (only if Phase 3 migration applied)
+    total_reviews = _safe_count("reviews")
+
+    return {
+        "users": {
+            "total": total_users,
+            "providers": total_providers,
+            "customers": max(0, total_users - total_providers),
+        },
+        "bookings": {
+            "total": total_bookings,
+            "pending": pending_bookings,
+            "confirmed": confirmed_bookings,
+            "completed": completed_bookings,
+            "canceled": canceled_bookings,
+        },
+        "wallets": {
+            "total_escrow": total_escrow,
+            "total_available": total_available,
+        },
+        "withdrawals": {
+            "pending_count": pending_withdrawals,
+            "pending_amount": pending_withdrawal_amount,
+        },
+        "feed": {
+            "total_active_posts": total_posts,
+        },
+        "reviews": {
+            "total": total_reviews,
+        },
+    }
+
+
+@api_router.get("/admin/recent-bookings")
+async def admin_recent_bookings(
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+    limit: int = Query(20, ge=1, le=100),
+    status_filter: Optional[str] = Query(None, alias="status"),
+):
+    """Most recent bookings with light enrichment (provider+customer display names)."""
+    _require_admin_key(x_admin_key)
+    if not check_table_exists("bookings"):
+        return {"bookings": [], "total": 0}
+
+    try:
+        q = supabase.table("bookings").select("*", count="exact")
+        if status_filter:
+            q = q.eq("status", status_filter)
+        res = q.order("created_at", desc=True).limit(limit).execute()
+        items = res.data or []
+
+        # Light enrichment: fetch user names by auth_id in bulk
+        auth_ids = set()
+        for b in items:
+            if b.get("provider_auth_id"):
+                auth_ids.add(b["provider_auth_id"])
+            if b.get("customer_auth_id"):
+                auth_ids.add(b["customer_auth_id"])
+        name_map = {}
+        if auth_ids:
+            try:
+                u_res = supabase.table("users").select("auth_id, name").in_(
+                    "auth_id", list(auth_ids)
+                ).execute()
+                for u in (u_res.data or []):
+                    name_map[u["auth_id"]] = u.get("name")
+            except Exception:
+                pass
+
+        out = []
+        for b in items:
+            out.append({
+                **b,
+                "provider_name": name_map.get(b.get("provider_auth_id")),
+                "customer_name": name_map.get(b.get("customer_auth_id")),
+            })
+        return {"bookings": out, "total": res.count or len(out)}
+    except Exception as e:
+        logging.error(f"admin_recent_bookings failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed: {e}")
+
+
+@api_router.get("/admin/recent-payments")
+async def admin_recent_payments(
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """Most recent payments (wallet top-ups + booking payments)."""
+    _require_admin_key(x_admin_key)
+    if not check_table_exists("payments"):
+        return {"payments": [], "total": 0, "note": "payments table not present"}
+    try:
+        res = supabase.table("payments").select("*", count="exact").order(
+            "created_at", desc=True
+        ).limit(limit).execute()
+        return {"payments": res.data or [], "total": res.count or len(res.data or [])}
+    except Exception as e:
+        logging.error(f"admin_recent_payments failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed: {e}")
+
+
+@api_router.get("/admin/reported-no-shows")
+async def admin_reported_no_shows(
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """No-show disputes / reports. Reuses bookings table with no-show statuses."""
+    _require_admin_key(x_admin_key)
+    if not check_table_exists("bookings"):
+        return {"items": [], "total": 0}
+    no_show_statuses = [
+        STATUS_NO_SHOW_PENDING,
+        STATUS_USER_NO_SHOW,
+        STATUS_PROVIDER_NO_SHOW,
+        STATUS_DISPUTED,
+    ]
+    try:
+        # Filter to any no-show-related status, newest first
+        res = supabase.table("bookings").select("*", count="exact").in_(
+            "status", no_show_statuses
+        ).order("created_at", desc=True).limit(limit).execute()
+        items = res.data or []
+
+        # Light enrichment - names
+        auth_ids = set()
+        for b in items:
+            if b.get("provider_auth_id"):
+                auth_ids.add(b["provider_auth_id"])
+            if b.get("customer_auth_id"):
+                auth_ids.add(b["customer_auth_id"])
+        name_map = {}
+        if auth_ids:
+            try:
+                u_res = supabase.table("users").select("auth_id, name").in_(
+                    "auth_id", list(auth_ids)
+                ).execute()
+                for u in (u_res.data or []):
+                    name_map[u["auth_id"]] = u.get("name")
+            except Exception:
+                pass
+        out = []
+        for b in items:
+            out.append({
+                **b,
+                "provider_name": name_map.get(b.get("provider_auth_id")),
+                "customer_name": name_map.get(b.get("customer_auth_id")),
+            })
+        return {"items": out, "total": res.count or len(out)}
+    except Exception as e:
+        logging.error(f"admin_reported_no_shows failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed: {e}")
+
+
+@api_router.get("/admin/providers")
+async def admin_list_providers(
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    search: Optional[str] = Query(None, description="Name fragment"),
+):
+    """Paginated list of providers with stylists join (best-effort)."""
+    _require_admin_key(x_admin_key)
+    if not check_table_exists("users"):
+        return {"providers": [], "total": 0}
+    try:
+        q = supabase.table("users").select("*", count="exact").eq("role", "stylist")
+        if search:
+            q = q.ilike("name", f"%{search}%")
+        q = q.order("id", desc=True).range(offset, offset + limit - 1)
+        res = q.execute()
+        users = res.data or []
+
+        # Attach stylists data
+        user_ids = [u["id"] for u in users]
+        stylists_map = {}
+        if user_ids and check_table_exists("stylists"):
+            try:
+                s_res = supabase.table("stylists").select("*").in_("user_id", user_ids).execute()
+                for s in (s_res.data or []):
+                    stylists_map[s["user_id"]] = s
+            except Exception:
+                pass
+
+        out = []
+        for u in users:
+            s = stylists_map.get(u["id"], {})
+            out.append({
+                "id": u.get("id"),
+                "auth_id": u.get("auth_id"),
+                "name": u.get("name"),
+                "email": u.get("email"),
+                "phone": u.get("phone"),
+                "city": u.get("city"),
+                "country": u.get("country"),
+                "created_at": u.get("created_at"),
+                "is_verified": s.get("is_verified"),
+                "is_premium": s.get("is_premium"),
+                "provider_type": s.get("provider_type"),
+                "business_name": s.get("business_name"),
+                "hourly_rate": s.get("hourly_rate"),
+                "rating": s.get("rating"),
+            })
+        return {
+            "providers": out,
+            "total": res.count or len(out),
+            "limit": limit,
+            "offset": offset,
+        }
+    except Exception as e:
+        logging.error(f"admin_list_providers failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed: {e}")
+
+
+# ====================================================================
+# END PHASE 4 - ADMIN DASHBOARD FOUNDATION
+# ====================================================================
+
+
+
+
 # Include the router in the main app
 app.include_router(api_router)
 

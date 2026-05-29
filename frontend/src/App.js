@@ -32,6 +32,10 @@ import BookingChatScreen from "@/screens/BookingChatScreen";
 // Admin Screens
 import AdminLoginScreen from "@/screens/AdminLoginScreen";
 import AdminWithdrawalsScreen from "@/screens/AdminWithdrawalsScreen";
+import AdminDashboardScreen from "@/screens/AdminDashboardScreen";
+
+// Phase 4 - Social Feed
+import FeedScreen from "@/screens/FeedScreen";
 
 // Components
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -347,6 +351,24 @@ function AppRoutes() {
         }
       />
 
+      {/* Phase 4 - Social Feed Lite */}
+      <Route
+        path="/feed"
+        element={
+          <ProtectedRoute>
+            <FeedScreen />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/user/feed"
+        element={
+          <ProtectedRoute>
+            <FeedScreen />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Catch all - redirect based on auth state and role */}
       <Route path="*" element={<RoleBasedRedirect />} />
 
@@ -354,6 +376,7 @@ function AppRoutes() {
       {/* ADMIN ROUTES - Separate from user auth */}
       {/* ============================================= */}
       <Route path="/admin" element={<AdminLoginScreen />} />
+      <Route path="/admin/dashboard" element={<AdminDashboardScreen />} />
       <Route path="/admin/withdrawals" element={<AdminWithdrawalsScreen />} />
     </Routes>
   );

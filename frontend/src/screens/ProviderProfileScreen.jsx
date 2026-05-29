@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Star, CheckCircle2, MapPin, Calendar, Clock, Store, Home, Car, ShoppingCart, User, Loader2, ChevronLeft, ChevronRight, Wallet, AlertCircle, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
-import { providersAPI, bookingsAPI, paymentsAPI, walletsAPI, reviewsAPI, staffAPI } from "@/services/api";
+import { providersAPI, bookingsAPI, paymentsAPI, walletsAPI, reviewsAPI, staffAPI, feedAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { CURRENCY } from "@/utils/constants";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -48,6 +48,10 @@ const ProviderProfileScreen = () => {
   const [reviewsStats, setReviewsStats] = useState({ avg_rating: 0, total_reviews: 0 });
   const [loadingReviews, setLoadingReviews] = useState(false);
 
+  // Phase 4 - Portfolio (provider feed posts)
+  const [portfolioPosts, setPortfolioPosts] = useState([]);
+  const [loadingPortfolio, setLoadingPortfolio] = useState(false);
+
   // Fetch wallet balance when entering payment step
   const fetchWalletBalance = async () => {
     if (!user?.id) return;
@@ -84,8 +88,24 @@ const ProviderProfileScreen = () => {
   useEffect(() => {
     if (provider?.provider_id) {
       fetchProviderReviews();
+      fetchPortfolioPosts();
     }
   }, [provider?.provider_id]);
+
+  // Phase 4 - Portfolio
+  const fetchPortfolioPosts = async () => {
+    if (!provider?.provider_id) return;
+    setLoadingPortfolio(true);
+    try {
+      const res = await feedAPI.listByProvider(provider.provider_id, userData?.auth_id, 12, 0);
+      setPortfolioPosts(res.data?.posts || []);
+    } catch (err) {
+      // 503 (migration not applied) or other → just hide section
+      setPortfolioPosts([]);
+    } finally {
+      setLoadingPortfolio(false);
+    }
+  };
 
   const fetchProviderReviews = async () => {
     if (!provider) return;
@@ -1033,6 +1053,46 @@ const ProviderProfileScreen = () => {
                     </li>
                   )}
                 </ul>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Portfolio Section - Phase 4 (Social Feed) */}
+          {portfolioPosts.length > 0 && (
+            <Card data-testid="portfolio-section">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Star className="h-5 w-5 text-pink-500" />
+                  Portfolio
+                  <Badge variant="secondary" className="ml-1">
+                    {portfolioPosts.length}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {portfolioPosts.map((post) => (
+                    <button
+                      key={post.id}
+                      type="button"
+                      onClick={() => navigate("/feed")}
+                      className="relative aspect-square rounded-md overflow-hidden bg-gray-100 hover:opacity-90 active:scale-95 transition"
+                      data-testid={`portfolio-post-${post.id}`}
+                    >
+                      <img
+                        src={post.image_url}
+                        alt={post.caption || "Post"}
+                        className="absolute inset-0 w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                      {(post.likes_count || 0) > 0 && (
+                        <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                          ♥ {post.likes_count}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           )}
