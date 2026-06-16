@@ -1525,6 +1525,454 @@ async def paystack_webhook(request: Request, x_paystack_signature: str = Header(
         return {"status": "ok"}  # Always return 200 to Paystack
 
 
+
+# ===========================================================================
+# FLUTTERWAVE PAYMENT ENDPOINTS (Phase 4.x - replaces Paystack as default)
+# ---------------------------------------------------------------------------
+# Purpose: wallet top-up via Flutterwave v3 hosted checkout.
+# Booking payments STILL go through the wallet (`/bookings/{id}/pay-with-wallet`).
+# Paystack endpoints above remain dormant so we can roll back instantly by
+# repointing the frontend `paymentsAPI` if needed.
+# ===========================================================================
+
+FLUTTERWAVE_BASE = "https://api.flutterwave.com/v3"
+
+
+class FlutterwaveInitRequest(BaseModel):
+    amount: float  # major units (Naira), NOT kobo
+    email: EmailStr
+    purpose: str  # "wallet_topup" (only mode supported for now)
+    booking_id: Optional[int] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    redirect_url: Optional[str] = None  # client-supplied; backend appends nothing
+
+
+def get_flw_headers():
+    """Build Flutterwave Authorization headers. Returns None if no secret configured."""
+    secret_key = os.environ.get("FLW_SECRET_KEY")
+    if not secret_key:
+        return None
+    return {
+        "Authorization": f"Bearer {secret_key}",
+        "Content-Type": "application/json",
+    }
+
+
+def _generate_flw_tx_ref(purpose: str) -> str:
+    """Unique tx_ref. Prefix matches existing Paystack scheme so dashboard/admin
+    tooling can still filter by `istylist_*`."""
+    return f"istylist_{purpose}_flw_{uuid.uuid4().hex[:12]}"
+
+
+@api_router.post("/payments/flutterwave/initialize")
+async def initialize_flutterwave_payment(request: FlutterwaveInitRequest):
+    """Initialize a Flutterwave hosted-checkout transaction for wallet top-up.
+
+    Returns the same shape the frontend currently expects from the legacy
+    Paystack initializer (`status`, `authorization_url`, `reference`), so the
+    `paymentsAPI.initialize()` call site doesn't need restructuring.
+    """
+    try:
+        # Only wallet_topup is supported - bookings go through wallet payment
+        if request.purpose != "wallet_topup":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Flutterwave checkout is only available for wallet top-ups. "
+                       "Use /api/bookings/{id}/pay-with-wallet for booking payments."
+            )
+
+        headers = get_flw_headers()
+        if not headers:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Payment gateway not configured. FLW_SECRET_KEY is missing."
+            )
+
+        if request.amount <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Amount must be greater than 0"
+            )
+
+        tx_ref = _generate_flw_tx_ref(request.purpose)
+
+        # Resolve redirect_url - if frontend didn't supply, leave it empty
+        # (Flutterwave will then show a generic completion page).
+        redirect_url = (request.redirect_url or "").strip()
+
+        payload = {
+            "tx_ref": tx_ref,
+            "amount": f"{float(request.amount):.2f}",   # Flutterwave: major units, string OK
+            "currency": "NGN",
+            "payment_options": "card,banktransfer,ussd,account,mobilemoneyghana,mpesa",
+            "customer": {
+                "email": request.email,
+                "name": request.name or request.email.split("@")[0],
+                "phonenumber": request.phone or "",
+            },
+            "meta": {
+                "purpose": request.purpose,
+                "booking_id": request.booking_id,
+                "user_email": request.email,
+            },
+            "customizations": {
+                "title": "iStylist Wallet Top-Up",
+                "description": f"Top up your iStylist wallet ({CURRENCY}{request.amount:,.2f})",
+            },
+        }
+        if redirect_url:
+            payload["redirect_url"] = redirect_url
+
+        try:
+            flw_resp = requests.post(
+                f"{FLUTTERWAVE_BASE}/payments",
+                json=payload,
+                headers=headers,
+                timeout=30,
+            )
+        except Exception as net_ex:
+            logging.error(f"Flutterwave network error: {net_ex}")
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Could not reach payment gateway. Please try again."
+            )
+
+        if flw_resp.status_code not in (200, 201):
+            logging.error(f"Flutterwave init non-2xx: {flw_resp.status_code} {flw_resp.text[:500]}")
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to initialize payment with Flutterwave"
+            )
+
+        flw_data = flw_resp.json()
+        if (flw_data.get("status") or "").lower() != "success" or not (flw_data.get("data") or {}).get("link"):
+            logging.error(f"Flutterwave init unexpected payload: {flw_data}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=flw_data.get("message") or "Flutterwave initialization failed"
+            )
+
+        link = flw_data["data"]["link"]
+
+        # Save pending payment record (reuses existing payments table)
+        payment_record = {
+            "reference": tx_ref,
+            "email": request.email,
+            "amount": request.amount,
+            "purpose": request.purpose,
+            "payment_provider": "flutterwave",
+            "status": "pending",
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        try:
+            if check_table_exists("payments"):
+                supabase.table("payments").insert(payment_record).execute()
+        except Exception as db_ex:
+            logging.warning(f"Could not insert payment row (continuing): {db_ex}")
+
+        # Backward-compatible response shape
+        return {
+            "status": True,
+            "message": "Authorization URL created",
+            "authorization_url": link,
+            "reference": tx_ref,
+            "provider": "flutterwave",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"initialize_flutterwave_payment error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to initialize payment: {e}"
+        )
+
+
+async def _flutterwave_verify_and_settle(tx_ref: Optional[str], transaction_id: Optional[str] = None):
+    """Verify a Flutterwave transaction (by tx_ref preferred, else id) and apply
+    the wallet/escrow credit. Idempotent. Returns a dict matching the legacy
+    Paystack verify endpoint response so the frontend stays unchanged."""
+    headers = get_flw_headers()
+    if not headers:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Payment gateway not configured"
+        )
+
+    if not tx_ref and not transaction_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either tx_ref or transaction_id is required"
+        )
+
+    # Idempotency check on our own payments table
+    if tx_ref and check_table_exists("payments"):
+        try:
+            existing = supabase.table("payments").select("*").eq("reference", tx_ref).execute()
+            if existing.data:
+                payment = existing.data[0]
+                if payment.get("status") == "success" and payment.get("processed"):
+                    return {
+                        "status": "success",
+                        "message": "Payment already verified and processed",
+                        "reference": tx_ref,
+                        "amount": payment.get("amount"),
+                        "provider": "flutterwave",
+                    }
+        except Exception as ex:
+            logging.warning(f"flw verify idempotency lookup failed: {ex}")
+
+    # Call Flutterwave verify
+    try:
+        if tx_ref:
+            verify_resp = requests.get(
+                f"{FLUTTERWAVE_BASE}/transactions/verify_by_reference",
+                headers=headers,
+                params={"tx_ref": tx_ref},
+                timeout=30,
+            )
+        else:
+            verify_resp = requests.get(
+                f"{FLUTTERWAVE_BASE}/transactions/{transaction_id}/verify",
+                headers=headers,
+                timeout=30,
+            )
+    except Exception as net_ex:
+        logging.error(f"flw verify network error: {net_ex}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach payment gateway"
+        )
+
+    if verify_resp.status_code != 200:
+        logging.error(f"flw verify non-2xx: {verify_resp.status_code} {verify_resp.text[:500]}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to verify payment with Flutterwave"
+        )
+
+    flw_data = verify_resp.json()
+    if (flw_data.get("status") or "").lower() != "success":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=flw_data.get("message") or "Payment verification failed"
+        )
+
+    transaction = flw_data.get("data") or {}
+    raw_status = (transaction.get("status") or "").lower()
+    # Normalize to legacy contract: Paystack used "success", Flutterwave uses "successful"
+    normalized_status = "success" if raw_status == "successful" else raw_status
+
+    actual_tx_ref = transaction.get("tx_ref") or tx_ref
+    amount_naira = float(transaction.get("amount") or 0)         # already major units
+    charged_currency = (transaction.get("currency") or "NGN").upper()
+    meta = transaction.get("meta") or {}
+    purpose = meta.get("purpose") or "wallet_topup"
+    booking_id = meta.get("booking_id")
+    customer = transaction.get("customer") or {}
+    email = customer.get("email") or meta.get("user_email")
+
+    # Update payments row with raw payload + verified_at
+    try:
+        if check_table_exists("payments") and actual_tx_ref:
+            supabase.table("payments").update({
+                "status": normalized_status,
+                "paystack_response": transaction,  # reuse existing JSON column for raw payload
+                "verified_at": datetime.utcnow().isoformat(),
+            }).eq("reference", actual_tx_ref).execute()
+    except Exception as ex:
+        logging.warning(f"flw verify: could not update payments row: {ex}")
+
+    if normalized_status != "success":
+        return {
+            "status": normalized_status,
+            "message": f"Payment {normalized_status}",
+            "reference": actual_tx_ref,
+            "amount": amount_naira,
+            "provider": "flutterwave",
+        }
+
+    # Currency/amount sanity check
+    if charged_currency != "NGN":
+        logging.warning(f"flw verify: unexpected currency {charged_currency} on {actual_tx_ref}")
+
+    expected_amount = None
+    if check_table_exists("payments") and actual_tx_ref:
+        try:
+            row = supabase.table("payments").select("amount").eq("reference", actual_tx_ref).execute()
+            if row.data:
+                expected_amount = float(row.data[0].get("amount") or 0)
+        except Exception:
+            pass
+    if expected_amount is not None and abs(amount_naira - expected_amount) > 0.01:
+        logging.error(
+            f"flw verify amount mismatch for {actual_tx_ref}: charged={amount_naira} expected={expected_amount}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment amount mismatch"
+        )
+
+    # Find user & credit wallet/escrow
+    user_auth_id = None
+    if email:
+        try:
+            ures = supabase.table("users").select("auth_id").eq("email", email).execute()
+            if ures.data:
+                user_auth_id = ures.data[0]["auth_id"]
+        except Exception as ex:
+            logging.warning(f"flw verify: user lookup failed for {email}: {ex}")
+
+    if not user_auth_id:
+        logging.warning(f"flw verify: no user for email {email} (tx_ref={actual_tx_ref})")
+        return {
+            "status": "success",
+            "message": "Payment verified but user not found for wallet credit",
+            "reference": actual_tx_ref,
+            "amount": amount_naira,
+            "provider": "flutterwave",
+        }
+
+    try:
+        if purpose == "wallet_topup":
+            await _credit_wallet(user_auth_id, amount_naira, "TOPUP", actual_tx_ref)
+        elif purpose == "booking_escrow" and booking_id:
+            await _credit_escrow(user_auth_id, amount_naira, int(booking_id), actual_tx_ref)
+            if check_table_exists("bookings"):
+                supabase.table("bookings").update({
+                    "status": "pending",
+                    "payment_reference": actual_tx_ref,
+                    "payment_status": "paid",
+                }).eq("id", int(booking_id)).execute()
+    except Exception as credit_ex:
+        logging.error(f"flw verify: wallet/escrow credit failed for {actual_tx_ref}: {credit_ex}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Payment succeeded but wallet credit failed. Please contact support."
+        )
+
+    # Mark as processed (final idempotency gate)
+    try:
+        if check_table_exists("payments") and actual_tx_ref:
+            supabase.table("payments").update({
+                "processed": True,
+                "processed_at": datetime.utcnow().isoformat(),
+            }).eq("reference", actual_tx_ref).execute()
+    except Exception:
+        pass
+
+    # Notify user
+    if purpose == "wallet_topup":
+        try:
+            await create_notification(
+                recipient_auth_id=user_auth_id,
+                notification_type="wallet_topup_success",
+                title="Wallet Top-Up Successful",
+                message=f"Your wallet has been credited with {CURRENCY}{amount_naira:,.2f}",
+                metadata={"amount": amount_naira, "reference": actual_tx_ref, "provider": "flutterwave"},
+            )
+        except Exception as ex:
+            logging.warning(f"flw verify: notification failed: {ex}")
+
+    return {
+        "status": "success",
+        "message": "Payment successful",
+        "reference": actual_tx_ref,
+        "amount": amount_naira,
+        "provider": "flutterwave",
+    }
+
+
+@api_router.get("/payments/flutterwave/verify")
+async def verify_flutterwave_payment(
+    reference: Optional[str] = Query(None, description="Our tx_ref (preferred)"),
+    tx_ref: Optional[str] = Query(None, description="Alias of `reference`"),
+    transaction_id: Optional[str] = Query(None, description="Flutterwave numeric transaction_id (from redirect)"),
+):
+    """Verify a Flutterwave transaction by `tx_ref` (preferred) or
+    `transaction_id` (also returned in the redirect). Idempotent."""
+    try:
+        ref = reference or tx_ref
+        return await _flutterwave_verify_and_settle(ref, transaction_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"verify_flutterwave_payment error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to verify payment: {e}"
+        )
+
+
+@api_router.post("/webhooks/flutterwave")
+async def flutterwave_webhook(
+    request: Request,
+    verif_hash: Optional[str] = Header(None, alias="verif-hash"),
+):
+    """Handle Flutterwave webhook events. Verifies the `verif-hash` header
+    against `FLW_WEBHOOK_SECRET` (must match the Secret Hash set in the
+    Flutterwave dashboard - Settings - Webhooks)."""
+    try:
+        webhook_secret = os.environ.get("FLW_WEBHOOK_SECRET")
+        if not webhook_secret:
+            logging.error("FLW_WEBHOOK_SECRET not configured")
+            return {"status": "ignored", "reason": "webhook not configured"}
+
+        # Constant-time comparison
+        if not verif_hash or not hmac.compare_digest(verif_hash, webhook_secret):
+            logging.warning("Invalid Flutterwave webhook signature")
+            raise HTTPException(status_code=401, detail="Invalid signature")
+
+        try:
+            event_data = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON")
+
+        event = event_data.get("event") or event_data.get("event.type")
+        data = event_data.get("data") or {}
+
+        logging.info(f"Flutterwave webhook received: event={event} tx_ref={data.get('tx_ref')}")
+
+        # Log webhook for audit (best-effort)
+        try:
+            if check_table_exists("webhook_logs"):
+                supabase.table("webhook_logs").insert({
+                    "provider": "flutterwave",
+                    "event": event,
+                    "data": data,
+                    "created_at": datetime.utcnow().isoformat(),
+                }).execute()
+        except Exception:
+            pass
+
+        # Process charge.completed (Flutterwave's success event)
+        if event == "charge.completed":
+            tx_ref = data.get("tx_ref")
+            flw_id = data.get("id")
+            tx_status = (data.get("status") or "").lower()
+            if tx_status == "successful" and tx_ref:
+                # Re-verify with Flutterwave (don't trust webhook payload alone)
+                try:
+                    await _flutterwave_verify_and_settle(tx_ref, str(flw_id) if flw_id else None)
+                except HTTPException as he:
+                    logging.error(f"Webhook settle failed for {tx_ref}: {he.detail}")
+                except Exception as ex:
+                    logging.error(f"Webhook settle exception for {tx_ref}: {ex}")
+
+        return {"status": "ok"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Flutterwave webhook error: {e}")
+        # Always return 200 so Flutterwave doesn't retry on transient errors
+        return {"status": "ok"}
+
+
+# =========================== END FLUTTERWAVE BLOCK ===========================
+
+
+
 # =============================================================================
 # WALLET-BASED BOOKING PAYMENT (POST /api/bookings/{booking_id}/pay-with-wallet)
 # =============================================================================

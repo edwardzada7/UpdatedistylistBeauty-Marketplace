@@ -153,6 +153,78 @@ frontend:
         comment: "FeedScreen with newest-first feed, optimistic like toggling, owner soft-delete via dropdown, load-more pagination, provider FAB to open composer. PostComposerModal supports file upload (base64 up to 4MB) OR URL paste. Routes: /feed and /user/feed. Wired into HomeScreen (Discovery preview grid - 4 newest), ProviderProfileScreen (Portfolio grid), StylistDashboard (Portfolio & Feed entry). Not yet tested via browser."
 
   - task: "Phase 4 - AdminDashboardScreen with stats + tabs"
+
+# ============================================================================
+# Phase 4.x - Flutterwave Migration (replaces Paystack as default checkout)
+# ============================================================================
+# Replaces Paystack with Flutterwave v3 for wallet top-up while keeping all
+# wallet, escrow, booking, no-show, dispute, withdrawal, and notification
+# architecture completely untouched. Paystack endpoints kept dormant on the
+# backend for instant rollback (frontend can be repointed in 2 lines of api.js).
+
+backend:
+  - task: "Flutterwave v3 - initialize / verify / webhook endpoints"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added 3 endpoints additively (no schema changes): POST /api/payments/flutterwave/initialize (returns Flutterwave hosted checkout URL with backward-compatible response shape - authorization_url, reference, status), GET /api/payments/flutterwave/verify (accepts reference/tx_ref/transaction_id, idempotent, normalizes Flutterwave 'successful' to 'success' to match legacy contract), POST /api/webhooks/flutterwave (verif-hash header constant-time compared with FLW_WEBHOOK_SECRET, re-verifies via Flutterwave API before settling, idempotent). Reuses existing _credit_wallet and _credit_escrow helpers - wallet/escrow/notification flows untouched. Live Flutterwave call confirmed: generated valid checkout URL. 10/10 smoke tests pass. Wallet/withdrawal/booking regression: 59 pass + 2 PRE-EXISTING failures (same as before, unrelated to Flutterwave)."
+
+  - task: "Flutterwave env keys configured (LIVE)"
+    implemented: true
+    working: true
+    file: "/app/backend/.env"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added FLW_PUBLIC_KEY, FLW_SECRET_KEY (both LIVE keys - real money), FLW_WEBHOOK_SECRET (user-defined: elroielyonedwardfavour1onyedikamaduzada). Paystack env vars kept for dormant rollback path."
+
+  - task: "Paystack endpoints kept as dormant rollback"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "POST /api/payments/paystack/initialize, GET /api/payments/paystack/verify, POST /api/webhooks/paystack all preserved unchanged. To roll back: change 2 lines in /app/frontend/src/services/api.js (paymentsAPI.initialize/verify) from /flutterwave/ to /paystack/. Test confirms endpoints are still 200/4xx-reachable (not 404)."
+
+frontend:
+  - task: "Repoint paymentsAPI to Flutterwave + rebrand WalletScreen"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/services/api.js, /app/frontend/src/screens/WalletScreen.jsx, /app/frontend/.env"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "paymentsAPI.initialize -> POST /payments/flutterwave/initialize (now accepts name/phone/redirect_url). paymentsAPI.verify -> GET /payments/flutterwave/verify (now accepts optional transactionId in addition to reference). WalletScreen.jsx: passes redirect_url={origin}/wallet on init; reads tx_ref AND transaction_id (in addition to legacy reference/trxref) and Flutterwave status query param on return; handles cancelled payment without calling verify; user-facing text 'Paystack' renamed to 'Flutterwave'. Added REACT_APP_FLW_PUBLIC_KEY to frontend/.env. No UI/UX changes beyond branding. Frontend compiled successfully. Browser end-to-end not yet tested - requires real card."
+
+metadata:
+  flutterwave_webhook_url_to_set_in_dashboard:
+    url: "{REACT_APP_BACKEND_URL}/api/webhooks/flutterwave"
+    secret_hash_field: "elroielyonedwardfavour1onyedikamaduzada"
+  rollback_procedure:
+    - "Edit /app/frontend/src/services/api.js lines ~272-281"
+    - "Change '/payments/flutterwave/initialize' -> '/payments/paystack/initialize'"
+    - "Change '/payments/flutterwave/verify?...' -> '/payments/paystack/verify?reference=...'"
+    - "No backend changes required - Paystack endpoints still live"
+  flutterwave_tests: "10/10 pass (test_flutterwave.py) - includes 1 real LIVE call"
+  regression: "Wallet/booking/withdrawal: 59 pass, 2 PRE-EXISTING failures unchanged"
+
+
     implemented: true
     working: "NA"
     file: "/app/frontend/src/screens/AdminDashboardScreen.jsx"

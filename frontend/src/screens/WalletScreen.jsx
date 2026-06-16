@@ -146,17 +146,35 @@ export default function WalletScreen() {
     }
   }, [user?.id, isProvider]);
 
-  // Check for payment callback on mount
+  // Check for payment callback on mount.
+  // Flutterwave appends: ?status=successful&tx_ref=...&transaction_id=...
+  // Legacy Paystack appended: ?reference=...&trxref=...
+  // We accept all of them so we can roll back without breaking the redirect.
   useEffect(() => {
     const reference = searchParams.get("reference");
     const trxref = searchParams.get("trxref");
-    
-    const verifyPayment = async (ref) => {
+    const txRef = searchParams.get("tx_ref");
+    const transactionId = searchParams.get("transaction_id");
+    const flwStatus = searchParams.get("status"); // 'successful' | 'cancelled' | 'failed'
+
+    const ref = reference || trxref || txRef;
+    if (!ref && !transactionId) return;
+
+    // If user cancelled at the gateway, skip verify and just clean the URL.
+    if (flwStatus && flwStatus !== "successful" && flwStatus !== "completed") {
+      toast.error(`Payment ${flwStatus}. No funds were deducted.`);
+      navigate("/wallet", { replace: true });
+      return;
+    }
+
+    const verifyPayment = async () => {
       setVerifyingPayment(true);
       try {
-        const response = await paymentsAPI.verify(ref);
+        const response = await paymentsAPI.verify(ref, transactionId);
         if (response.data.status === "success") {
-          toast.success(`Payment successful! ${CURRENCY}${response.data.amount?.toLocaleString()} added to your wallet.`);
+          toast.success(
+            `Payment successful! ${CURRENCY}${response.data.amount?.toLocaleString()} added to your wallet.`
+          );
         } else {
           toast.error(`Payment ${response.data.status}: ${response.data.message}`);
         }
@@ -169,10 +187,8 @@ export default function WalletScreen() {
         setVerifyingPayment(false);
       }
     };
-    
-    if (reference || trxref) {
-      verifyPayment(reference || trxref);
-    }
+
+    verifyPayment();
   }, [searchParams, navigate]);
 
   // Fetch wallet data on user change
@@ -209,12 +225,16 @@ export default function WalletScreen() {
       const response = await paymentsAPI.initialize({
         amount: amount,
         email: userData.email,
-        purpose: "wallet_topup"
+        purpose: "wallet_topup",
+        name: userData.name || undefined,
+        phone: userData.phone || undefined,
+        // Bring the user back to this exact screen after payment.
+        redirect_url: `${window.location.origin}/wallet`,
       });
 
       if (response.data.status && response.data.authorization_url) {
-        toast.info("Redirecting to payment page...");
-        // Redirect to Paystack checkout
+        toast.info("Redirecting to secure payment page...");
+        // Redirect to Flutterwave hosted checkout
         window.location.href = response.data.authorization_url;
       } else {
         toast.error(response.data.message || "Failed to initialize payment");
@@ -705,7 +725,7 @@ export default function WalletScreen() {
               </div>
               
               <p className="text-xs text-center text-gray-500">
-                You will be redirected to Paystack for secure payment
+                You will be redirected to Flutterwave for secure payment
               </p>
             </CardContent>
           </Card>

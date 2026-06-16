@@ -265,17 +265,28 @@ export const withdrawalsAPI = {
     api.get(`/withdrawals/me?auth_id=${authId}&limit=${limit}`),
 };
 
-// ==================== PAYMENTS API (Paystack for wallet top-up only) ====================
+// ==================== PAYMENTS API (Flutterwave for wallet top-up only) ====================
+// Note: Paystack endpoints (/payments/paystack/initialize, /payments/paystack/verify)
+// remain available on the backend as a dormant fallback. To roll back, change the
+// two URLs below from /flutterwave/ to /paystack/ - no other change required.
 
 export const paymentsAPI = {
-  // Initialize a Paystack payment (ONLY for wallet top-up)
-  initialize: (data) => api.post("/payments/paystack/initialize", data),
-  
-  // Verify a payment by reference
-  verify: (reference) => api.get(`/payments/paystack/verify?reference=${reference}`),
-  
-  // Pay for a booking using wallet balance (NEW - wallet-based payment)
-  payWithWallet: (bookingId, authId) => api.post(`/bookings/${bookingId}/pay-with-wallet?auth_id=${authId}`),
+  // Initialize a Flutterwave payment (ONLY for wallet top-up).
+  // `data` shape: { amount, email, purpose: "wallet_topup", name?, phone?, redirect_url? }
+  initialize: (data) => api.post("/payments/flutterwave/initialize", data),
+
+  // Verify a payment by reference (our tx_ref).
+  // Optionally accepts transactionId (Flutterwave's numeric id, also passed back
+  // in the redirect query string as `transaction_id`).
+  verify: (reference, transactionId = null) => {
+    const qs = new URLSearchParams({ reference: reference || "" });
+    if (transactionId) qs.set("transaction_id", transactionId);
+    return api.get(`/payments/flutterwave/verify?${qs.toString()}`);
+  },
+
+  // Pay for a booking using wallet balance (wallet-based payment - unchanged)
+  payWithWallet: (bookingId, authId) =>
+    api.post(`/bookings/${bookingId}/pay-with-wallet?auth_id=${authId}`),
 };
 
 // ==================== NOTIFICATIONS API (Phase 2B) ====================
