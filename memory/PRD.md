@@ -526,3 +526,52 @@ import { Label } from "@/components/ui/label";
 
 **Known Adjacent Bug (NOT fixed — out of audit scope)**:
 - Line 188 of the same file calls `fetchBookingDetails()` after a successful wallet payment, but the function is named `fetchBooking`. This swallows successful payments into the catch block as errors. Recommend a 1-line rename in a follow-up audit credit.
+
+
+### Launch-Blocking Audit — Pass 2 (Fixed - Feb 16, 2026)
+
+**1. Wallet-Pay Success Handler — `fetchBookingDetails is not defined` (Fixed)**
+- File: `/app/frontend/src/screens/BookingDetailsScreen.jsx` line 188
+- After a successful wallet payment, code called `fetchBookingDetails()` — function doesn't exist (real name is `fetchBooking`). Successful payments were getting swallowed into the catch block as errors.
+- Fix: renamed call to `fetchBooking()`.
+
+**2. Booking Reminder Scheduler — Silently Dead Since May 29, 2026 (Fixed)** 🔴 CRITICAL
+- Symptom: backend logs showed `[reminder_scheduler] failed to start: No module named 'tzlocal'` on every boot for ~3 weeks.
+- Impact:
+  - ❌ NO booking reminder notifications were ever sent (2h + 30m before appointments)
+  - ❌ NO-show auto-finalization NEVER ran → disputed/no-show escrows could hang indefinitely without manual admin intervention
+- Root cause: APScheduler 3.10.4 requires `tzlocal` to resolve the `timezone="Africa/Lagos"` argument; the package was missing from `requirements.txt`.
+- Fix:
+  - `pip install tzlocal==5.4`
+  - `requirements.txt` regenerated via `pip freeze`
+  - Verified `[scheduler] started - booking reminders + no-show finalization (every 5 min)` on restart
+  - Manually triggered `/api/admin/booking-reminders/run` — returned `{"success":true,"stats":{"scanned":0,...}}`, confirming the job executes the Supabase query without errors.
+
+**3. Provider Dashboard Available Balance Reads Wrong Column (Fixed)** 🔴 LAUNCH-BLOCKER
+- File: `/app/backend/server.py` `/api/providers/dashboard-metrics` endpoint (line 3049)
+- Bug: read `wallets.available_balance` with NO fallback, but every escrow-release write path in the codebase updates the legacy `wallets.balance` column. On any wallet row whose `available_balance` column is null, the provider dashboard showed **₦0** even when `/api/wallet/me` showed the correct balance.
+- Fix: added 1-line fallback to `balance` column — same pattern already used in `/api/wallet/me/computed` (line ~2313).
+```python
+avail_raw = w.get("available_balance")
+if avail_raw is None:
+    avail_raw = w.get("balance")
+result["available_balance"] = float(avail_raw or 0)
+```
+
+**4. Flutterwave Verification + Webhook Hash — AUDIT PASSED (No Changes)** ✅
+- Initialize → Verify → Webhook flow inspected end-to-end (server.py lines 1530–1972).
+- Verified safeguards:
+  - ✅ HMAC constant-time signature compare on `verif-hash` header
+  - ✅ Pre-call idempotency check on `payments` table (returns cached success if already processed)
+  - ✅ Re-verifies via FLW `/transactions/verify_by_reference` from webhook handler — does NOT trust webhook payload
+  - ✅ Currency check (NGN expected, others logged)
+  - ✅ Amount mismatch protection (rejects > 0.01 NGN delta as 400)
+  - ✅ Wallet credit failure raises 500 to prevent false-success state
+  - ✅ Final `processed=True` gate set only after credit succeeds
+- Empirically validated by user's live ₦100 top-up + webhook + wallet/history update prior to this audit.
+
+**Files Modified in Pass 2**:
+- `/app/frontend/src/screens/BookingDetailsScreen.jsx` (renamed call)
+- `/app/backend/server.py` (added `balance` fallback in dashboard-metrics)
+- `/app/backend/requirements.txt` (added `tzlocal==5.4`)
+- No schema changes. No refactors. No feature additions.

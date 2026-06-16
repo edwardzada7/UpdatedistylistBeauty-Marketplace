@@ -185,7 +185,7 @@ const BookingDetailsScreen = () => {
           description: "Your booking has been confirmed."
         });
         // Refresh booking details
-        fetchBookingDetails();
+        fetchBooking();
       }
     } catch (error) {
       console.error("Wallet payment failed:", error);

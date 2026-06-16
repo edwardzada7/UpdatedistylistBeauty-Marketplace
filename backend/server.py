@@ -3046,7 +3046,14 @@ async def get_provider_dashboard_metrics(
             
             if wallet_response.data:
                 w = wallet_response.data[0]
-                result["available_balance"] = float(w.get("available_balance") or 0)
+                # Read with fallback: 'balance' is the canonical column written
+                # by all wallet update paths; 'available_balance' is an optional
+                # mirror column some schemas have. Same pattern as
+                # /api/wallet/me/computed (see line ~2313).
+                avail_raw = w.get("available_balance")
+                if avail_raw is None:
+                    avail_raw = w.get("balance")
+                result["available_balance"] = float(avail_raw or 0)
                 result["escrow_balance"] = float(w.get("escrow_balance") or 0)
                 # total_balance = available + escrow
                 result["total_balance"] = result["available_balance"] + result["escrow_balance"]
