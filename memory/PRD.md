@@ -509,3 +509,20 @@ UNIQUE(booking_id, reviewer_auth_id)
 **Files Modified**:
 - `/app/frontend/src/services/authService.js` - Added body stream error detection in catch block
 - `/app/frontend/src/screens/LoginScreen.jsx` - Added safer error message extraction
+
+
+### No-Show Blank Page Crash (Fixed - Feb 16, 2026)
+**Problem**: Tapping "Mark User No-Show" / "Provider Didn't Show" / "Dispute" on the booking details screen rendered a blank page — a launch-blocking bug for the dispute flow.
+
+**Root Cause**: `BookingDetailsScreen.jsx` used `<Label>` inside the no-show report modal (line 1017) and the dispute modal (line 1111), but never imported the `Label` component. The moment a user opened either modal, React encountered an undefined component reference and crashed the entire subtree → blank page.
+
+**Solution**: Added the missing import:
+```js
+import { Label } from "@/components/ui/label";
+```
+
+**Files Modified**:
+- `/app/frontend/src/screens/BookingDetailsScreen.jsx` — added one-line `Label` import (additive, no refactor)
+
+**Known Adjacent Bug (NOT fixed — out of audit scope)**:
+- Line 188 of the same file calls `fetchBookingDetails()` after a successful wallet payment, but the function is named `fetchBooking`. This swallows successful payments into the catch block as errors. Recommend a 1-line rename in a follow-up audit credit.
