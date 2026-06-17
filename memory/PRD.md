@@ -600,3 +600,31 @@ result["available_balance"] = float(avail_raw or 0)
 - `frontend/src/screens/ProviderBookingsScreen.jsx`
 - `frontend/src/screens/ProviderProfileScreen.jsx`
 - `frontend/src/screens/ProvidersListScreen.jsx`
+
+
+### Lambda 503 MB Bundle Bloat — Fixed (Feb 17, 2026)
+
+**Problem**: Vercel reported `Total bundle size (503.37 MB) exceeds Lambda ephemeral storage limit (500 MB)` when packaging the backend Python serverless function.
+
+**Root Cause**: `/app/backend/requirements.txt` contained 144 packages, of which only **6** were actually imported by the backend code. The file had been regenerated via `pip freeze` against the Emergent dev-pod environment (which has the entire kitchen sink — pandas, litellm, mypy, boto3, stripe SDK, huggingface, etc., none of which iStylist uses).
+
+**Fix**: Hand-curated `requirements.txt` to 13 essential packages → installed footprint reduced to ~139 MB (62 packages including transitives). Saved original as `requirements.txt.bloated.bak`.
+
+**Curated list (13 lines)**:
+- Web framework: `fastapi`, `starlette`, `uvicorn`, `python-multipart`, `email-validator`
+- Validation: `pydantic`
+- HTTP: `requests`, `httpx`
+- DB/Auth: `supabase`
+- Config: `python-dotenv`
+- Scheduler: `APScheduler`, `pytz`, `tzlocal`
+
+**Validation completed**:
+- Fresh venv install → 62 packages, 139 MB total
+- `from server import app` → 108 routes registered
+- Live backend restart → scheduler started (booking reminders + no-show finalization)
+- Endpoints verified: Flutterwave init/verify/webhook (422/400/401 — validation-error responses prove routes registered), wallet, transactions, bookings, staff, admin/booking-reminders — all responded correctly
+- Litellm Emergent-only wheel URL removed.
+
+**Files Modified**:
+- `/app/backend/requirements.txt` (rewritten, 13 lines, ~139 MB installed footprint)
+- `/app/backend/requirements.txt.bloated.bak` (original 144-line file preserved for rollback)
