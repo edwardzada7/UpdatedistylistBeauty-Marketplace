@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,15 +26,7 @@ const ProvidersListScreen = () => {
   const [filterVerified, setFilterVerified] = useState(FILTER_OPTIONS.ALL);
   const [sortBy, setSortBy] = useState(SORT_OPTIONS.RECOMMENDED);
 
-  useEffect(() => {
-    fetchProviders();
-  }, [serviceFilter, categoryFilter]);
-
-  useEffect(() => {
-    applyFilters();
-  }, [providers, searchQuery, filterVerified, sortBy]);
-
-  const fetchProviders = async () => {
+  const fetchProviders = useCallback(async () => {
     setLoading(true);
     try {
       // First try to get providers with services (Phase 1.4)
@@ -72,9 +64,14 @@ const ProvidersListScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
+    // sortBy is intentionally omitted from deps: it's only passed to the
+    // legacy fallback API, and sorting is re-applied client-side in
+    // applyFilters() whenever sortBy changes. Including sortBy here would
+    // cause an unnecessary server round-trip on every sort change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serviceFilter, categoryFilter]);
 
-  const applyFilters = () => {
+  const applyFilters = useCallback(() => {
     let filtered = [...providers];
 
     // Search filter
@@ -108,7 +105,15 @@ const ProvidersListScreen = () => {
     }
 
     setFilteredProviders(filtered);
-  };
+  }, [providers, searchQuery, filterVerified, sortBy]);
+
+  useEffect(() => {
+    fetchProviders();
+  }, [serviceFilter, categoryFilter, fetchProviders]);
+
+  useEffect(() => {
+    applyFilters();
+  }, [providers, searchQuery, filterVerified, sortBy, applyFilters]);
 
   // Get service name for filter display
   const getServiceName = () => {

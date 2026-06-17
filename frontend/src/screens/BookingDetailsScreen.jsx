@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { bookingsAPI, paymentsAPI, reviewsAPI } from "@/services/api";
@@ -77,18 +77,45 @@ const BookingDetailsScreen = () => {
   const authId = userData?.auth_id;
   const role = isProvider ? "provider" : "customer";
 
+  const fetchExistingReview = useCallback(async () => {
+    if (!booking || !authId) return;
+    try {
+      const response = await reviewsAPI.getByBooking(booking.id, authId);
+      setExistingReview(response.data);
+      if (response.data?.provider_reply) {
+        setReplyText(response.data.provider_reply);
+      }
+    } catch (error) {
+      // Review doesn't exist or error - that's fine
+      setExistingReview(null);
+    }
+  }, [booking, authId]);
+
+  const fetchBooking = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await bookingsAPI.getById(id, role);
+      setBooking(response.data);
+    } catch (error) {
+      console.error("Failed to fetch booking:", error);
+      toast.error("Failed to load booking details");
+    } finally {
+      setLoading(false);
+    }
+  }, [id, role]);
+
   useEffect(() => {
     if (id) {
       fetchBooking();
     }
-  }, [id]);
+  }, [id, fetchBooking]);
 
   // Fetch review when booking is loaded
   useEffect(() => {
     if (booking && authId) {
       fetchExistingReview();
     }
-  }, [booking?.id, authId]);
+  }, [booking?.id, authId, booking, fetchExistingReview]);
 
   // Live countdown for no-show deadline
   useEffect(() => {
@@ -113,33 +140,6 @@ const BookingDetailsScreen = () => {
     return () => clearInterval(t);
   }, [booking?.status, booking?.no_show_deadline]);
 
-
-  const fetchExistingReview = async () => {
-    if (!booking || !authId) return;
-    try {
-      const response = await reviewsAPI.getByBooking(booking.id, authId);
-      setExistingReview(response.data);
-      if (response.data?.provider_reply) {
-        setReplyText(response.data.provider_reply);
-      }
-    } catch (error) {
-      // Review doesn't exist or error - that's fine
-      setExistingReview(null);
-    }
-  };
-
-  const fetchBooking = async () => {
-    try {
-      setLoading(true);
-      const response = await bookingsAPI.getById(id, role);
-      setBooking(response.data);
-    } catch (error) {
-      console.error("Failed to fetch booking:", error);
-      toast.error("Failed to load booking details");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleStatusUpdate = async (newStatus) => {
     try {

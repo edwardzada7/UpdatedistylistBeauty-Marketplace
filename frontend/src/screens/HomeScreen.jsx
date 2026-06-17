@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,12 +28,7 @@ const HomeScreen = () => {
     }
   }, [isProvider, navigate]);
 
-  useEffect(() => {
-    fetchTopProviders();
-    fetchFeedPreview();
-  }, []);
-
-  const fetchTopProviders = async () => {
+  const fetchTopProviders = useCallback(async () => {
     try {
       const response = await stylistsAPI.getAll({ 
         verifiedOnly: true, 
@@ -52,11 +47,11 @@ const HomeScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Phase 4 - lightweight feed preview (top 4 newest posts). Fails silently
   // if the social-feed migration hasn't been applied.
-  const fetchFeedPreview = async () => {
+  const fetchFeedPreview = useCallback(async () => {
     try {
       const res = await feedAPI.list(userData?.auth_id, 4, 0);
       setFeedPreview(res.data?.posts || []);
@@ -66,7 +61,12 @@ const HomeScreen = () => {
     } finally {
       setLoadingFeed(false);
     }
-  };
+  }, [userData?.auth_id]);
+
+  useEffect(() => {
+    fetchTopProviders();
+    fetchFeedPreview();
+  }, [fetchTopProviders, fetchFeedPreview]);
 
   const firstName = displayName.split(" ")[0];
 

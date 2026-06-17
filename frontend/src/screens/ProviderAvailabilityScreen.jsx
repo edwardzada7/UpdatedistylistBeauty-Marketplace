@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { providersAPI } from "@/services/api";
@@ -70,13 +70,7 @@ const ProviderAvailabilityScreen = () => {
 
   const providerId = userData?.id;
 
-  // Load existing availability on mount
-  useEffect(() => {
-    if (!providerId) return;
-    loadAvailability();
-  }, [providerId]);
-
-  const loadAvailability = async () => {
+  const loadAvailability = useCallback(async () => {
     try {
       setLoading(true);
       const response = await providersAPI.getAvailability(providerId);
@@ -127,7 +121,13 @@ const ProviderAvailabilityScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [providerId]);
+
+  // Load existing availability on mount
+  useEffect(() => {
+    if (!providerId) return;
+    loadAvailability();
+  }, [providerId, loadAvailability]);
 
   // Update weekly availability for a day
   const updateDayAvailability = (dayValue, field, value) => {

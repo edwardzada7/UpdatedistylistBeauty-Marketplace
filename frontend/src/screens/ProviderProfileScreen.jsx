@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,33 +67,8 @@ const ProviderProfileScreen = () => {
     }
   };
 
-  useEffect(() => {
-    fetchProviderProfile();
-  }, [userId]);
-
-  // Phase 4 - Load staff for this provider (only relevant for business providers)
-  useEffect(() => {
-    if (!userId) return;
-    (async () => {
-      try {
-        const res = await staffAPI.listForProvider(userId, true);
-        setStaffList(res.data?.staff || []);
-      } catch {
-        setStaffList([]);
-      }
-    })();
-  }, [userId]);
-
-  // Fetch reviews when provider data is available
-  useEffect(() => {
-    if (provider?.provider_id) {
-      fetchProviderReviews();
-      fetchPortfolioPosts();
-    }
-  }, [provider?.provider_id]);
-
   // Phase 4 - Portfolio
-  const fetchPortfolioPosts = async () => {
+  const fetchPortfolioPosts = useCallback(async () => {
     if (!provider?.provider_id) return;
     setLoadingPortfolio(true);
     try {
@@ -105,9 +80,9 @@ const ProviderProfileScreen = () => {
     } finally {
       setLoadingPortfolio(false);
     }
-  };
+  }, [provider?.provider_id, userData?.auth_id]);
 
-  const fetchProviderReviews = async () => {
+  const fetchProviderReviews = useCallback(async () => {
     if (!provider) return;
     
     setLoadingReviews(true);
@@ -130,9 +105,9 @@ const ProviderProfileScreen = () => {
     } finally {
       setLoadingReviews(false);
     }
-  };
+  }, [provider]);
 
-  const fetchProviderProfile = async () => {
+  const fetchProviderProfile = useCallback(async () => {
     setLoading(true);
     try {
       const response = await providersAPI.getFullProfile(userId);
@@ -143,7 +118,32 @@ const ProviderProfileScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
+
+  useEffect(() => {
+    fetchProviderProfile();
+  }, [userId, fetchProviderProfile]);
+
+  // Phase 4 - Load staff for this provider (only relevant for business providers)
+  useEffect(() => {
+    if (!userId) return;
+    (async () => {
+      try {
+        const res = await staffAPI.listForProvider(userId, true);
+        setStaffList(res.data?.staff || []);
+      } catch {
+        setStaffList([]);
+      }
+    })();
+  }, [userId]);
+
+  // Fetch reviews when provider data is available
+  useEffect(() => {
+    if (provider?.provider_id) {
+      fetchProviderReviews();
+      fetchPortfolioPosts();
+    }
+  }, [provider?.provider_id, fetchProviderReviews, fetchPortfolioPosts]);
 
   // Toggle service selection
   const toggleServiceSelection = (serviceId) => {

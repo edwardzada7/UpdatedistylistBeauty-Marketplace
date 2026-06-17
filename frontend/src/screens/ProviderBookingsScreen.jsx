@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { bookingsAPI } from "@/services/api";
@@ -43,13 +43,7 @@ const ProviderBookingsScreen = () => {
 
   const authId = userData?.auth_id;
 
-  useEffect(() => {
-    if (authId && isProvider) {
-      fetchBookings();
-    }
-  }, [authId, isProvider]);
-
-  const fetchBookings = async () => {
+  const fetchBookings = useCallback(async () => {
     try {
       setLoading(true);
       const response = await bookingsAPI.list({
@@ -63,7 +57,13 @@ const ProviderBookingsScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [authId]);
+
+  useEffect(() => {
+    if (authId && isProvider) {
+      fetchBookings();
+    }
+  }, [authId, isProvider, fetchBookings]);
 
   const handleStatusUpdate = async (bookingId, newStatus, e) => {
     e.stopPropagation();

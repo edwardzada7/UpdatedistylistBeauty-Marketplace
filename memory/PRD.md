@@ -575,3 +575,28 @@ result["available_balance"] = float(avail_raw or 0)
 - `/app/backend/server.py` (added `balance` fallback in dashboard-metrics)
 - `/app/backend/requirements.txt` (added `tzlocal==5.4`)
 - No schema changes. No refactors. No feature additions.
+
+
+### Vercel Deployment Blocker — ESLint Warnings-as-Errors (Fixed - Feb 17, 2026)
+
+**Problem**: Vercel build failed at "Creating an optimized production build... Treating warnings as errors because process.env.CI = true. Failed to compile." Adding `CI=false` env var to Vercel did not resolve the issue (Vercel internally forces `CI=true`).
+
+**Root Cause**: 10 `react-hooks/exhaustive-deps` lint warnings across 6 screen files. CRA's `build` script escalates all ESLint warnings to errors when `CI=true`, which Vercel sets unconditionally for every build.
+
+**Fix (Option D — proper useCallback refactor)**: Wrapped each helper function (`fetchBooking`, `fetchExistingReview`, `fetchTopProviders`, `fetchFeedPreview`, `loadAvailability`, `fetchBookings`, `fetchProviderProfile`, `fetchProviderReviews`, `fetchPortfolioPosts`, `fetchProviders`, `applyFilters`) in `useCallback` with proper dependency arrays, then added each wrapped function to its triggering `useEffect`'s deps. Reordered declarations to avoid temporal dead zone (useCallback definitions now precede the useEffects that consume them).
+
+**Special case — `ProvidersListScreen.fetchProviders`**: `sortBy` is read inside the function (for the legacy stylists API fallback only) but client-side sort already runs via `applyFilters` whenever `sortBy` changes. Including `sortBy` in fetchProviders' deps would trigger an unnecessary server round-trip on every sort click. Used `// eslint-disable-next-line react-hooks/exhaustive-deps` with a comment explaining the deliberate omission. This is the React-team-endorsed pattern for intentional dep exclusions.
+
+**Cleanup bug fixed in the same pass**: Removed orphan `tailsScreen;` token at end of `BookingDetailsScreen.jsx` (leftover from a prior botched edit). This was causing a runtime `ReferenceError` after the refactor.
+
+**Verification**:
+- `CI=true yarn build` → `Compiled successfully.` (was previously `Failed to compile.`)
+- Preview URL smoke-tested: login screen renders cleanly, zero console errors
+
+**Files Modified**:
+- `frontend/src/screens/BookingDetailsScreen.jsx`
+- `frontend/src/screens/HomeScreen.jsx`
+- `frontend/src/screens/ProviderAvailabilityScreen.jsx`
+- `frontend/src/screens/ProviderBookingsScreen.jsx`
+- `frontend/src/screens/ProviderProfileScreen.jsx`
+- `frontend/src/screens/ProvidersListScreen.jsx`
