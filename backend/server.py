@@ -466,6 +466,7 @@ async def get_user(user_id: int):
 @api_router.get("/users/by-auth/{auth_id}", response_model=UserResponse)
 async def get_user_by_auth_id(auth_id: str):
     """Get a user by auth_id"""
+    logging.info("[route-entered] GET /api/users/by-auth/{auth_id} auth_id=%s", auth_id)
     try:
         response = supabase.table("users").select("*").eq("auth_id", auth_id).execute()
         if not response.data:
@@ -588,6 +589,7 @@ async def get_all_stylists(
     sort_by: str = "hourly_rate"  # hourly_rate, verified, premium
 ):
     """Get all stylists with optional filtering and sorting"""
+    logging.info("[route-entered] GET /api/stylists verified_only=%s premium_only=%s sort_by=%s", verified_only, premium_only, sort_by)
     try:
         # Build query - use specific relationship name to avoid ambiguity
         query = supabase.table("stylists").select("*, users!stylists_user_id_fkey(name, email)")
@@ -6837,6 +6839,7 @@ async def list_feed_posts(
     provider_id: Optional[int] = Query(None, description="Filter to a single provider"),
 ):
     """Public feed listing, newest first. Inactive posts excluded."""
+    logging.info("[route-entered] GET /api/feed/posts limit=%s offset=%s provider_id=%s", limit, offset, provider_id)
     _require_feed_tables()
     try:
         q = supabase.table("provider_posts").select("*", count="exact").eq("is_active", True)
@@ -7389,7 +7392,13 @@ async def admin_list_providers(
 
 
 # Include the router in the main app
-app.include_router(api_router)
+try:
+    app.include_router(api_router)
+    logging.info("[startup] api_router included successfully (%d routes)", len(api_router.routes))
+except Exception as _e:
+    import traceback as _tb
+    logging.error("[startup] FAILED to include api_router: %s\n%s", _e, _tb.format_exc())
+    raise
 
 app.add_middleware(
     CORSMiddleware,
@@ -7398,6 +7407,61 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ====================================================================
+# DIAGNOSTIC ENDPOINTS + GLOBAL EXCEPTION HANDLER
+# Added for Railway 502 root-cause investigation. Safe, additive only.
+# ====================================================================
+import traceback as _diag_tb
+from fastapi import Request as _DiagRequest
+from fastapi.responses import JSONResponse as _DiagJSONResponse
+
+@app.get("/health")
+async def diag_health():
+    """Lightweight liveness probe. No DB, no auth."""
+    return {"status": "ok"}
+
+@app.get("/debug/env")
+async def diag_env():
+    """Reports presence (not values) of critical env vars. Never returns secrets."""
+    return {
+        "supabase_url_present": bool(os.environ.get("SUPABASE_URL")),
+        "supabase_key_present": bool(os.environ.get("SUPABASE_SERVICE_ROLE_KEY")),
+        "cors_origins_present": bool(os.environ.get("CORS_ORIGINS")),
+        "port_env": os.environ.get("PORT"),
+    }
+
+@app.exception_handler(Exception)
+async def diag_global_exception_handler(request: _DiagRequest, exc: Exception):
+    """Catches any unhandled exception and emits the full traceback to logs.
+    Routes that already raise HTTPException are NOT affected (FastAPI handles
+    those before reaching this handler)."""
+    tb_str = _diag_tb.format_exc()
+    logging.error(
+        "[unhandled_exception] path=%s method=%s type=%s msg=%s\n%s",
+        request.url.path, request.method, type(exc).__name__, str(exc), tb_str,
+    )
+    return _DiagJSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error",
+            "exception_type": type(exc).__name__,
+            "exception_message": str(exc),
+        },
+    )
+
+# Startup port + env diagnostic - prints once at boot so Railway logs show
+# exactly what uvicorn bound to vs what $PORT contained.
+@app.on_event("startup")
+async def diag_startup_env_dump():
+    logging.info(
+        "[startup-diag] PORT=%r SUPABASE_URL_present=%s SUPABASE_KEY_present=%s CORS_ORIGINS=%r",
+        os.environ.get("PORT"),
+        bool(os.environ.get("SUPABASE_URL")),
+        bool(os.environ.get("SUPABASE_SERVICE_ROLE_KEY")),
+        os.environ.get("CORS_ORIGINS"),
+    )
+# ====================================================================
 
 # Configure logging
 logging.basicConfig(
