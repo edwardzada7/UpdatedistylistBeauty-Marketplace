@@ -6,7 +6,14 @@
  */
 export function timeAgoShort(input) {
   if (!input) return "";
-  const d = input instanceof Date ? input : new Date(input);
+  // Defensive UTC parsing: legacy timestamps from the backend may lack a
+  // timezone marker. JS treats naive ISO strings as LOCAL, which created
+  // a 1-hour offset for WAT users. Append 'Z' if no offset is present.
+  let normalized = input;
+  if (typeof input === "string" && !/Z$|[+-]\d{2}:?\d{2}$/.test(input)) {
+    normalized = input + "Z";
+  }
+  const d = normalized instanceof Date ? normalized : new Date(normalized);
   if (isNaN(d.getTime())) return "";
   const diff = Date.now() - d.getTime();
   if (diff < 0) return "Just now";

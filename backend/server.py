@@ -3215,6 +3215,12 @@ async def create_notification(
             "title": title,
             "message": message,
             "read": False,
+            # Explicit UTC-aware ISO timestamp (with +00:00 suffix) so the
+            # frontend's `new Date(...)` parses unambiguously. Without this,
+            # Postgres' DEFAULT NOW() returned a naive string that JS
+            # interpreted as LOCAL time, producing "1h ago" for new notifications
+            # in WAT (UTC+1) browsers.
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
         if actor_auth_id:
             notification_data["actor_auth_id"] = actor_auth_id

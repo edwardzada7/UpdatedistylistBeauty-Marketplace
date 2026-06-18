@@ -217,8 +217,17 @@ const NotificationsScreen = () => {
 
   const formatTimeAgo = (dateString) => {
     if (!dateString) return "";
-    
-    const date = new Date(dateString);
+
+    // Defensive UTC parsing: if the timestamp has no timezone marker (legacy
+    // rows from before the backend fix), append 'Z' so `new Date()` treats it
+    // as UTC instead of LOCAL time. Without this, WAT (UTC+1) browsers would
+    // see "1h ago" for notifications created seconds ago.
+    let ts = dateString;
+    if (typeof ts === "string" && !/Z$|[+-]\d{2}:?\d{2}$/.test(ts)) {
+      ts = ts + "Z";
+    }
+
+    const date = new Date(ts);
     const now = new Date();
     const diffMs = now - date;
     const diffMins = Math.floor(diffMs / 60000);
