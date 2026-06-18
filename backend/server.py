@@ -2884,7 +2884,15 @@ async def admin_process_withdrawal(
                 )
             
             wallet = wallet_response.data[0]
-            available_balance = float(wallet.get("available_balance") or wallet.get("balance") or 0)
+            # Read from canonical `balance` column FIRST. All escrow-release and
+            # wallet-update paths in this codebase write to `balance` (see line ~1311,
+            # ~2221). `available_balance` is a sparsely-populated legacy mirror column
+            # that may be stale. Reading it first caused a wrong starting balance
+            # (e.g. stale 4000 → withdraw 2000 → result 2000 instead of 32000).
+            balance_val = wallet.get("balance")
+            if balance_val is None:
+                balance_val = wallet.get("available_balance")
+            available_balance = float(balance_val or 0)
             
             # Re-check balance
             if available_balance < amount:
