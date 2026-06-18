@@ -132,7 +132,9 @@ export default function AdminWithdrawalsScreen() {
       const data = await response.json();
 
       if (response.ok && data.ok) {
-        toast.success(`Withdrawal #${id} approved successfully`);
+        toast.success(`Withdrawal approved`);
+        setShowApproveModal(false);
+        setApprovingWithdrawal(null);
         fetchWithdrawals(activeTab);
       } else {
         toast.error(data.detail || "Failed to approve withdrawal");
@@ -143,6 +145,11 @@ export default function AdminWithdrawalsScreen() {
     } finally {
       setProcessingId(null);
     }
+  };
+
+  const openApproveModal = (withdrawal) => {
+    setApprovingWithdrawal(withdrawal);
+    setShowApproveModal(true);
   };
 
   const openRejectModal = (id) => {
@@ -177,7 +184,7 @@ export default function AdminWithdrawalsScreen() {
       const data = await response.json();
 
       if (response.ok && data.ok) {
-        toast.success(`Withdrawal #${rejectingId} rejected`);
+        toast.success(`Withdrawal rejected`);
         setShowRejectModal(false);
         setRejectingId(null);
         setRejectReason("");
@@ -211,11 +218,6 @@ export default function AdminWithdrawalsScreen() {
       dateStyle: "medium",
       timeStyle: "short"
     });
-  };
-
-  const maskAccountNumber = (num) => {
-    if (!num || num.length < 4) return num;
-    return "******" + num.slice(-4);
   };
 
   const getStatusBadge = (status) => {
@@ -376,7 +378,8 @@ export default function AdminWithdrawalsScreen() {
                             <TableHead>Bank</TableHead>
                             <TableHead>Account</TableHead>
                             <TableHead>Status</TableHead>
-                            <TableHead>Date</TableHead>
+                            <TableHead>Request Date</TableHead>
+                            <TableHead>Approval Date</TableHead>
                             <TableHead>Note</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
@@ -394,13 +397,16 @@ export default function AdminWithdrawalsScreen() {
                               <TableCell>{w.bank_name}</TableCell>
                               <TableCell>
                                 <div className="text-sm">{w.account_name}</div>
-                                <div className="text-xs text-gray-500 font-mono">
-                                  {maskAccountNumber(w.account_number)}
+                                <div className="text-xs text-gray-500 font-mono" data-testid={`account-number-${w.id}`}>
+                                  {w.account_number}
                                 </div>
                               </TableCell>
                               <TableCell>{getStatusBadge(w.status)}</TableCell>
                               <TableCell className="text-xs text-gray-500">
                                 {formatDate(w.created_at)}
+                              </TableCell>
+                              <TableCell className="text-xs text-gray-500" data-testid={`approval-date-${w.id}`}>
+                                {w.status !== "pending" ? formatDate(w.updated_at) : "-"}
                               </TableCell>
                               <TableCell className="max-w-[150px] truncate text-sm text-gray-500">
                                 {w.note || "-"}
@@ -410,7 +416,7 @@ export default function AdminWithdrawalsScreen() {
                                   <div className="flex gap-2 justify-end">
                                     <Button
                                       size="sm"
-                                      onClick={() => handleApprove(w.id)}
+                                      onClick={() => openApproveModal(w)}
                                       disabled={processingId === w.id}
                                       className="bg-green-600 hover:bg-green-700"
                                       data-testid={`approve-btn-${w.id}`}
@@ -470,12 +476,18 @@ export default function AdminWithdrawalsScreen() {
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-500">Account #:</span>
-                                <span className="font-mono">{maskAccountNumber(w.account_number)}</span>
+                                <span className="font-mono" data-testid={`account-number-card-${w.id}`}>{w.account_number}</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-gray-500">Date:</span>
+                                <span className="text-gray-500">Request Date:</span>
                                 <span className="text-xs">{formatDate(w.created_at)}</span>
                               </div>
+                              {w.status !== "pending" && (
+                                <div className="flex justify-between">
+                                  <span className="text-gray-500">Approval Date:</span>
+                                  <span className="text-xs">{formatDate(w.updated_at)}</span>
+                                </div>
+                              )}
                               {w.note && (
                                 <div className="pt-2 border-t">
                                   <span className="text-gray-500">Note: </span>
@@ -488,7 +500,7 @@ export default function AdminWithdrawalsScreen() {
                               <div className="flex gap-2 mt-4">
                                 <Button
                                   size="sm"
-                                  onClick={() => handleApprove(w.id)}
+                                  onClick={() => openApproveModal(w)}
                                   disabled={processingId === w.id}
                                   className="flex-1 bg-green-600 hover:bg-green-700"
                                 >
@@ -524,6 +536,80 @@ export default function AdminWithdrawalsScreen() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Approve Confirmation Modal */}
+      {showApproveModal && approvingWithdrawal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-green-600">
+                <CheckCircle className="h-5 w-5" />
+                Approve Withdrawal #{approvingWithdrawal.id}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2 text-sm bg-gray-50 rounded-lg p-3">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Amount:</span>
+                  <span className="font-semibold">{CURRENCY}{approvingWithdrawal.amount?.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Account Name:</span>
+                  <span>{approvingWithdrawal.account_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Bank:</span>
+                  <span>{approvingWithdrawal.bank_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Account #:</span>
+                  <span className="font-mono">{approvingWithdrawal.account_number}</span>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg text-amber-800 text-sm">
+                <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <p>
+                  Confirm the bank details above match the recipient. Once approved, the amount will be debited from the provider&apos;s wallet and this action cannot be undone.
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    setShowApproveModal(false);
+                    setApprovingWithdrawal(null);
+                  }}
+                  disabled={processingId === approvingWithdrawal.id}
+                  data-testid="cancel-approve-btn"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 bg-green-600 hover:bg-green-700"
+                  onClick={() => handleApprove(approvingWithdrawal.id)}
+                  disabled={processingId === approvingWithdrawal.id}
+                  data-testid="confirm-approve-btn"
+                >
+                  {processingId === approvingWithdrawal.id ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Confirm Approve
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Reject Modal */}
       {showRejectModal && (
