@@ -174,7 +174,13 @@ const ProviderAvailabilityScreen = () => {
   const handleSave = async () => {
     try {
       setSaving(true);
-      
+
+      // Guard: providerId must be available before we can save
+      if (!providerId) {
+        toast.error("Your profile is still loading. Please wait a moment and try again.");
+        return;
+      }
+
       // Validate weekly availability
       for (const day of weeklyAvailability) {
         if (day.is_active) {
@@ -203,7 +209,16 @@ const ProviderAvailabilityScreen = () => {
       toast.success("Availability settings saved!");
     } catch (error) {
       console.error("Failed to save availability:", error);
-      toast.error("Failed to save settings. Please try again.");
+      // Surface the actual backend error so users (and support) can see WHY the save failed
+      // instead of a generic message that hides the real cause.
+      const backendDetail = error?.response?.data?.detail;
+      const networkMsg = error?.message;
+      const reason =
+        (typeof backendDetail === "string" && backendDetail) ||
+        (backendDetail && JSON.stringify(backendDetail)) ||
+        networkMsg ||
+        "Unknown error";
+      toast.error(`Failed to save settings: ${reason}`);
     } finally {
       setSaving(false);
     }
