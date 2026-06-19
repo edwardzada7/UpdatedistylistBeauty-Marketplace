@@ -46,6 +46,10 @@ export default function AdminWithdrawalsScreen() {
   const [rejectingId, setRejectingId] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
 
+  // Approve confirmation modal state
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [approvingWithdrawal, setApprovingWithdrawal] = useState(null);
+
   // Check auth on mount
   useEffect(() => {
     const storedKey = sessionStorage.getItem(ADMIN_KEY_STORAGE);
