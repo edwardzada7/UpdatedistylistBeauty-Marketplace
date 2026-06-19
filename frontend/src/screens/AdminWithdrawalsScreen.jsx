@@ -26,8 +26,8 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
 
-const ADMIN_KEY_STORAGE = "ADMIN_KEY";
 const API_BASE = process.env.REACT_APP_BACKEND_URL || "";
 const CURRENCY = "₦";
 

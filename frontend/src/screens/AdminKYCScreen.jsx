@@ -9,8 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, CheckCircle, XCircle, Eye, ArrowLeft, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import KYCStatusBadge from "@/components/KYCStatusBadge";
-
-const ADMIN_KEY_STORAGE = "istylist_admin_key";
+import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
 
 export default function AdminKYCScreen() {
   const navigate = useNavigate();

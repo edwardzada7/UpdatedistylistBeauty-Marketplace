@@ -628,3 +628,19 @@ result["available_balance"] = float(avail_raw or 0)
 **Files Modified**:
 - `/app/backend/requirements.txt` (rewritten, 13 lines, ~139 MB installed footprint)
 - `/app/backend/requirements.txt.bloated.bak` (original 144-line file preserved for rollback)
+
+
+### Admin KYC Navigation Bug — Fixed (Feb 21, 2026)
+
+**Problem**: Clicking "Review KYC Submissions" on Admin Dashboard "refreshed" back to `/admin` instead of opening `/admin/kyc`.
+
+**Root Cause**: sessionStorage key drift. `AdminLoginScreen`, `AdminDashboardScreen`, `AdminWithdrawalsScreen` all wrote/read `"ADMIN_KEY"`, but the new `AdminKYCScreen.jsx` read `"istylist_admin_key"`. On mount it found no key and ran `navigate("/admin", { replace: true })` — looked like a refresh. Routing itself was fine.
+
+**Fix**: Created `/app/frontend/src/constants/adminAuth.js` with single source of truth `ADMIN_KEY_STORAGE = "ADMIN_KEY"`. Removed local re-declarations from all 4 admin screens and imported the shared constant instead.
+
+**Files Modified**:
+- `/app/frontend/src/constants/adminAuth.js` (new)
+- `/app/frontend/src/screens/AdminKYCScreen.jsx`
+- `/app/frontend/src/screens/AdminLoginScreen.jsx`
+- `/app/frontend/src/screens/AdminDashboardScreen.jsx`
+- `/app/frontend/src/screens/AdminWithdrawalsScreen.jsx`

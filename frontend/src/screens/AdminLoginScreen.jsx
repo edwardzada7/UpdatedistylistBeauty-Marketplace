@@ -6,8 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Shield, KeyRound, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-
-const ADMIN_KEY_STORAGE = "ADMIN_KEY";
+import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
 
 export default function AdminLoginScreen() {
   const navigate = useNavigate();

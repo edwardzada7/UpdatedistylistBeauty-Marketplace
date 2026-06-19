@@ -37,8 +37,8 @@ import {
 import { toast } from "sonner";
 import { adminAPI } from "@/services/api";
 import { timeAgoShort } from "@/utils/timeAgo";
+import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
 
-const ADMIN_KEY_STORAGE = "ADMIN_KEY";
 const CURRENCY = "₦";
 
 /**
