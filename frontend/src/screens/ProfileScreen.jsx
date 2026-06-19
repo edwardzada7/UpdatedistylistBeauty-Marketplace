@@ -7,9 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, User, Mail, Phone, Save, Loader2, LogOut, Shield, Star, MapPin, FileText, Globe, Building2, CalendarClock } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { ArrowLeft, User, Mail, Phone, Save, Loader2, LogOut, Shield, Star, MapPin, FileText, Globe, Building2, CalendarClock, AlertTriangle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { usersAPI, stylistsAPI, kycAPI } from "@/services/api";
+import { loginWithEmail } from "@/services/authService";
 import { useAuth } from "@/contexts/AuthContext";
 import { TOAST_MESSAGES, APP_NAME, CURRENCY } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
@@ -17,6 +19,8 @@ import KYCStatusBadge from "@/components/KYCStatusBadge";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
 import NotificationBell from "@/components/NotificationBell";
+
+const DELETE_CONFIRMATION_PHRASE = "DELETE MY ACCOUNT";
 
 const ProfileScreen = () => {
   const navigate = useNavigate();
@@ -27,6 +31,12 @@ const ProfileScreen = () => {
 
   // Phase 5 - KYC status
   const [kycStatus, setKycStatus] = useState("not_submitted");
+
+  // Phase 6 - Delete Account modal state
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePhrase, setDeletePhrase] = useState("");
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // User form data
   const [formData, setFormData] = useState({
@@ -184,6 +194,52 @@ const ProfileScreen = () => {
     }
   };
 
+  // Phase 6 - Delete Account flow.
+  // Requires: typed phrase "DELETE MY ACCOUNT" + correct password.
+  // Step 1: re-authenticate via Supabase signInWithPassword (loginWithEmail)
+  // Step 2: call backend soft-delete endpoint
+  // Step 3: sign out + redirect to /login
+  const handleDeleteAccount = async () => {
+    const email = userData?.email || user?.email;
+    if (!email) {
+      toast.error("No email on file. Cannot proceed.");
+      return;
+    }
+    if (deletePhrase.trim() !== DELETE_CONFIRMATION_PHRASE) {
+      toast.error(`You must type exactly: ${DELETE_CONFIRMATION_PHRASE}`);
+      return;
+    }
+    if (!deletePassword) {
+      toast.error("Password is required");
+      return;
+    }
+    setDeleteLoading(true);
+    try {
+      // Step 1 - re-auth to verify password
+      try {
+        await loginWithEmail(email, deletePassword);
+      } catch (authErr) {
+        toast.error("Incorrect password. Account NOT deleted.");
+        setDeleteLoading(false);
+        return;
+      }
+      // Step 2 - backend soft delete
+      const authId = userData?.auth_id || user?.id;
+      await usersAPI.deleteAccount(authId, deletePhrase.trim());
+      toast.success("Your account has been deleted.");
+      setDeleteOpen(false);
+      // Step 3 - sign out + hard-redirect to /login
+      try { await signOut(); } catch (_) { /* ignore */ }
+      window.location.replace("/login?reason=account_deleted");
+    } catch (err) {
+      console.error("[delete-account] failed:", err);
+      const detail = err?.response?.data?.detail;
+      const msg = typeof detail === "string" ? detail : (detail?.message || err?.message || "Failed to delete account");
+      toast.error(msg);
+      setDeleteLoading(false);
+    }
+  };
+
   // Show empty state if no user at all
   if (!user) {
     return (
@@ -265,11 +321,23 @@ const ProfileScreen = () => {
                           Premium
                         </Badge>
                       )}
-                      {/* Phase 5 - account type + KYC badge */}
-                      {userData?.account_type && (
-                        <Badge variant="outline" className="capitalize" data-testid="account-type-badge">
-                          {userData.account_type}
+                      {/* Phase 5/6 - Verified badge w/ account type */}
+                      {kycStatus === "verified" ? (
+                        <Badge
+                          className="bg-emerald-50 text-emerald-700 border-emerald-200"
+                          data-testid="verified-account-badge"
+                        >
+                          <Shield className="h-3 w-3 mr-1" />
+                          {userData?.account_type === "business"
+                            ? "Verified Business"
+                            : "Verified Individual"}
                         </Badge>
+                      ) : (
+                        userData?.account_type && (
+                          <Badge variant="outline" className="capitalize" data-testid="account-type-badge">
+                            {userData.account_type}
+                          </Badge>
+                        )
                       )}
                       <button onClick={() => navigate("/profile/kyc")} data-testid="kyc-link-from-profile">
                         <KYCStatusBadge status={kycStatus} />
@@ -627,6 +695,113 @@ const ProfileScreen = () => {
               </Button>
             </CardContent>
           </Card>
+
+          {/* Phase 6 - Danger Zone: permanent account deletion */}
+          <Card className="border-red-300 bg-red-50/60" data-testid="danger-zone-card">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2 text-red-700">
+                <AlertTriangle className="h-4 w-4" />
+                Danger Zone
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-red-700/90">
+                Deleting your account is permanent. Your profile will be hidden from
+                the marketplace and you will no longer be able to sign in. Your
+                bookings, wallet history and payouts are preserved for compliance.
+              </p>
+              <Button
+                onClick={() => {
+                  setDeletePhrase("");
+                  setDeletePassword("");
+                  setDeleteOpen(true);
+                }}
+                variant="outline"
+                className="w-full text-red-700 border-red-400 hover:bg-red-100"
+                data-testid="open-delete-account-btn"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete My Account
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Dialog open={deleteOpen} onOpenChange={(o) => !deleteLoading && setDeleteOpen(o)}>
+            <DialogContent data-testid="delete-account-dialog">
+              <DialogHeader>
+                <DialogTitle className="text-red-700 flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5" />
+                  Delete Account
+                </DialogTitle>
+                <DialogDescription>
+                  This action cannot be undone. To confirm, type
+                  <span className="font-mono font-semibold mx-1">DELETE MY ACCOUNT</span>
+                  and re-enter your password.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div>
+                  <Label htmlFor="delete-phrase">
+                    Type <span className="font-mono">DELETE MY ACCOUNT</span> to confirm
+                  </Label>
+                  <Input
+                    id="delete-phrase"
+                    value={deletePhrase}
+                    onChange={(e) => setDeletePhrase(e.target.value)}
+                    placeholder="DELETE MY ACCOUNT"
+                    autoComplete="off"
+                    className="mt-2 font-mono"
+                    data-testid="delete-phrase-input"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="delete-password">Re-enter your password</Label>
+                  <Input
+                    id="delete-password"
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    className="mt-2"
+                    data-testid="delete-password-input"
+                  />
+                </div>
+              </div>
+              <DialogFooter className="gap-2 sm:gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setDeleteOpen(false)}
+                  disabled={deleteLoading}
+                  data-testid="delete-cancel-btn"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleDeleteAccount}
+                  disabled={
+                    deleteLoading ||
+                    deletePhrase.trim() !== DELETE_CONFIRMATION_PHRASE ||
+                    !deletePassword
+                  }
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                  data-testid="delete-confirm-btn"
+                >
+                  {deleteLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete My Account
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 

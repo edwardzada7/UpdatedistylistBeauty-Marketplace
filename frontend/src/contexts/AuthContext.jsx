@@ -56,6 +56,8 @@ export const AuthProvider = ({ children }) => {
 
   /**
    * Create user in backend if doesn't exist
+   * Phase 6 - If backend returns 410 Gone, the account was soft-deleted
+   *           upstream. Force sign-out and route the visitor to /login.
    */
   const ensureUserExists = async (authUser) => {
     if (!authUser) return null;
@@ -65,6 +67,18 @@ export const AuthProvider = ({ children }) => {
       const response = await usersAPI.getByAuthId(authUser.id);
       return response.data;
     } catch (error) {
+      // Phase 6 - account was deleted, force sign-out + redirect
+      if (error.response?.status === 410) {
+        console.warn("[AuthContext] Account is deleted (410). Signing out.");
+        try {
+          await authSignOut();
+        } catch (_) { /* ignore */ }
+        if (typeof window !== "undefined") {
+          // Hard reload to clear all in-memory auth state cleanly
+          window.location.replace("/login?reason=account_deleted");
+        }
+        return null;
+      }
       // User doesn't exist, create one
       if (error.response?.status === 404) {
         const newUserData = {

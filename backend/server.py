@@ -142,6 +142,10 @@ class StylistResponse(BaseModel):
     # Populated from join with users table
     user_name: Optional[str] = None
     user_email: Optional[str] = None
+    # Phase 6 - exposed for KYC-based "Verified Individual / Business" badge
+    auth_id: Optional[str] = None
+    account_type: Optional[str] = None
+    kyc_status: Optional[str] = None
 
 # Wallet Models
 class WalletCreate(BaseModel):
@@ -480,7 +484,15 @@ async def get_user_by_auth_id(auth_id: str):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        return response.data[0]
+        user_row = response.data[0]
+        # Phase 6 - reject soft-deleted accounts with HTTP 410 Gone so the
+        # frontend AuthContext can force sign-out cleanly.
+        if user_row.get("is_deleted") is True:
+            raise HTTPException(
+                status_code=status.HTTP_410_GONE,
+                detail="Account has been deleted."
+            )
+        return user_row
     except HTTPException:
         raise
     except Exception as e:
@@ -549,6 +561,115 @@ async def delete_user(user_id: int):
         )
 
 
+# ==================== PHASE 6 - ACCOUNT DELETION ==========================
+
+class DeleteAccountRequest(BaseModel):
+    auth_id: str
+    confirmation_phrase: str
+
+DELETE_ACCOUNT_PHRASE = "DELETE MY ACCOUNT"
+
+
+@api_router.post("/users/delete-account")
+async def delete_my_account(payload: DeleteAccountRequest):
+    """
+    Phase 6 - Soft-delete the calling user's account.
+
+    Requirements (frontend MUST satisfy before calling this):
+      - User has re-authenticated with their password (Supabase signInWithPassword)
+      - User typed the exact phrase 'DELETE MY ACCOUNT'
+
+    Effect:
+      - users.is_deleted = TRUE, users.deleted_at = now()
+      - If user is a provider, stylists.is_verified is left untouched but the
+        is_deleted flag on users will hide them from /api/stylists.
+      - Bookings, wallet, withdrawals, and audit history are PRESERVED.
+    """
+    # 1) Validate confirmation phrase (case-sensitive)
+    if (payload.confirmation_phrase or "").strip() != DELETE_ACCOUNT_PHRASE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Confirmation phrase must exactly match: '{DELETE_ACCOUNT_PHRASE}'"
+        )
+
+    # 2) Locate user
+    res = supabase.table("users").select("*").eq("auth_id", payload.auth_id).execute()
+    if not res.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    user_row = res.data[0]
+    if user_row.get("is_deleted") is True:
+        return {
+            "ok": True,
+            "already_deleted": True,
+            "deleted_at": user_row.get("deleted_at"),
+        }
+
+    # 3) Soft-delete: try the full payload first; fall back if migration
+    # hasn't been applied so the endpoint still returns a sane error.
+    update_payload = {
+        "is_deleted": True,
+        "deleted_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        supabase.table("users").update(update_payload).eq("auth_id", payload.auth_id).execute()
+    except Exception as e:
+        msg = str(e).lower()
+        if "is_deleted" in msg or "deleted_at" in msg or "column" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Account deletion not provisioned. Apply phase6_account_deletion.sql migration."
+            )
+        logging.error(f"[delete-account] update failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete account: {e}"
+        )
+
+    logging.info(f"[delete-account] soft-deleted user auth_id={payload.auth_id}")
+    return {
+        "ok": True,
+        "auth_id": payload.auth_id,
+        "deleted_at": update_payload["deleted_at"],
+        "message": "Account deleted successfully.",
+    }
+
+
+@api_router.get("/admin/users/deleted")
+async def admin_list_deleted_users(
+    limit: int = 100,
+    offset: int = 0,
+    x_admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY"),
+):
+    """Phase 6 - Admin-only list of soft-deleted users."""
+    admin_dash_key = os.environ.get("ADMIN_DASH_KEY", "")
+    if not x_admin_key or x_admin_key != admin_dash_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+    try:
+        q = supabase.table("users").select(
+            "id, auth_id, name, email, role, account_type, is_deleted, deleted_at, created_at",
+            count="exact",
+        ).eq("is_deleted", True).order("deleted_at", desc=True).range(offset, offset + limit - 1)
+        res = q.execute()
+        return {
+            "users": res.data or [],
+            "total": res.count or 0,
+            "limit": limit,
+            "offset": offset,
+        }
+    except Exception as e:
+        msg = str(e).lower()
+        if "is_deleted" in msg or "column" in msg:
+            raise HTTPException(
+                status_code=503,
+                detail="Soft-delete column not provisioned. Apply phase6_account_deletion.sql migration."
+            )
+        logging.error(f"[admin/users/deleted] failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== STYLISTS ENDPOINTS ====================
 
 @api_router.post("/stylists", response_model=StylistResponse, status_code=status.HTTP_201_CREATED)
@@ -597,8 +718,12 @@ async def get_all_stylists(
     """Get all stylists with optional filtering and sorting"""
     logging.info("[route-entered] GET /api/stylists verified_only=%s premium_only=%s sort_by=%s", verified_only, premium_only, sort_by)
     try:
-        # Build query - use specific relationship name to avoid ambiguity
-        query = supabase.table("stylists").select("*, users!stylists_user_id_fkey(name, email)")
+        # Build query - use specific relationship name to avoid ambiguity.
+        # Phase 6: include auth_id + account_type + is_deleted so we can
+        # filter soft-deleted accounts and surface the KYC-verified badge.
+        query = supabase.table("stylists").select(
+            "*, users!stylists_user_id_fkey(auth_id, name, email, account_type, is_deleted)"
+        )
         
         if verified_only:
             query = query.eq("is_verified", True)
@@ -608,9 +733,31 @@ async def get_all_stylists(
         # Execute query
         response = query.execute()
         
+        # Phase 6 - bulk-fetch KYC statuses keyed by auth_id (graceful fallback)
+        provider_auth_ids = [
+            it.get("users", {}).get("auth_id")
+            for it in (response.data or [])
+            if it.get("users") and it["users"].get("auth_id")
+        ]
+        kyc_status_by_auth: Dict[str, str] = {}
+        if provider_auth_ids:
+            try:
+                kyc_res = supabase.table("kyc_submissions").select("user_auth_id,status").in_(
+                    "user_auth_id", provider_auth_ids
+                ).execute()
+                for row in (kyc_res.data or []):
+                    kyc_status_by_auth[row["user_auth_id"]] = row.get("status") or "not_submitted"
+            except Exception as kyc_err:
+                logging.warning(f"[stylists] kyc bulk fetch failed (non-fatal): {kyc_err}")
+        
         # Format response to include user data
         stylists = []
         for item in response.data:
+            user_join = item.get("users") or {}
+            # Phase 6 - skip soft-deleted users from public marketplace
+            if user_join.get("is_deleted") is True:
+                continue
+            auth_id = user_join.get("auth_id")
             stylist = {
                 "user_id": item["user_id"],
                 "hourly_rate": item["hourly_rate"],
@@ -622,8 +769,12 @@ async def get_all_stylists(
                 # Phase 1.9 - Provider Type
                 "provider_type": item.get("provider_type", "individual"),
                 "business_name": item.get("business_name"),
-                "user_name": item["users"]["name"] if item.get("users") else None,
-                "user_email": item["users"]["email"] if item.get("users") else None
+                "user_name": user_join.get("name"),
+                "user_email": user_join.get("email"),
+                # Phase 6 - account type + KYC for badges
+                "auth_id": auth_id,
+                "account_type": user_join.get("account_type"),
+                "kyc_status": kyc_status_by_auth.get(auth_id, "not_submitted"),
             }
             stylists.append(stylist)
         
@@ -646,7 +797,9 @@ async def get_all_stylists(
 async def get_stylist(user_id: int):
     """Get a specific stylist by user_id"""
     try:
-        response = supabase.table("stylists").select("*, users!stylists_user_id_fkey(name, email)").eq("user_id", user_id).execute()
+        response = supabase.table("stylists").select(
+            "*, users!stylists_user_id_fkey(auth_id, name, email, account_type, is_deleted)"
+        ).eq("user_id", user_id).execute()
         if not response.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -654,6 +807,25 @@ async def get_stylist(user_id: int):
             )
         
         item = response.data[0]
+        user_join = item.get("users") or {}
+        # Phase 6 - hide soft-deleted providers from marketplace
+        if user_join.get("is_deleted") is True:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Stylist not found"
+            )
+        auth_id = user_join.get("auth_id")
+        # Phase 6 - look up KYC status for badge rendering (graceful fallback)
+        kyc_status = "not_submitted"
+        if auth_id:
+            try:
+                kyc_res = supabase.table("kyc_submissions").select("status").eq(
+                    "user_auth_id", auth_id
+                ).limit(1).execute()
+                if kyc_res.data:
+                    kyc_status = kyc_res.data[0].get("status") or "not_submitted"
+            except Exception as kyc_err:
+                logging.warning(f"[stylist] kyc lookup failed (non-fatal): {kyc_err}")
         return {
             "user_id": item["user_id"],
             "hourly_rate": item["hourly_rate"],
@@ -665,8 +837,12 @@ async def get_stylist(user_id: int):
             # Phase 1.9 - Provider Type
             "provider_type": item.get("provider_type", "individual"),
             "business_name": item.get("business_name"),
-            "user_name": item["users"]["name"] if item.get("users") else None,
-            "user_email": item["users"]["email"] if item.get("users") else None
+            "user_name": user_join.get("name"),
+            "user_email": user_join.get("email"),
+            # Phase 6 - badge inputs
+            "auth_id": auth_id,
+            "account_type": user_join.get("account_type"),
+            "kyc_status": kyc_status,
         }
     except HTTPException:
         raise
@@ -2623,6 +2799,28 @@ async def request_withdrawal(
                 detail="Withdrawal service not available. Please contact support."
             )
         
+        # Phase 6 - KYC enforcement gate. Reject any withdrawal request from
+        # a provider whose KYC is not VERIFIED. We DO NOT touch the rest of
+        # the withdrawal flow (balance math, ledger entries, approval flow).
+        try:
+            kyc_check = supabase.table("kyc_submissions").select("status").eq(
+                "user_auth_id", auth_id
+            ).limit(1).execute()
+            kyc_status_value = (kyc_check.data[0]["status"] if kyc_check.data else None)
+        except Exception as kyc_err:
+            # If the table doesn't exist (migration not run), treat as not verified.
+            logging.warning(f"[withdrawal] kyc check failed (treating as not_verified): {kyc_err}")
+            kyc_status_value = None
+        if kyc_status_value != "verified":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "kyc_required",
+                    "kyc_status": kyc_status_value or "not_submitted",
+                    "message": "Complete KYC verification before requesting payouts.",
+                }
+            )
+
         # 2. Get provider's wallet
         wallet_response = supabase.table("wallets").select("*").eq("user_auth_id", auth_id).execute()
         

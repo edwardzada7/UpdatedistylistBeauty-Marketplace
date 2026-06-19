@@ -644,3 +644,61 @@ result["available_balance"] = float(avail_raw or 0)
 - `/app/frontend/src/screens/AdminLoginScreen.jsx`
 - `/app/frontend/src/screens/AdminDashboardScreen.jsx`
 - `/app/frontend/src/screens/AdminWithdrawalsScreen.jsx`
+
+
+### Phase 6 — Account Deletion + KYC Enforcement + KYC Notifications + Badges (Feb 21, 2026)
+
+**All 4 tasks + Phase 7 settings foundation shipped within 8-credit budget.**
+
+#### Task 1 — Account Deletion (soft delete)
+- NEW migration `/app/backend/migrations/phase6_account_deletion.sql` (additive only) adds `users.is_deleted`, `users.deleted_at`, indexes, and `app_settings` table seeded with disabled `withdrawal_fee` (Phase 7 prep — NOT applied to any calc).
+- NEW endpoints in `server.py`: `POST /api/users/delete-account` (requires `DELETE MY ACCOUNT` phrase) and `GET /api/admin/users/deleted` (admin key required).
+- `/api/users/by-auth/{auth_id}` returns **HTTP 410 Gone** for deleted users.
+- `/api/stylists` + `/api/stylists/{id}` filter out `users.is_deleted = true` (deleted providers disappear from public marketplace).
+- Frontend `AuthContext.jsx`: catches 410, hard-redirects to `/login?reason=account_deleted` after sign-out.
+- Frontend `LoginScreen.jsx`: surfaces toast when `reason=account_deleted` query param present.
+- Frontend `ProfileScreen.jsx`: NEW "Danger Zone" card + modal requiring **both** typed phrase `DELETE MY ACCOUNT` **and** password re-entry (via `loginWithEmail` re-auth) before backend call.
+- Frontend `AdminDashboardScreen.jsx`: NEW "Deleted Users" tab listing soft-deleted accounts.
+- Bookings, wallet transactions, withdrawals — all preserved (no foreign-key cascade).
+
+#### Task 2 — KYC Enforcement on Withdrawals
+- Added a **single 8-line guard at the top of `POST /api/withdrawals/request`** (line 2625-ish). Queries `kyc_submissions.status`; returns HTTP 403 with `{"error":"kyc_required","kyc_status":"...","message":"Complete KYC verification before requesting payouts."}` when status ≠ `verified`. **Wallet balance math, ledger entries, approval flow, rejection flow, admin withdrawal management, bank account validation, and Flutterwave integration were NOT touched.**
+
+#### Task 3 — KYC Notifications
+- `register_kyc_routes()` now receives `create_notification`. In `kyc_routes.py`, `admin_review_kyc` dispatches `kyc_approved` ("Your KYC verification has been approved.") or `kyc_rejected` ("Your KYC verification was rejected." + rejection reason) via the existing notification infrastructure. Failures are non-fatal.
+
+#### Task 4 — Verified Badges
+- `StylistResponse` extended with `auth_id`, `account_type`, `kyc_status` (joined from users + kyc_submissions).
+- `ProfileScreen.jsx`: badge cluster now shows "Verified Individual" or "Verified Business" when `kyc_status === "verified"`.
+- `ProviderProfileScreen.jsx`: same badge added on public provider profile.
+
+#### Premium Verification
+Not applicable — no `/api/providers/.../premium-request` endpoint exists in the current codebase.
+
+#### Phase 7 Prep
+`app_settings` table seeded with disabled `withdrawal_fee` config (NOT applied to any calculation, only stored).
+
+#### Files Modified
+- NEW: `/app/backend/migrations/phase6_account_deletion.sql`
+- `/app/backend/server.py` (added `delete_my_account`, `admin_list_deleted_users`, KYC guard, deleted-user filtering on stylists, 410 on `/users/by-auth/`, `create_notification` passthrough to KYC, `StylistResponse` model extended)
+- `/app/backend/kyc_routes.py` (added notification dispatch in `admin_review_kyc`)
+- `/app/frontend/src/services/api.js` (added `usersAPI.deleteAccount`, `adminAPI.deletedUsers`)
+- `/app/frontend/src/contexts/AuthContext.jsx` (410 → forced sign-out + redirect)
+- `/app/frontend/src/screens/LoginScreen.jsx` (deleted reason toast)
+- `/app/frontend/src/screens/ProfileScreen.jsx` (Danger Zone card + delete dialog + verified badge)
+- `/app/frontend/src/screens/ProviderProfileScreen.jsx` (verified individual/business badge)
+- `/app/frontend/src/screens/AdminDashboardScreen.jsx` (Deleted Users tab + loader)
+
+#### Validation
+- ✅ Python lint clean (`server.py`, `kyc_routes.py`)
+- ✅ ESLint clean (6 frontend files)
+- ✅ `from server import app` — 116 routes registered (was 108)
+- ✅ Backend live, supervisor healthy, `/api/stylists` returns 200 with new fields
+- ✅ Curl tests:
+  - `POST /api/users/delete-account` with wrong phrase → 400 with exact required-phrase message
+  - `POST /api/users/delete-account` valid phrase + fake auth_id → 404 user not found
+  - `GET /api/admin/users/deleted` without key → 401
+  - `POST /api/withdrawals/request` no KYC → **403 with exact message "Complete KYC verification before requesting payouts."** ✅
+
+#### USER ACTION REQUIRED
+Run `/app/backend/migrations/phase6_account_deletion.sql` in Supabase before deletion or admin-deleted-users tabs will work. Existing flows continue to function without it (graceful 503 fallback).

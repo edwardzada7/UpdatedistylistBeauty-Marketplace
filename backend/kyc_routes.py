@@ -281,4 +281,33 @@ def register_kyc_routes(api_router, supabase, admin_dash_key: str, create_notifi
             logger.error("[kyc] admin review failed: %s", e)
             raise HTTPException(status_code=500, detail=f"Failed to update KYC: {e}")
 
+        # Phase 6 - notify the user about approval/rejection (uses existing
+        # notification infrastructure; failures are swallowed by helper).
+        if create_notification is not None:
+            try:
+                submission_row = existing.data[0]
+                recipient = submission_row.get("user_auth_id")
+                if body.action == "approve":
+                    await create_notification(
+                        recipient_auth_id=recipient,
+                        notification_type="kyc_approved",
+                        title="KYC Approved",
+                        message="Your KYC verification has been approved.",
+                        metadata={"submission_id": submission_id},
+                    )
+                else:
+                    reason = (body.rejection_reason or "").strip()
+                    msg = "Your KYC verification was rejected."
+                    if reason:
+                        msg = f"{msg} Reason: {reason}"
+                    await create_notification(
+                        recipient_auth_id=recipient,
+                        notification_type="kyc_rejected",
+                        title="KYC Rejected",
+                        message=msg,
+                        metadata={"submission_id": submission_id, "reason": reason or None},
+                    )
+            except Exception as ne:
+                logger.warning("[kyc] notification dispatch failed (non-fatal): %s", ne)
+
         return {"ok": True, "status": new_status}

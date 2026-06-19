@@ -44,6 +44,12 @@ export const usersAPI = {
   create: (data) => api.post("/users", data),
   update: (id, data) => api.put(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`),
+  // Phase 6 - Soft-delete the authenticated user's account
+  deleteAccount: (authId, confirmationPhrase) =>
+    api.post(`/users/delete-account`, {
+      auth_id: authId,
+      confirmation_phrase: confirmationPhrase,
+    }),
 };
 
 // ==================== STYLISTS API ====================
@@ -409,6 +415,11 @@ export const adminAPI = {
     const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     if (statusFilter) qs.append("status", statusFilter);
     return api.get(`/admin/withdrawals?${qs.toString()}`, withAdminKey(adminKey));
+  },
+  // Phase 6 - list soft-deleted users
+  deletedUsers: (adminKey, limit = 100, offset = 0) => {
+    const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    return api.get(`/admin/users/deleted?${qs.toString()}`, withAdminKey(adminKey));
   },
 };
 

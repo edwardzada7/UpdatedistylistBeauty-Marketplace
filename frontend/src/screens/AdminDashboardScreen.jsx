@@ -59,6 +59,9 @@ export default function AdminDashboardScreen() {
   const [recentPayments, setRecentPayments] = useState([]);
   const [providers, setProviders] = useState([]);
   const [providerSearch, setProviderSearch] = useState("");
+  // Phase 6 - soft-deleted users
+  const [deletedUsers, setDeletedUsers] = useState([]);
+  const [loadingDeleted, setLoadingDeleted] = useState(false);
 
   // Pull admin key on mount; bounce to /admin if missing.
   useEffect(() => {
@@ -127,6 +130,25 @@ export default function AdminDashboardScreen() {
       else toast.error("Search failed");
     }
   };
+
+  // Phase 6 - load deleted users on demand
+  const loadDeletedUsers = useCallback(async () => {
+    if (!adminKey) return;
+    setLoadingDeleted(true);
+    try {
+      const res = await adminAPI.deletedUsers(adminKey, 100, 0);
+      setDeletedUsers(res.data?.users || []);
+    } catch (e) {
+      if (e?.response?.status === 401) handleUnauthorized();
+      else if (e?.response?.status === 503) {
+        toast.error("Run phase6_account_deletion.sql migration in Supabase first.");
+      } else {
+        toast.error(e?.response?.data?.detail || "Failed to load deleted users");
+      }
+    } finally {
+      setLoadingDeleted(false);
+    }
+  }, [adminKey, handleUnauthorized]);
 
   const fmtMoney = (n) => {
     if (n === null || n === undefined) return `${CURRENCY}0`;
@@ -267,8 +289,8 @@ export default function AdminDashboardScreen() {
           </button>
         </div>
 
-        <Tabs defaultValue="bookings" className="w-full">
-          <TabsList className="grid grid-cols-4 w-full max-w-2xl">
+        <Tabs defaultValue="bookings" className="w-full" onValueChange={(v) => { if (v === "deleted") loadDeletedUsers(); }}>
+          <TabsList className="grid grid-cols-5 w-full max-w-3xl">
             <TabsTrigger value="bookings" data-testid="tab-bookings">
               Recent Bookings
             </TabsTrigger>
@@ -280,6 +302,9 @@ export default function AdminDashboardScreen() {
             </TabsTrigger>
             <TabsTrigger value="providers" data-testid="tab-providers">
               Providers
+            </TabsTrigger>
+            <TabsTrigger value="deleted" data-testid="tab-deleted-users">
+              Deleted Users
             </TabsTrigger>
           </TabsList>
 
@@ -509,6 +534,71 @@ export default function AdminDashboardScreen() {
                               ) : (
                                 <span className="text-xs text-gray-400">No</span>
                               )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Phase 6 - Deleted Users */}
+          <TabsContent value="deleted" className="mt-4">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base">Deleted Users</CardTitle>
+                    <CardDescription>
+                      Soft-deleted accounts. Bookings, wallet history & payouts are preserved.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    onClick={loadDeletedUsers}
+                    variant="outline"
+                    size="sm"
+                    disabled={loadingDeleted}
+                    data-testid="refresh-deleted-users-btn"
+                  >
+                    {loadingDeleted ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loadingDeleted ? (
+                  <p className="text-sm text-gray-500 py-8 text-center">Loading…</p>
+                ) : deletedUsers.length === 0 ? (
+                  <p className="text-sm text-gray-500 py-8 text-center" data-testid="no-deleted-users">
+                    No deleted users.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Role</TableHead>
+                          <TableHead>Account Type</TableHead>
+                          <TableHead>Deleted</TableHead>
+                          <TableHead>Auth ID</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {deletedUsers.map((u) => (
+                          <TableRow key={u.id} data-testid={`deleted-user-row-${u.id}`}>
+                            <TableCell className="font-medium">{u.name || "—"}</TableCell>
+                            <TableCell className="text-xs text-gray-600">{u.email || "—"}</TableCell>
+                            <TableCell className="capitalize text-xs">{u.role || "—"}</TableCell>
+                            <TableCell className="capitalize text-xs">{u.account_type || "—"}</TableCell>
+                            <TableCell className="text-xs text-gray-500">
+                              {u.deleted_at ? timeAgoShort(u.deleted_at) : "—"}
+                            </TableCell>
+                            <TableCell className="font-mono text-[10px] text-gray-400">
+                              {u.auth_id ? `${u.auth_id.slice(0, 8)}…` : "—"}
                             </TableCell>
                           </TableRow>
                         ))}

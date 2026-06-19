@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { loginWithEmail } from "@/services/authService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,16 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Phase 6 - surface a clear message when a deleted account was just signed out
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("reason") === "account_deleted") {
+      toast.error("This account has been deleted and can no longer sign in.", {
+        duration: 6000,
+      });
+    }
+  }, []);
 
   const handleEmailLogin = async (e) => {
     e?.preventDefault();

@@ -829,6 +829,18 @@ const ProviderProfileScreen = () => {
                     </Badge>
                   )}
                   <div className="flex flex-wrap gap-2 mb-3">
+                    {/* Phase 6 - KYC-based verified badge (uses kyc_status + account_type from backend) */}
+                    {provider.kyc_status === "verified" && (
+                      <Badge
+                        className="bg-emerald-50 text-emerald-700 border-emerald-200"
+                        data-testid="provider-kyc-verified-badge"
+                      >
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        {provider.account_type === "business"
+                          ? "Verified Business"
+                          : "Verified Individual"}
+                      </Badge>
+                    )}
                     {provider.is_verified && (
                       <Badge className="bg-green-50 text-green-700 border-green-200">
                         <CheckCircle2 className="h-3 w-3 mr-1" />
