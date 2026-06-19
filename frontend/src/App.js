@@ -78,13 +78,15 @@ const PublicRoute = ({ children }) => {
 };
 
 /**
- * RoleBasedRedirect - Redirects based on user role
+ * RoleBasedRedirect - Redirects based on user role.
+ * Guests (not logged in) are sent to the public home/browsing experience.
  */
 const RoleBasedRedirect = () => {
   const { isAuthenticated, isProvider } = useAuth();
   
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    // Guests land on the public home/marketplace, not the login screen
+    return <Navigate to="/user/home" replace />;
   }
   
   // Redirect to new path structure
@@ -127,39 +129,13 @@ function AppRoutes() {
 
       {/* ============================================= */}
       {/* USER (CUSTOMER) ROUTES - New /user/* structure */}
+      {/* Browsing routes are PUBLIC (guest-accessible).            */}
+      {/* Transactional routes (wallet, bookings) remain protected. */}
       {/* ============================================= */}
-      <Route
-        path="/user/home"
-        element={
-          <ProtectedRoute>
-            <HomeScreen />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/user/services"
-        element={
-          <ProtectedRoute>
-            <ServicesScreen />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/user/providers"
-        element={
-          <ProtectedRoute>
-            <ProvidersListScreen />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/user/providers/:userId"
-        element={
-          <ProtectedRoute>
-            <ProviderProfileScreen />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/user/home" element={<HomeScreen />} />
+      <Route path="/user/services" element={<ServicesScreen />} />
+      <Route path="/user/providers" element={<ProvidersListScreen />} />
+      <Route path="/user/providers/:userId" element={<ProviderProfileScreen />} />
       <Route
         path="/user/wallet"
         element={
@@ -254,57 +230,15 @@ function AppRoutes() {
       {/* LEGACY ROUTES - Backward compatibility */}
       {/* ============================================= */}
       
-      {/* USER (CUSTOMER) ROUTES */}
-      <Route
-        path="/home"
-        element={
-          <ProtectedRoute>
-            <HomeScreen />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/services"
-        element={
-          <ProtectedRoute>
-            <ServicesScreen />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/providers"
-        element={
-          <ProtectedRoute>
-            <ProvidersListScreen />
-          </ProtectedRoute>
-        }
-      />
+      {/* USER (CUSTOMER) ROUTES - legacy paths, public for browsing */}
+      <Route path="/home" element={<HomeScreen />} />
+      <Route path="/services" element={<ServicesScreen />} />
+      <Route path="/providers" element={<ProvidersListScreen />} />
       {/* Legacy route for backward compatibility */}
-      <Route
-        path="/stylists"
-        element={
-          <ProtectedRoute>
-            <ProvidersListScreen />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/providers/:userId"
-        element={
-          <ProtectedRoute>
-            <ProviderProfileScreen />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/stylists" element={<ProvidersListScreen />} />
+      <Route path="/providers/:userId" element={<ProviderProfileScreen />} />
       {/* Legacy route */}
-      <Route
-        path="/stylists/:userId"
-        element={
-          <ProtectedRoute>
-            <ProviderProfileScreen />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/stylists/:userId" element={<ProviderProfileScreen />} />
       <Route
         path="/wallet"
         element={
@@ -351,23 +285,9 @@ function AppRoutes() {
         }
       />
 
-      {/* Phase 4 - Social Feed Lite */}
-      <Route
-        path="/feed"
-        element={
-          <ProtectedRoute>
-            <FeedScreen />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/user/feed"
-        element={
-          <ProtectedRoute>
-            <FeedScreen />
-          </ProtectedRoute>
-        }
-      />
+      {/* Phase 4 - Social Feed Lite (public browsing) */}
+      <Route path="/feed" element={<FeedScreen />} />
+      <Route path="/user/feed" element={<FeedScreen />} />
 
       {/* Catch all - redirect based on auth state and role */}
       <Route path="*" element={<RoleBasedRedirect />} />
