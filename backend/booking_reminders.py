@@ -54,14 +54,19 @@ WINDOW_MINUTES = 5
 
 
 def _parse_appointment_datetime(booking: dict) -> Optional[datetime]:
-    """Combine booking_date (YYYY-MM-DD) + booking_time (HH:MM) into a tz-aware datetime."""
+    """Combine booking_date (YYYY-MM-DD) + booking_time (HH:MM or HH:MM:SS) into a tz-aware datetime."""
     date_str = booking.get("booking_date")
     time_str = booking.get("booking_time")
     if not date_str or not time_str:
         return None
     try:
         d = datetime.strptime(date_str, "%Y-%m-%d").date()
-        t = datetime.strptime(time_str, "%H:%M").time()
+        # DB stores booking_time as 'HH:MM:SS' (Postgres TIME); some legacy rows
+        # may store 'HH:MM'. Try both formats so neither is silently dropped.
+        try:
+            t = datetime.strptime(time_str, "%H:%M:%S").time()
+        except ValueError:
+            t = datetime.strptime(time_str, "%H:%M").time()
     except Exception:
         return None
     dt = datetime.combine(d, t)
