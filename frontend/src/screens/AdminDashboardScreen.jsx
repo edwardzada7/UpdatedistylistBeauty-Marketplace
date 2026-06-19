@@ -279,13 +279,21 @@ export default function AdminDashboardScreen() {
         </div>
 
         {/* Phase 5 - quick admin action: KYC review */}
-        <div className="mb-6">
+        <div className="mb-6 flex flex-wrap gap-2">
           <button
             onClick={() => navigate("/admin/kyc")}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 text-sm font-medium"
             data-testid="admin-kyc-link"
           >
             Review KYC Submissions →
+          </button>
+          {/* Phase 7 - quick admin action: financial settings */}
+          <button
+            onClick={() => navigate("/admin/settings")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800 text-white hover:bg-gray-900 text-sm font-medium"
+            data-testid="admin-financial-settings-link"
+          >
+            Financial Settings →
           </button>
         </div>
 

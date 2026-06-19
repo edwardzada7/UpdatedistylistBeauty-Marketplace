@@ -41,6 +41,9 @@ import FeedScreen from "@/screens/FeedScreen";
 import KYCScreen from "@/screens/KYCScreen";
 import AdminKYCScreen from "@/screens/AdminKYCScreen";
 
+// Phase 7 - Admin financial settings
+import AdminFinancialSettingsScreen from "@/screens/AdminFinancialSettingsScreen";
+
 // Components
 import LoadingSpinner from "@/components/LoadingSpinner";
 
@@ -313,6 +316,8 @@ function AppRoutes() {
       <Route path="/admin/withdrawals" element={<AdminWithdrawalsScreen />} />
       {/* Phase 5 - Admin KYC review */}
       <Route path="/admin/kyc" element={<AdminKYCScreen />} />
+      {/* Phase 7 - Admin financial settings */}
+      <Route path="/admin/settings" element={<AdminFinancialSettingsScreen />} />
     </Routes>
   );
 }

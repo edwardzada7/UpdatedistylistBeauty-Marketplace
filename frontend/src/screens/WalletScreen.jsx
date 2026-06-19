@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { walletsAPI, paymentsAPI, withdrawalsAPI, providersAPI } from "@/services/api";
+import { settingsAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { CURRENCY, QUICK_TOPUP_AMOUNTS } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
@@ -87,6 +88,25 @@ export default function WalletScreen() {
   const [accountNumber, setAccountNumber] = useState("");
   const [withdrawNote, setWithdrawNote] = useState("");
   const [processingWithdraw, setProcessingWithdraw] = useState(false);
+
+  // Phase 7 - admin-configured withdrawal fee settings (live preview)
+  const [feeSettings, setFeeSettings] = useState({
+    fee_percentage: 0,
+    min_withdrawal: 0,
+    max_withdrawal: null,
+    currency: "NGN",
+  });
+  useEffect(() => {
+    let cancelled = false;
+    settingsAPI
+      .getWithdrawalFee()
+      .then((res) => {
+        if (!cancelled) setFeeSettings(res.data || feeSettings);
+      })
+      .catch(() => { /* keep defaults */ });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fetch wallet data function
   const fetchWalletData = useCallback(async () => {
@@ -310,10 +330,13 @@ export default function WalletScreen() {
     } catch (error) {
       console.error("Withdrawal request failed:", error);
       const errorDetail = error.response?.data?.detail;
-      if (typeof errorDetail === "object" && errorDetail.error) {
+      if (typeof errorDetail === "object" && errorDetail.message) {
+        // Phase 7 - structured errors (below_minimum, above_maximum, kyc_required, etc.)
+        toast.error(errorDetail.message);
+      } else if (typeof errorDetail === "object" && errorDetail.error === "Insufficient balance") {
         toast.error(`${errorDetail.error}. Available: ${CURRENCY}${errorDetail.available?.toLocaleString()}`);
       } else {
-        toast.error(errorDetail || "Failed to submit withdrawal request");
+        toast.error(typeof errorDetail === "string" ? errorDetail : "Failed to submit withdrawal request");
       }
     } finally {
       setProcessingWithdraw(false);
@@ -569,11 +592,21 @@ export default function WalletScreen() {
                       </div>
                       <div>
                         <p className="font-medium text-sm">
-                          {CURRENCY}{(req.amount || 0).toLocaleString()}
+                          {CURRENCY}{(req.amount || req.gross_amount || 0).toLocaleString()}
                         </p>
                         <p className="text-xs text-gray-500">
                           {req.bank_name} • ****{req.account_number?.slice(-4)}
                         </p>
+                        {/* Phase 7 - Fee breakdown if recorded */}
+                        {(req.fee_amount != null || req.net_amount != null) && (
+                          <p className="text-xs text-gray-600 mt-1" data-testid={`req-fee-breakdown-${idx}`}>
+                            Fee: {CURRENCY}{Number(req.fee_amount || 0).toLocaleString()}
+                            <span className="mx-1">•</span>
+                            Received: <span className="font-medium text-purple-700">
+                              {CURRENCY}{Number(req.net_amount ?? req.amount ?? 0).toLocaleString()}
+                            </span>
+                          </p>
+                        )}
                         <div className="flex items-center gap-1 text-xs text-gray-500">
                           <Clock className="h-3 w-3" />
                           {formatDate(req.created_at)}
@@ -764,7 +797,47 @@ export default function WalletScreen() {
                   max={wallet.available_balance || 0}
                   data-testid="withdraw-amount-input"
                 />
+                {feeSettings.min_withdrawal > 0 && (
+                  <p className="text-xs text-gray-500" data-testid="min-withdrawal-hint">
+                    Minimum withdrawal: {CURRENCY}{Number(feeSettings.min_withdrawal).toLocaleString()}
+                  </p>
+                )}
               </div>
+
+              {/* Phase 7 - Live Fee Preview */}
+              {withdrawAmount && Number(withdrawAmount) > 0 && (() => {
+                const gross = Math.round(parseFloat(withdrawAmount) * 100) / 100;
+                const feePct = Number(feeSettings.fee_percentage) || 0;
+                const fee = Math.round(gross * (feePct / 100) * 100) / 100;
+                const net = Math.max(0, Math.round((gross - fee) * 100) / 100);
+                return (
+                  <div
+                    className="rounded-lg border border-purple-200 bg-purple-50/60 p-3 text-sm space-y-1"
+                    data-testid="withdraw-fee-preview"
+                  >
+                    <div className="flex justify-between">
+                      <span className="text-gray-700">Requested Amount:</span>
+                      <span className="font-semibold" data-testid="preview-gross">
+                        {CURRENCY}{gross.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-700">
+                        Platform Fee ({feePct}%):
+                      </span>
+                      <span className="font-semibold text-amber-700" data-testid="preview-fee">
+                        {CURRENCY}{fee.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between pt-1 border-t border-purple-200">
+                      <span className="text-gray-900 font-medium">Amount You Will Receive:</span>
+                      <span className="font-bold text-purple-700" data-testid="preview-net">
+                        {CURRENCY}{net.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Bank Name */}
               <div className="space-y-2">

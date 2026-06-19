@@ -378,7 +378,9 @@ export default function AdminWithdrawalsScreen() {
                           <TableRow>
                             <TableHead className="w-16">ID</TableHead>
                             <TableHead>Provider</TableHead>
-                            <TableHead>Amount</TableHead>
+                            <TableHead>Gross</TableHead>
+                            <TableHead>Fee</TableHead>
+                            <TableHead>Pay Provider</TableHead>
                             <TableHead>Bank</TableHead>
                             <TableHead>Account</TableHead>
                             <TableHead>Status</TableHead>
@@ -395,8 +397,14 @@ export default function AdminWithdrawalsScreen() {
                               <TableCell className="font-mono text-xs text-gray-500 max-w-[150px] truncate">
                                 {w.provider_auth_id?.slice(0, 8)}...
                               </TableCell>
-                              <TableCell className="font-semibold">
-                                {CURRENCY}{w.amount?.toLocaleString()}
+                              <TableCell className="font-semibold" data-testid={`w-gross-${w.id}`}>
+                                {CURRENCY}{Number(w.gross_amount ?? w.amount ?? 0).toLocaleString()}
+                              </TableCell>
+                              <TableCell className="text-amber-700" data-testid={`w-fee-${w.id}`}>
+                                {CURRENCY}{Number(w.fee_amount ?? 0).toLocaleString()}
+                              </TableCell>
+                              <TableCell className="font-semibold text-purple-700" data-testid={`w-net-${w.id}`}>
+                                {CURRENCY}{Number(w.net_amount ?? w.amount ?? 0).toLocaleString()}
                               </TableCell>
                               <TableCell>{w.bank_name}</TableCell>
                               <TableCell>
@@ -463,13 +471,22 @@ export default function AdminWithdrawalsScreen() {
                               <div>
                                 <span className="text-xs text-gray-500 font-mono">#{w.id}</span>
                                 <p className="text-lg font-bold">
-                                  {CURRENCY}{w.amount?.toLocaleString()}
+                                  {CURRENCY}{Number(w.gross_amount ?? w.amount ?? 0).toLocaleString()}
                                 </p>
                               </div>
                               {getStatusBadge(w.status)}
                             </div>
                             
                             <div className="space-y-2 text-sm">
+                              {/* Phase 7 - Fee breakdown */}
+                              <div className="flex justify-between">
+                                <span className="text-gray-500">Fee:</span>
+                                <span className="text-amber-700">{CURRENCY}{Number(w.fee_amount ?? 0).toLocaleString()}</span>
+                              </div>
+                              <div className="flex justify-between font-semibold">
+                                <span className="text-gray-700">Pay Provider:</span>
+                                <span className="text-purple-700">{CURRENCY}{Number(w.net_amount ?? w.amount ?? 0).toLocaleString()}</span>
+                              </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-500">Bank:</span>
                                 <span>{w.bank_name}</span>
@@ -554,10 +571,24 @@ export default function AdminWithdrawalsScreen() {
             <CardContent className="space-y-4">
               <div className="space-y-2 text-sm bg-gray-50 rounded-lg p-3">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Amount:</span>
-                  <span className="font-semibold">{CURRENCY}{approvingWithdrawal.amount?.toLocaleString()}</span>
+                  <span className="text-gray-500">Requested:</span>
+                  <span className="font-semibold">
+                    {CURRENCY}{Number(approvingWithdrawal.gross_amount ?? approvingWithdrawal.amount ?? 0).toLocaleString()}
+                  </span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-gray-500">Fee:</span>
+                  <span className="font-semibold text-amber-700">
+                    {CURRENCY}{Number(approvingWithdrawal.fee_amount ?? 0).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between pt-1 border-t border-gray-200">
+                  <span className="text-gray-900 font-medium">Pay Provider:</span>
+                  <span className="font-bold text-purple-700" data-testid="approve-modal-net">
+                    {CURRENCY}{Number(approvingWithdrawal.net_amount ?? approvingWithdrawal.amount ?? 0).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between pt-2">
                   <span className="text-gray-500">Account Name:</span>
                   <span>{approvingWithdrawal.account_name}</span>
                 </div>

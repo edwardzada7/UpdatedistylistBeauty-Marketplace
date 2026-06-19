@@ -2780,6 +2780,132 @@ async def backfill_transaction_auth_ids():
 
 # ==================== WITHDRAWAL REQUEST ENDPOINTS (Phase A) ====================
 
+# ==================== PHASE 7 - WITHDRAWAL FEE SETTINGS ==================
+
+DEFAULT_WITHDRAWAL_FEE_SETTINGS = {
+    "enabled": True,
+    "fee_percentage": 0.0,
+    "min_withdrawal": 0.0,
+    "max_withdrawal": None,
+    "currency": "NGN",
+}
+
+
+def _load_withdrawal_fee_settings() -> dict:
+    """
+    Read the 'withdrawal_fee' row from app_settings. Falls back to safe
+    defaults (zero fee, no min/max) if the table or row is missing — so
+    the existing withdrawal flow never breaks on un-migrated environments.
+    """
+    try:
+        res = supabase.table("app_settings").select("value").eq("key", "withdrawal_fee").limit(1).execute()
+        if res.data and isinstance(res.data[0].get("value"), dict):
+            merged = dict(DEFAULT_WITHDRAWAL_FEE_SETTINGS)
+            merged.update(res.data[0]["value"])
+            return merged
+    except Exception as e:
+        logging.warning(f"[settings] withdrawal_fee load failed (using defaults): {e}")
+    return dict(DEFAULT_WITHDRAWAL_FEE_SETTINGS)
+
+
+class FinancialSettingsUpdate(BaseModel):
+    fee_percentage: Optional[float] = None
+    min_withdrawal: Optional[float] = None
+    max_withdrawal: Optional[float] = None  # use 0/null to disable
+    enabled: Optional[bool] = None
+
+
+@api_router.get("/settings/withdrawal-fee")
+async def get_withdrawal_fee_public():
+    """
+    Public, read-only fee config for the provider withdrawal screen so it
+    can render a live fee preview. Returns only display-safe fields.
+    """
+    s = _load_withdrawal_fee_settings()
+    return {
+        "fee_percentage": float(s.get("fee_percentage") or 0),
+        "min_withdrawal": float(s.get("min_withdrawal") or 0),
+        "max_withdrawal": (
+            float(s["max_withdrawal"]) if s.get("max_withdrawal") not in (None, "", "null") else None
+        ),
+        "currency": s.get("currency") or "NGN",
+    }
+
+
+@api_router.get("/admin/settings/financial")
+async def admin_get_financial_settings(
+    x_admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY"),
+):
+    """Admin view of financial settings (currently: withdrawal fee config)."""
+    admin_dash_key = os.environ.get("ADMIN_DASH_KEY", "")
+    if not x_admin_key or x_admin_key != admin_dash_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+    return {"withdrawal_fee": _load_withdrawal_fee_settings()}
+
+
+@api_router.put("/admin/settings/financial")
+async def admin_update_financial_settings(
+    payload: FinancialSettingsUpdate,
+    x_admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY"),
+):
+    """Update withdrawal fee + min/max settings. Validates inputs."""
+    admin_dash_key = os.environ.get("ADMIN_DASH_KEY", "")
+    if not x_admin_key or x_admin_key != admin_dash_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+
+    current = _load_withdrawal_fee_settings()
+    updated = dict(current)
+
+    if payload.fee_percentage is not None:
+        if payload.fee_percentage < 0 or payload.fee_percentage > 100:
+            raise HTTPException(status_code=400, detail="fee_percentage must be between 0 and 100")
+        updated["fee_percentage"] = float(payload.fee_percentage)
+    if payload.min_withdrawal is not None:
+        if payload.min_withdrawal < 0:
+            raise HTTPException(status_code=400, detail="min_withdrawal must be >= 0")
+        updated["min_withdrawal"] = float(payload.min_withdrawal)
+    if payload.max_withdrawal is not None:
+        # 0 means "no maximum"
+        if payload.max_withdrawal < 0:
+            raise HTTPException(status_code=400, detail="max_withdrawal must be >= 0")
+        updated["max_withdrawal"] = float(payload.max_withdrawal) if payload.max_withdrawal > 0 else None
+    if payload.enabled is not None:
+        updated["enabled"] = bool(payload.enabled)
+
+    # Cross-field validation
+    if (updated.get("max_withdrawal") is not None
+            and updated["max_withdrawal"] > 0
+            and updated["max_withdrawal"] < (updated.get("min_withdrawal") or 0)):
+        raise HTTPException(
+            status_code=400,
+            detail="max_withdrawal cannot be less than min_withdrawal",
+        )
+
+    try:
+        # Upsert into app_settings
+        existing = supabase.table("app_settings").select("key").eq("key", "withdrawal_fee").limit(1).execute()
+        row = {
+            "key": "withdrawal_fee",
+            "value": updated,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if existing.data:
+            supabase.table("app_settings").update(row).eq("key", "withdrawal_fee").execute()
+        else:
+            supabase.table("app_settings").insert(row).execute()
+    except Exception as e:
+        msg = str(e).lower()
+        if "app_settings" in msg or "does not exist" in msg:
+            raise HTTPException(
+                status_code=503,
+                detail="app_settings table missing. Apply phase7_withdrawal_fees.sql migration.",
+            )
+        logging.error(f"[settings] update failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"ok": True, "withdrawal_fee": updated}
+
+
 @api_router.post("/withdrawals/request")
 async def request_withdrawal(
     request_data: WithdrawalRequestCreate,
@@ -2840,6 +2966,44 @@ async def request_withdrawal(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Withdrawal amount must be greater than 0"
             )
+
+        # Phase 7 - load admin-configured fee settings & enforce min/max + compute
+        # gross/fee/net SERVER-SIDE. Frontend values are display-only; the
+        # database is the source of truth. We DO NOT change the wallet ledger:
+        # the existing 'amount' field still represents the GROSS amount that
+        # will be debited from the wallet on approval.
+        fee_settings = _load_withdrawal_fee_settings()
+        fee_percentage = float(fee_settings.get("fee_percentage") or 0)
+        min_withdrawal = float(fee_settings.get("min_withdrawal") or 0)
+        max_withdrawal_raw = fee_settings.get("max_withdrawal")
+        max_withdrawal = float(max_withdrawal_raw) if max_withdrawal_raw not in (None, "", "null") else None
+
+        if min_withdrawal > 0 and request_data.amount < min_withdrawal:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "below_minimum",
+                    "min_withdrawal": min_withdrawal,
+                    "requested": request_data.amount,
+                    "message": f"Minimum withdrawal amount is {CURRENCY}{min_withdrawal:,.2f}",
+                }
+            )
+        if max_withdrawal is not None and max_withdrawal > 0 and request_data.amount > max_withdrawal:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "above_maximum",
+                    "max_withdrawal": max_withdrawal,
+                    "requested": request_data.amount,
+                    "message": f"Maximum withdrawal amount is {CURRENCY}{max_withdrawal:,.2f}",
+                }
+            )
+
+        gross_amount = round(float(request_data.amount), 2)
+        fee_amount = round(gross_amount * (fee_percentage / 100.0), 2)
+        net_amount = round(gross_amount - fee_amount, 2)
+        if net_amount < 0:
+            net_amount = 0.0
         
         if available_balance < request_data.amount:
             raise HTTPException(
@@ -2859,11 +3023,14 @@ async def request_withdrawal(
                 detail="Account number must be exactly 10 digits"
             )
         
-        # 5. Create withdrawal request
+        # 5. Create withdrawal request (Phase 7 - persist gross/fee/net)
         withdrawal_ref = f"withdraw_req_{uuid.uuid4().hex[:12]}"
         withdrawal_data = {
             "provider_auth_id": auth_id,
-            "amount": request_data.amount,
+            "amount": gross_amount,            # existing column = GROSS (wallet debit on approval)
+            "gross_amount": gross_amount,      # Phase 7 explicit gross
+            "fee_amount": fee_amount,          # Phase 7 platform fee
+            "net_amount": net_amount,          # Phase 7 amount provider receives
             "currency": "NGN",
             "bank_name": request_data.bank_name.strip(),
             "account_name": request_data.account_name.strip(),
@@ -2872,7 +3039,18 @@ async def request_withdrawal(
             "note": request_data.note
         }
         
-        withdrawal_result = supabase.table("withdrawal_requests").insert(withdrawal_data).execute()
+        # Try with new columns; fall back to legacy schema if migration not applied.
+        try:
+            withdrawal_result = supabase.table("withdrawal_requests").insert(withdrawal_data).execute()
+        except Exception as insert_err:
+            msg = str(insert_err).lower()
+            if "gross_amount" in msg or "fee_amount" in msg or "net_amount" in msg or "column" in msg:
+                logging.warning("[withdrawal] fee columns missing; inserting legacy payload (apply phase7 migration)")
+                legacy_payload = {k: v for k, v in withdrawal_data.items()
+                                  if k not in ("gross_amount", "fee_amount", "net_amount")}
+                withdrawal_result = supabase.table("withdrawal_requests").insert(legacy_payload).execute()
+            else:
+                raise
         
         if not withdrawal_result.data:
             raise HTTPException(
@@ -2922,6 +3100,9 @@ async def request_withdrawal(
             "ok": True,
             "withdrawal_request_id": withdrawal_record["id"],
             "status": "pending",
+            "gross_amount": gross_amount,
+            "fee_amount": fee_amount,
+            "net_amount": net_amount,
             "message": "Withdrawal request submitted successfully. Admin will review shortly."
         }
         

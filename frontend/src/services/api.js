@@ -466,4 +466,20 @@ export const kycAPI = {
     ),
 };
 
+// ==================== PHASE 7 - FINANCIAL SETTINGS API ====================
+
+export const settingsAPI = {
+  // Public: read withdrawal fee config for the live preview on the
+  // provider withdrawal screen.
+  getWithdrawalFee: () => api.get(`/settings/withdrawal-fee`),
+
+  // Admin: read full financial settings
+  adminGetFinancial: (adminKey) =>
+    api.get(`/admin/settings/financial`, { headers: { "X-ADMIN-KEY": adminKey } }),
+
+  // Admin: update withdrawal fee + min/max
+  adminUpdateFinancial: (adminKey, payload) =>
+    api.put(`/admin/settings/financial`, payload, { headers: { "X-ADMIN-KEY": adminKey } }),
+};
+
 export default api;

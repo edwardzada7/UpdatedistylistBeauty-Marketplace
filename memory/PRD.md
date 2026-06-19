@@ -702,3 +702,67 @@ Not applicable — no `/api/providers/.../premium-request` endpoint exists in th
 
 #### USER ACTION REQUIRED
 Run `/app/backend/migrations/phase6_account_deletion.sql` in Supabase before deletion or admin-deleted-users tabs will work. Existing flows continue to function without it (graceful 503 fallback).
+
+
+### Phase 7 — Withdrawal Fees + Admin Financial Settings (Feb 21, 2026)
+
+**All 6 tasks shipped within 8-credit budget. Build passes, lint clean, curl validated.**
+
+#### What changed
+- **NEW migration** `/app/backend/migrations/phase7_withdrawal_fees.sql`:
+  - Adds `gross_amount`, `fee_amount`, `net_amount` (nullable, additive) to `withdrawal_requests`.
+  - Backfills historical rows so reads stay sane (fee=0, gross=net=amount).
+  - Refreshes `app_settings.withdrawal_fee` JSONB with `{enabled, fee_percentage, min_withdrawal, max_withdrawal, currency, notes}`.
+- **NEW backend endpoints** in `server.py`:
+  - `GET /api/settings/withdrawal-fee` (public, used by provider screen live preview)
+  - `GET /api/admin/settings/financial` (admin-only)
+  - `PUT /api/admin/settings/financial` (admin-only, with cross-field validation)
+- **Server-side fee enforcement** in `POST /api/withdrawals/request`:
+  - Loads settings, enforces `min_withdrawal` + `max_withdrawal`, computes `gross / fee / net` SERVER-SIDE, persists all three columns. Frontend values are display-only.
+  - Falls back to legacy schema if migration not applied (graceful 503 hint).
+  - **DID NOT** change wallet ledger, balance math, approval flow, KYC gate, account validation, or Flutterwave.
+- **NEW frontend screen** `/app/frontend/src/screens/AdminFinancialSettingsScreen.jsx` — full settings form with live ₦10,000-example preview.
+- **`WalletScreen.jsx`** withdrawal modal: live fee preview (Requested / Platform Fee / You Will Receive); history rows now show `Fee: X • Received: Y`. Min-withdrawal hint rendered when configured. Structured-error toasts (`below_minimum`, `above_maximum`).
+- **`AdminWithdrawalsScreen.jsx`**: replaced "Amount" column with **Gross / Fee / Pay Provider** in both desktop table and mobile cards. Approve modal shows full breakdown. Account number remains fully visible.
+- **`AdminDashboardScreen.jsx`**: added "Financial Settings →" quick-action button next to "Review KYC Submissions".
+- **`App.js`**: registered `/admin/settings` → `AdminFinancialSettingsScreen`.
+- **`api.js`**: added `settingsAPI` with `getWithdrawalFee`, `adminGetFinancial`, `adminUpdateFinancial`.
+
+#### Files Modified / Added
+- NEW: `backend/migrations/phase7_withdrawal_fees.sql`
+- NEW: `frontend/src/screens/AdminFinancialSettingsScreen.jsx`
+- `backend/server.py` (3 endpoints + `_load_withdrawal_fee_settings` helper + fee calc block in `request_withdrawal` + new columns persisted)
+- `frontend/src/services/api.js` (+ `settingsAPI`)
+- `frontend/src/screens/WalletScreen.jsx` (live preview + history fee breakdown + min hint + error mapping)
+- `frontend/src/screens/AdminWithdrawalsScreen.jsx` (Gross/Fee/Pay Provider columns + approve modal breakdown)
+- `frontend/src/screens/AdminDashboardScreen.jsx` (settings quick-link)
+- `frontend/src/App.js` (route)
+
+#### Build Results
+- ✅ Python lint: no new errors (only pre-existing ones unrelated to Phase 7).
+- ✅ ESLint clean across all 6 modified frontend files.
+- ✅ Backend imports cleanly. **119 routes** registered (was 116 → 3 new).
+- ✅ Backend restarted and live; supervisor healthy.
+- ✅ Curl validations passed:
+  - `GET /api/settings/withdrawal-fee` returns `{fee_percentage:0, min_withdrawal:0, max_withdrawal:null, currency:NGN}`
+  - `PUT /api/admin/settings/financial` saves `5%` + `min_withdrawal=2000` correctly
+  - Public endpoint reflects the update immediately
+  - `fee_percentage=150` rejected with 400 "must be between 0 and 100"
+  - KYC gate continues to fire BEFORE fee calc (Phase 6 preserved)
+- ✅ Admin login screen renders correctly.
+
+#### Manual Test Steps
+1. **Run migration**: paste `/app/backend/migrations/phase7_withdrawal_fees.sql` into Supabase SQL editor.
+2. **Configure fees**: Admin Dashboard → "Financial Settings →" → set Fee=5%, Min=2000 → Save. Reload → values persist.
+3. **Provider preview**: as a KYC-verified provider, open Wallet → Withdraw → type 10000. You should see live preview "Requested ₦10,000 / Platform Fee (5%) ₦500 / Amount You Will Receive ₦9,500".
+4. **Min enforcement**: try 1000 → submit → toast: "Minimum withdrawal amount is ₦2,000".
+5. **Admin review**: Admin → Withdrawals tab → table shows **Gross / Fee / Pay Provider** columns with the right values. Account number fully visible.
+6. **Provider history**: Wallet → Withdrawal Requests list now shows "Fee: ₦500 • Received: ₦9,500".
+7. **Approve flow**: existing approve/reject still works — wallet balance changes by GROSS (unchanged behaviour).
+
+#### USER ACTION REQUIRED
+- Run `phase7_withdrawal_fees.sql` in Supabase.
+- Until then, the backend uses legacy schema (gross/fee/net columns won't be persisted; everything else still works).
+
+#### Credits Consumed
+~7 of 8 (within budget).
