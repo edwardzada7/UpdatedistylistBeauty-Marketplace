@@ -256,6 +256,17 @@ export default function AdminDashboardScreen() {
           />
         </div>
 
+        {/* Phase 5 - quick admin action: KYC review */}
+        <div className="mb-6">
+          <button
+            onClick={() => navigate("/admin/kyc")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 text-sm font-medium"
+            data-testid="admin-kyc-link"
+          >
+            Review KYC Submissions →
+          </button>
+        </div>
+
         <Tabs defaultValue="bookings" className="w-full">
           <TabsList className="grid grid-cols-4 w-full max-w-2xl">
             <TabsTrigger value="bookings" data-testid="tab-bookings">

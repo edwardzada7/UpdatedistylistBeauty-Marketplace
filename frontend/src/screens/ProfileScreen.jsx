@@ -9,10 +9,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, User, Mail, Phone, Save, Loader2, LogOut, Shield, Star, MapPin, FileText, Globe, Building2, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
-import { usersAPI, stylistsAPI } from "@/services/api";
+import { usersAPI, stylistsAPI, kycAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { TOAST_MESSAGES, APP_NAME, CURRENCY } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
+import KYCStatusBadge from "@/components/KYCStatusBadge";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
 import NotificationBell from "@/components/NotificationBell";
@@ -23,7 +24,10 @@ const ProfileScreen = () => {
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editingProvider, setEditingProvider] = useState(false);
-  
+
+  // Phase 5 - KYC status
+  const [kycStatus, setKycStatus] = useState("not_submitted");
+
   // User form data
   const [formData, setFormData] = useState({
     name: "",
@@ -79,6 +83,21 @@ const ProfileScreen = () => {
       });
     }
   }, [providerData]);
+
+  // Phase 5 - load KYC status
+  useEffect(() => {
+    const authId = userData?.auth_id;
+    if (!authId) return;
+    let cancelled = false;
+    kycAPI.getMe(authId)
+      .then((res) => {
+        if (!cancelled) setKycStatus(res.data?.status || "not_submitted");
+      })
+      .catch(() => {
+        if (!cancelled) setKycStatus("not_submitted");
+      });
+    return () => { cancelled = true; };
+  }, [userData?.auth_id]);
 
   const handleUpdate = async (e) => {
     e.preventDefault();
@@ -246,6 +265,15 @@ const ProfileScreen = () => {
                           Premium
                         </Badge>
                       )}
+                      {/* Phase 5 - account type + KYC badge */}
+                      {userData?.account_type && (
+                        <Badge variant="outline" className="capitalize" data-testid="account-type-badge">
+                          {userData.account_type}
+                        </Badge>
+                      )}
+                      <button onClick={() => navigate("/profile/kyc")} data-testid="kyc-link-from-profile">
+                        <KYCStatusBadge status={kycStatus} />
+                      </button>
                     </div>
                   </div>
                 </div>

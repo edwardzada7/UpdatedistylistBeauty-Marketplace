@@ -435,4 +435,24 @@ export const staffAPI = {
     api.get(`/staff/${staffId}/available-slots?date=${date}&service_duration=${serviceDuration}`),
 };
 
+// ==================== PHASE 5 - KYC API ====================
+
+export const kycAPI = {
+  // User-facing
+  submit: (payload) => api.post(`/kyc/submit`, payload),
+  getMe: (authId) => api.get(`/kyc/me?auth_id=${encodeURIComponent(authId)}`),
+
+  // Admin-facing (caller must pass adminKey via headers)
+  listAdmin: (adminKey, statusFilter) => {
+    const qs = statusFilter ? `?status_filter=${encodeURIComponent(statusFilter)}` : "";
+    return api.get(`/admin/kyc${qs}`, { headers: { "X-ADMIN-KEY": adminKey } });
+  },
+  review: (adminKey, submissionId, action, rejectionReason, reviewerAuthId) =>
+    api.put(
+      `/admin/kyc/${submissionId}`,
+      { action, rejection_reason: rejectionReason || null, reviewer_auth_id: reviewerAuthId || null },
+      { headers: { "X-ADMIN-KEY": adminKey } }
+    ),
+};
+
 export default api;

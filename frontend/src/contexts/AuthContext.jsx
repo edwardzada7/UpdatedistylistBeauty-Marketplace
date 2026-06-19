@@ -74,6 +74,8 @@ export const AuthProvider = ({ children }) => {
           phone: authUser.user_metadata?.phone || null,
           role: authUser.user_metadata?.role || 'user',
           phone_verified: false,
+          // Phase 5 - persist account_type from signup metadata
+          account_type: authUser.user_metadata?.account_type || 'individual',
         };
         
         try {

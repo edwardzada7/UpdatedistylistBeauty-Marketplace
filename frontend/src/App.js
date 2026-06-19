@@ -37,6 +37,10 @@ import AdminDashboardScreen from "@/screens/AdminDashboardScreen";
 // Phase 4 - Social Feed
 import FeedScreen from "@/screens/FeedScreen";
 
+// Phase 5 - KYC
+import KYCScreen from "@/screens/KYCScreen";
+import AdminKYCScreen from "@/screens/AdminKYCScreen";
+
 // Components
 import LoadingSpinner from "@/components/LoadingSpinner";
 
@@ -225,6 +229,15 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      {/* Phase 5 - KYC */}
+      <Route
+        path="/profile/kyc"
+        element={
+          <ProtectedRoute>
+            <KYCScreen />
+          </ProtectedRoute>
+        }
+      />
 
       {/* ============================================= */}
       {/* LEGACY ROUTES - Backward compatibility */}
@@ -298,6 +311,8 @@ function AppRoutes() {
       <Route path="/admin" element={<AdminLoginScreen />} />
       <Route path="/admin/dashboard" element={<AdminDashboardScreen />} />
       <Route path="/admin/withdrawals" element={<AdminWithdrawalsScreen />} />
+      {/* Phase 5 - Admin KYC review */}
+      <Route path="/admin/kyc" element={<AdminKYCScreen />} />
     </Routes>
   );
 }

@@ -19,7 +19,7 @@ function getErrorMessage(error, fallback = "An error occurred") {
 /**
  * Sign up with email and password
  */
-export async function signUpWithEmail({ email, password, phone, fullName, role }) {
+export async function signUpWithEmail({ email, password, phone, fullName, role, accountType }) {
   try {
     // Use a fresh client to avoid potential body stream issues
     const freshClient = createFreshSupabaseClient();
@@ -32,6 +32,8 @@ export async function signUpWithEmail({ email, password, phone, fullName, role }
           full_name: fullName,
           role,
           phone,
+          // Phase 5 - account_type stored in auth metadata, read by ensureUserExists
+          account_type: accountType || "individual",
         },
       },
     });

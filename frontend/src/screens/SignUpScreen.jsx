@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { APP_NAME, APP_TAGLINE } from "@/utils/constants";
-import { Loader2, User, Scissors } from "lucide-react";
+import { Loader2, User, Scissors, Briefcase } from "lucide-react";
 
 export default function SignUpScreen() {
   const navigate = useNavigate();
@@ -14,6 +14,8 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState("user");
+  // Phase 5 - account type (individual / business)
+  const [accountType, setAccountType] = useState("individual");
   const [loading, setLoading] = useState(false);
 
   const handleSignUp = async (e) => {
@@ -31,7 +33,7 @@ export default function SignUpScreen() {
 
     try {
       setLoading(true);
-      await signUpWithEmail({ email, password, phone, fullName, role });
+      await signUpWithEmail({ email, password, phone, fullName, role, accountType });
       toast.success("Account created! Please check your email to verify.");
       navigate("/login");
     } catch (error) {
@@ -131,6 +133,54 @@ export default function SignUpScreen() {
                 <Scissors className={`h-6 w-6 mb-2 ${role === "provider" ? "text-purple-500" : "text-gray-400"}`} />
                 <span className="font-medium">Offer Services</span>
                 <span className="text-xs mt-1 opacity-70">As a Provider</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Phase 5 - Account Type Selection */}
+          <div className="pt-2">
+            <p className="text-sm text-gray-600 mb-3">Account type:</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setAccountType("individual")}
+                data-testid="account-type-individual"
+                className={`flex flex-col items-start text-left p-4 rounded-xl border-2 transition-all ${
+                  accountType === "individual"
+                    ? "border-purple-500 bg-purple-50"
+                    : "border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <User className={`h-5 w-5 ${accountType === "individual" ? "text-purple-500" : "text-gray-400"}`} />
+                  <span className={`font-medium ${accountType === "individual" ? "text-purple-700" : "text-gray-700"}`}>
+                    Individual
+                  </span>
+                </div>
+                <span className="text-xs text-gray-500 leading-snug">
+                  For freelancers, independent professionals, and personal service providers.
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAccountType("business")}
+                data-testid="account-type-business"
+                className={`flex flex-col items-start text-left p-4 rounded-xl border-2 transition-all ${
+                  accountType === "business"
+                    ? "border-purple-500 bg-purple-50"
+                    : "border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Briefcase className={`h-5 w-5 ${accountType === "business" ? "text-purple-500" : "text-gray-400"}`} />
+                  <span className={`font-medium ${accountType === "business" ? "text-purple-700" : "text-gray-700"}`}>
+                    Business
+                  </span>
+                </div>
+                <span className="text-xs text-gray-500 leading-snug">
+                  For salons, spas, fashion houses, event companies, agencies, and registered businesses.
+                </span>
               </button>
             </div>
           </div>

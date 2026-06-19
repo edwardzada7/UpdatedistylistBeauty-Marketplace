@@ -77,6 +77,8 @@ class UserCreate(BaseModel):
     country: Optional[str] = None
     city: Optional[str] = None
     gender: Optional[str] = None  # male, female, other, prefer_not_to_say
+    # Phase 5 - Account type (individual or business)
+    account_type: Optional[str] = "individual"
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
@@ -101,6 +103,8 @@ class UserResponse(BaseModel):
     country: Optional[str] = None
     city: Optional[str] = None
     gender: Optional[str] = None
+    # Phase 5 - Account type
+    account_type: Optional[str] = "individual"
 
 # Stylist Models
 class StylistCreate(BaseModel):
@@ -419,7 +423,9 @@ async def create_user(user_data: UserCreate):
             "name": user_data.name,
             "email": user_data.email,
             "phone": user_data.phone,
-            "role": user_data.role
+            "role": user_data.role,
+            # Phase 5 - persist account_type (column added by phase5 migration)
+            "account_type": user_data.account_type or "individual",
         }
         
         response = supabase.table("users").insert(user_dict).execute()
@@ -7407,6 +7413,15 @@ async def admin_list_providers(
 
 # Include the router in the main app
 try:
+    # Phase 5 - register KYC routes onto api_router before include
+    try:
+        from kyc_routes import register_kyc_routes
+        register_kyc_routes(api_router, supabase, os.environ.get("ADMIN_DASH_KEY", ""))
+        logging.info("[startup] KYC routes registered")
+    except Exception as _ke:
+        import traceback as _kt
+        logging.warning("[startup] KYC routes NOT registered: %s\n%s", _ke, _kt.format_exc())
+
     app.include_router(api_router)
     logging.info("[startup] api_router included successfully (%d routes)", len(api_router.routes))
 except Exception as _e:
