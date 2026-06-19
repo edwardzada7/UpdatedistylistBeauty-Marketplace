@@ -661,7 +661,11 @@ async def admin_list_deleted_users(
         }
     except Exception as e:
         msg = str(e).lower()
-        if "is_deleted" in msg or "column" in msg:
+        # Phase 6 hotfix - only treat as a phase6 provisioning problem when the
+        # actual phase6 columns are missing. A generic "column X does not exist"
+        # for unrelated columns (e.g., users.created_at) should NOT be blamed
+        # on phase6 — surface the real error instead so we can fix it cleanly.
+        if "is_deleted" in msg or "deleted_at" in msg:
             raise HTTPException(
                 status_code=503,
                 detail="Soft-delete column not provisioned. Apply phase6_account_deletion.sql migration."
