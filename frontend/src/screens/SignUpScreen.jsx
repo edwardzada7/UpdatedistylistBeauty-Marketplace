@@ -211,6 +211,16 @@ export default function SignUpScreen() {
             Sign In
           </span>
         </p>
+
+        {/* Phase 8 - compliance links */}
+        <div className="mt-6 pt-4 border-t border-gray-100 flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs text-gray-500" data-testid="signup-legal-links">
+          <a href="/privacy" className="hover:text-purple-600">Privacy</a>
+          <a href="/terms" className="hover:text-purple-600">Terms</a>
+          <a href="/community-guidelines" className="hover:text-purple-600">Community Guidelines</a>
+          <a href="/refund-policy" className="hover:text-purple-600">Refunds</a>
+          <a href="/safety" className="hover:text-purple-600">Safety</a>
+          <a href="/support" className="hover:text-purple-600">Support</a>
+        </div>
       </div>
     </div>
   );

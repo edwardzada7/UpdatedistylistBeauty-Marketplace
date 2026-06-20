@@ -295,6 +295,14 @@ export default function AdminDashboardScreen() {
           >
             Financial Settings →
           </button>
+          {/* Phase 8 - quick admin action: reports moderation */}
+          <button
+            onClick={() => navigate("/admin/reports")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 text-sm font-medium"
+            data-testid="admin-reports-link"
+          >
+            Reports Moderation →
+          </button>
         </div>
 
         <Tabs defaultValue="bookings" className="w-full" onValueChange={(v) => { if (v === "deleted") loadDeletedUsers(); }}>

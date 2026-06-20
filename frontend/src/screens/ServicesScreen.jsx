@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { SERVICE_CATEGORIES, APP_NAME } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
+import Footer from "@/components/Footer";
 
 export default function ServicesScreen() {
   const navigate = useNavigate();
@@ -159,6 +160,7 @@ export default function ServicesScreen() {
         </div>
       </div>
 
+      <Footer />
       <BottomNavigation />
     </div>
   );

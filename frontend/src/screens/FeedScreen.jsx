@@ -18,6 +18,8 @@ import { toast } from "sonner";
 import { feedAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation";
+import Footer from "@/components/Footer";
+import ReportButton from "@/components/ReportButton";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import PostComposerModal from "@/components/PostComposerModal";
 import { timeAgoShort } from "@/utils/timeAgo";
@@ -235,6 +237,7 @@ export default function FeedScreen() {
       />
 
       <BottomNavSpacer />
+      <Footer />
       <BottomNavigation />
     </div>
   );
@@ -367,6 +370,12 @@ export function PostCard({
             />
             <span className="text-sm font-medium">{post.likes_count || 0}</span>
           </button>
+          {/* Phase 8 - report this post */}
+          {!isOwner && (
+            <div className="ml-auto">
+              <ReportButton targetType="post" targetId={post.id} compact />
+            </div>
+          )}
         </div>
         {post.caption && (
           <p className="text-sm text-gray-800 whitespace-pre-wrap">

@@ -8,6 +8,7 @@ import { stylistsAPI, feedAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { APP_NAME, APP_TAGLINE, CURRENCY, SERVICE_CATEGORIES } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
+import Footer from "@/components/Footer";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import NotificationBell from "@/components/NotificationBell";
 import { timeAgoShort } from "@/utils/timeAgo";
@@ -338,6 +339,7 @@ const HomeScreen = () => {
         </div>
       </div>
 
+      <Footer />
       <BottomNavigation />
     </div>
   );

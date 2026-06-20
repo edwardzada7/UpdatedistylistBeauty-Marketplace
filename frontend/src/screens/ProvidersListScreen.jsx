@@ -12,6 +12,7 @@ import { CURRENCY, FILTER_OPTIONS, SORT_OPTIONS, SERVICE_CATALOG } from "@/utils
 import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
 import BottomNavigation from "@/components/BottomNavigation";
+import Footer from "@/components/Footer";
 
 const ProvidersListScreen = () => {
   const navigate = useNavigate();
@@ -337,6 +338,7 @@ const ProvidersListScreen = () => {
       </div>
 
       {/* Bottom Navigation */}
+      <Footer />
       <BottomNavigation />
     </div>
   );

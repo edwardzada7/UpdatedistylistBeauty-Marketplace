@@ -15,6 +15,7 @@ import { CURRENCY } from "@/utils/constants";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
 import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation";
+import ReportButton from "@/components/ReportButton";
 
 const ProviderProfileScreen = () => {
   const navigate = useNavigate();
@@ -858,6 +859,10 @@ const ProviderProfileScreen = () => {
                         {provider.total_services} Services
                       </Badge>
                     )}
+                  </div>
+                  {/* Phase 8 - report this provider */}
+                  <div className="mb-1">
+                    <ReportButton targetType="provider" targetId={provider.user_id} label="Report Provider" />
                   </div>
                   {/* Show rating from reviews stats if available, otherwise from provider */}
                   {(reviewsStats.total_reviews > 0 || provider.rating > 0) && (

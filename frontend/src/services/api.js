@@ -482,4 +482,30 @@ export const settingsAPI = {
     api.put(`/admin/settings/financial`, payload, { headers: { "X-ADMIN-KEY": adminKey } }),
 };
 
+// ==================== PHASE 8 LEAN - TRUST & SAFETY ====================
+
+export const legalAPI = {
+  list: () => api.get(`/legal`),
+  get: (slug) => api.get(`/legal/${encodeURIComponent(slug)}`),
+};
+
+export const reportsAPI = {
+  // User submits a report
+  create: (payload) => api.post(`/reports`, payload),
+  // Admin: list with optional filters
+  adminList: (adminKey, statusFilter = null, targetType = null, limit = 100, offset = 0) => {
+    const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (statusFilter) qs.append("status_filter", statusFilter);
+    if (targetType) qs.append("target_type", targetType);
+    return api.get(`/admin/reports?${qs.toString()}`, { headers: { "X-ADMIN-KEY": adminKey } });
+  },
+  // Admin: update status / notes
+  adminUpdate: (adminKey, id, payload) =>
+    api.put(`/admin/reports/${id}`, payload, { headers: { "X-ADMIN-KEY": adminKey } }),
+};
+
+export const supportAPI = {
+  create: (payload) => api.post(`/support/tickets`, payload),
+};
+
 export default api;

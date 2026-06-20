@@ -7794,6 +7794,217 @@ async def admin_list_providers(
 
 
 
+# ==================== PHASE 8 LEAN - TRUST, SAFETY, REPORTS, SUPPORT =====
+
+class ReportCreate(BaseModel):
+    reporter_auth_id: str
+    target_type: str       # 'provider' | 'customer' | 'post' | 'review' | 'chat'
+    target_id: str
+    reason: str            # one of REPORT_REASONS
+    description: Optional[str] = None
+
+
+class ReportAdminUpdate(BaseModel):
+    status: Optional[str] = None     # 'pending' | 'under_review' | 'resolved' | 'dismissed'
+    admin_notes: Optional[str] = None
+    resolved_by_auth_id: Optional[str] = None
+
+
+class SupportTicketCreate(BaseModel):
+    user_auth_id: Optional[str] = None  # may be null for guest submissions
+    name: str
+    email: EmailStr
+    category: str
+    subject: str
+    message: str
+
+
+REPORT_REASONS = {
+    "spam", "scam_fraud", "harassment", "impersonation", "hate_speech",
+    "inappropriate_content", "copyright_violation", "fake_profile", "other",
+}
+REPORT_TARGET_TYPES = {"provider", "customer", "post", "review", "chat"}
+REPORT_STATUSES = {"pending", "under_review", "resolved", "dismissed"}
+SUPPORT_CATEGORIES = {
+    "account", "booking", "payment", "provider", "technical_issue",
+    "abuse_report", "other",
+}
+
+
+# ----- Legal pages (public) ----------------------------------------------
+
+@api_router.get("/legal/{slug}")
+async def get_legal_page(slug: str):
+    """Public: fetch a legal page by slug. Guests can read."""
+    try:
+        res = supabase.table("legal_pages").select("*").eq("slug", slug).limit(1).execute()
+    except Exception as e:
+        msg = str(e).lower()
+        if "legal_pages" in msg or "does not exist" in msg or "could not find the table" in msg:
+            raise HTTPException(
+                status_code=503,
+                detail="Legal pages not provisioned. Apply phase8_lean_trust_safety.sql migration.",
+            )
+        logging.error(f"[legal] fetch failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    if not res.data:
+        raise HTTPException(status_code=404, detail=f"Legal page '{slug}' not found")
+    return res.data[0]
+
+
+@api_router.get("/legal")
+async def list_legal_pages():
+    """Public: list available legal page slugs + titles."""
+    try:
+        res = supabase.table("legal_pages").select("slug,title,updated_at").order("slug").execute()
+        return {"pages": res.data or []}
+    except Exception as e:
+        msg = str(e).lower()
+        if "legal_pages" in msg:
+            return {"pages": []}
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ----- Reports -----------------------------------------------------------
+
+@api_router.post("/reports", status_code=status.HTTP_201_CREATED)
+async def create_report(body: ReportCreate):
+    """Authenticated users submit a report on a provider/customer/post/review/chat."""
+    if body.target_type not in REPORT_TARGET_TYPES:
+        raise HTTPException(status_code=400, detail=f"target_type must be one of {sorted(REPORT_TARGET_TYPES)}")
+    if body.reason not in REPORT_REASONS:
+        raise HTTPException(status_code=400, detail=f"reason must be one of {sorted(REPORT_REASONS)}")
+    if not body.target_id or not str(body.target_id).strip():
+        raise HTTPException(status_code=400, detail="target_id is required")
+    if not body.reporter_auth_id or not body.reporter_auth_id.strip():
+        raise HTTPException(status_code=400, detail="reporter_auth_id is required (login required)")
+
+    payload = {
+        "reporter_auth_id": body.reporter_auth_id,
+        "target_type": body.target_type,
+        "target_id": str(body.target_id),
+        "reason": body.reason,
+        "description": (body.description or "").strip() or None,
+        "status": "pending",
+    }
+    try:
+        res = supabase.table("reports").insert(payload).execute()
+    except Exception as e:
+        msg = str(e).lower()
+        if "reports" in msg and ("does not exist" in msg or "could not find the table" in msg):
+            raise HTTPException(
+                status_code=503,
+                detail="Reports table not provisioned. Apply phase8_lean_trust_safety.sql migration.",
+            )
+        logging.error(f"[reports] insert failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"ok": True, "report_id": res.data[0]["id"] if res.data else None}
+
+
+@api_router.get("/admin/reports")
+async def admin_list_reports(
+    status_filter: Optional[str] = None,
+    target_type: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+    x_admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY"),
+):
+    """Admin: list reports with status/target filters."""
+    admin_dash_key = os.environ.get("ADMIN_DASH_KEY", "")
+    if not x_admin_key or x_admin_key != admin_dash_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+    try:
+        q = supabase.table("reports").select("*", count="exact")
+        if status_filter:
+            if status_filter not in REPORT_STATUSES:
+                raise HTTPException(status_code=400, detail=f"status_filter must be one of {sorted(REPORT_STATUSES)}")
+            q = q.eq("status", status_filter)
+        if target_type:
+            if target_type not in REPORT_TARGET_TYPES:
+                raise HTTPException(status_code=400, detail=f"target_type must be one of {sorted(REPORT_TARGET_TYPES)}")
+            q = q.eq("target_type", target_type)
+        q = q.order("created_at", desc=True).range(offset, offset + limit - 1)
+        res = q.execute()
+        return {"reports": res.data or [], "total": res.count or 0, "limit": limit, "offset": offset}
+    except HTTPException:
+        raise
+    except Exception as e:
+        msg = str(e).lower()
+        if "reports" in msg and ("does not exist" in msg or "could not find the table" in msg):
+            raise HTTPException(
+                status_code=503,
+                detail="Reports table not provisioned. Apply phase8_lean_trust_safety.sql migration.",
+            )
+        logging.error(f"[admin/reports] failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.put("/admin/reports/{report_id}")
+async def admin_update_report(
+    report_id: int,
+    body: ReportAdminUpdate,
+    x_admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY"),
+):
+    """Admin: update report status / notes."""
+    admin_dash_key = os.environ.get("ADMIN_DASH_KEY", "")
+    if not x_admin_key or x_admin_key != admin_dash_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+    update: dict = {}
+    if body.status is not None:
+        if body.status not in REPORT_STATUSES:
+            raise HTTPException(status_code=400, detail=f"status must be one of {sorted(REPORT_STATUSES)}")
+        update["status"] = body.status
+        if body.status in ("resolved", "dismissed"):
+            update["resolved_at"] = datetime.now(timezone.utc).isoformat()
+            if body.resolved_by_auth_id:
+                update["resolved_by"] = body.resolved_by_auth_id
+    if body.admin_notes is not None:
+        update["admin_notes"] = body.admin_notes.strip() or None
+    if not update:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    try:
+        res = supabase.table("reports").update(update).eq("id", report_id).execute()
+    except Exception as e:
+        logging.error(f"[admin/reports] update failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return {"ok": True, "report": res.data[0]}
+
+
+# ----- Support tickets ---------------------------------------------------
+
+@api_router.post("/support/tickets", status_code=status.HTTP_201_CREATED)
+async def create_support_ticket(body: SupportTicketCreate):
+    """Submit a support ticket. user_auth_id is optional (guests allowed)."""
+    if body.category not in SUPPORT_CATEGORIES:
+        raise HTTPException(status_code=400, detail=f"category must be one of {sorted(SUPPORT_CATEGORIES)}")
+    for field, val in (("name", body.name), ("subject", body.subject), ("message", body.message)):
+        if not val or not str(val).strip():
+            raise HTTPException(status_code=400, detail=f"{field} is required")
+    payload = {
+        "user_auth_id": body.user_auth_id,
+        "name": body.name.strip(),
+        "email": str(body.email),
+        "category": body.category,
+        "subject": body.subject.strip(),
+        "message": body.message.strip(),
+        "status": "open",
+    }
+    try:
+        res = supabase.table("support_tickets").insert(payload).execute()
+    except Exception as e:
+        msg = str(e).lower()
+        if "support_tickets" in msg and ("does not exist" in msg or "could not find the table" in msg):
+            raise HTTPException(
+                status_code=503,
+                detail="Support tickets table not provisioned. Apply phase8_lean_trust_safety.sql migration.",
+            )
+        logging.error(f"[support] insert failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"ok": True, "ticket_id": res.data[0]["id"] if res.data else None}
+
+
 # Include the router in the main app
 try:
     # Phase 5 - register KYC routes onto api_router before include

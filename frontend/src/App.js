@@ -44,6 +44,12 @@ import AdminKYCScreen from "@/screens/AdminKYCScreen";
 // Phase 7 - Admin financial settings
 import AdminFinancialSettingsScreen from "@/screens/AdminFinancialSettingsScreen";
 
+// Phase 8 Lean - Trust, Safety, Support, Reports
+import LegalPageScreen from "@/screens/LegalPageScreen";
+import SafetyCenterScreen from "@/screens/SafetyCenterScreen";
+import SupportScreen from "@/screens/SupportScreen";
+import AdminReportsScreen from "@/screens/AdminReportsScreen";
+
 // Components
 import LoadingSpinner from "@/components/LoadingSpinner";
 
@@ -305,6 +311,14 @@ function AppRoutes() {
       <Route path="/feed" element={<FeedScreen />} />
       <Route path="/user/feed" element={<FeedScreen />} />
 
+      {/* Phase 8 Lean - public Trust & Safety routes (guest-accessible) */}
+      <Route path="/privacy" element={<LegalPageScreen slug="privacy" />} />
+      <Route path="/terms" element={<LegalPageScreen slug="terms" />} />
+      <Route path="/community-guidelines" element={<LegalPageScreen slug="community-guidelines" />} />
+      <Route path="/refund-policy" element={<LegalPageScreen slug="refund-policy" />} />
+      <Route path="/safety" element={<SafetyCenterScreen />} />
+      <Route path="/support" element={<SupportScreen />} />
+
       {/* Catch all - redirect based on auth state and role */}
       <Route path="*" element={<RoleBasedRedirect />} />
 
@@ -318,6 +332,8 @@ function AppRoutes() {
       <Route path="/admin/kyc" element={<AdminKYCScreen />} />
       {/* Phase 7 - Admin financial settings */}
       <Route path="/admin/settings" element={<AdminFinancialSettingsScreen />} />
+      {/* Phase 8 Lean - Admin reports moderation */}
+      <Route path="/admin/reports" element={<AdminReportsScreen />} />
     </Routes>
   );
 }
