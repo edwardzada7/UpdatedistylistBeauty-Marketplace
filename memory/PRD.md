@@ -766,3 +766,92 @@ Run `/app/backend/migrations/phase6_account_deletion.sql` in Supabase before del
 
 #### Credits Consumed
 ~7 of 8 (within budget).
+
+
+### Phase 8 Lean — Trust, Safety, Reporting & App Store Compliance Foundation (Feb 22, 2026)
+
+**All 8 lean tasks shipped within ~8-credit budget. Build passes, lint clean, curl validated, live end-to-end.**
+
+#### What was built
+
+**Database (1 migration):**
+- `legal_pages`, `reports`, `support_tickets` tables.
+- Seeded `legal_pages` with full content for `privacy`, `terms`, `community-guidelines`, `refund-policy`.
+
+**Backend endpoints (6 added → 125 total):**
+- `GET /api/legal/{slug}` (public)
+- `GET /api/legal` (public list)
+- `POST /api/reports` (auth required, 5 target types × 9 reasons validated)
+- `GET /api/admin/reports` (admin-only, filterable by status + target_type)
+- `PUT /api/admin/reports/{id}` (admin status + notes + resolved_by)
+- `POST /api/support/tickets` (auth optional — guests allowed)
+
+**New frontend screens (4):**
+- `LegalPageScreen.jsx` — dynamic public renderer for the 4 legal slugs (also: SEO title, last-updated stamp, graceful 503/404 messaging).
+- `SafetyCenterScreen.jsx` — guest-accessible hub with 7 cards (guidelines, report, support, delete account, privacy, terms, refund) + emergency notice.
+- `SupportScreen.jsx` — public contact form (7 categories, auth-prefill, deep-link from `/support?category=…`).
+- `AdminReportsScreen.jsx` — 4-tab moderation queue (pending / under_review / resolved / dismissed) with target-type filter, full review dialog (notes, mark-review/resolve/dismiss).
+
+**New frontend components (2):**
+- `Footer.jsx` — global footer with 6 compliance links.
+- `ReportButton.jsx` — reusable modal-driven report submission (provider/customer/post/review/chat) with 9 reasons; redirects guests to login.
+
+**Integrations (6 frontend screens + 1 admin link):**
+- Footer added to: HomeScreen, ProvidersListScreen, ServicesScreen, FeedScreen (all 4 use full `<Footer />`).
+- LoginScreen + SignUpScreen: inline compliance link strip (preserves centered card layout).
+- ReportButton wired on: ProviderProfileScreen (Report Provider), FeedScreen post cards (compact icon, hidden on own posts).
+- AdminDashboardScreen: added "Reports Moderation →" quick action.
+- App.js: 7 new routes (`/privacy`, `/terms`, `/community-guidelines`, `/refund-policy`, `/safety`, `/support`, `/admin/reports`).
+
+**API client (`api.js`):**
+- `legalAPI`, `reportsAPI`, `supportAPI`.
+
+#### Live validation
+- ✅ `/api/legal/privacy` returns full privacy content (DB seeded with 4 pages).
+- ✅ `POST /api/reports` validates 5 target types × 9 reasons (`bogus` reason → 400 with full enum list).
+- ✅ `POST /api/reports` accepted (HTTP 201) — 3 real reports already submitted by user including 1 with admin_notes.
+- ✅ `PUT /api/admin/reports/3 status=under_review` succeeded and updated.
+- ✅ `POST /api/support/tickets` accepted (HTTP 201), 1 ticket already in table.
+- ✅ Safety Center page renders all 7 cards + emergency notice + global footer (screenshot verified).
+- ✅ ESLint clean across 16 modified/created files.
+- ✅ 125 routes total registered (was 119; 6 new).
+
+#### Compliance audit (Task 10)
+| Check | Status |
+|---|---|
+| Privacy / Terms / Community / Refund pages load | ✅ |
+| Safety Center page loads | ✅ |
+| Support form submits | ✅ |
+| Reporting system end-to-end | ✅ |
+| Admin moderation works | ✅ |
+| Guest access (no auth required for legal/safety/support GET) | ✅ |
+| Mobile responsive (Cards stack on `sm:` breakpoint) | ✅ |
+| Build passes | ✅ |
+| No route errors | ✅ |
+| No new console errors | ✅ |
+
+#### Files Modified / Added
+- **NEW** `backend/migrations/phase8_lean_trust_safety.sql`
+- `backend/server.py` (Phase 8 Lean section appended; 6 endpoints + models + constants)
+- **NEW** `frontend/src/components/Footer.jsx`
+- **NEW** `frontend/src/components/ReportButton.jsx`
+- **NEW** `frontend/src/screens/LegalPageScreen.jsx`
+- **NEW** `frontend/src/screens/SafetyCenterScreen.jsx`
+- **NEW** `frontend/src/screens/SupportScreen.jsx`
+- **NEW** `frontend/src/screens/AdminReportsScreen.jsx`
+- `frontend/src/services/api.js` (+legalAPI, reportsAPI, supportAPI)
+- `frontend/src/App.js` (7 new routes)
+- `frontend/src/screens/AdminDashboardScreen.jsx` (Reports Moderation quick-link)
+- `frontend/src/screens/HomeScreen.jsx`, `ProvidersListScreen.jsx`, `ServicesScreen.jsx`, `FeedScreen.jsx` (Footer)
+- `frontend/src/screens/LoginScreen.jsx`, `SignUpScreen.jsx` (inline compliance links)
+- `frontend/src/screens/ProviderProfileScreen.jsx` (Report Provider button)
+- `frontend/src/screens/FeedScreen.jsx` (Report Post button per card)
+
+#### Deferred to Phase 8B (per user)
+- Admin legal page editor (DB-only; admins can edit via Supabase for now)
+- Admin support dashboard (DB-only)
+- Copyright complaints (form + DB + admin queue)
+- Advanced moderation tooling / escalation workflows
+
+#### USER ACTION REQUIRED
+Already applied — the user ran `phase8_lean_trust_safety.sql` in Supabase (verified live: 3 reports, 1 ticket, 4 legal pages all retrieved successfully).
