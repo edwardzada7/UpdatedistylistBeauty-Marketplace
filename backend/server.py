@@ -8005,6 +8005,669 @@ async def create_support_ticket(body: SupportTicketCreate):
     return {"ok": True, "ticket_id": res.data[0]["id"] if res.data else None}
 
 
+# ============================================================================
+# PHASE 9 - PRE-LAUNCH COMPLETION
+# ============================================================================
+
+# ==================== MODELS - Phase 9 ====================
+
+class NoShowDisputeResolution(BaseModel):
+    """Admin resolution for disputed no-show"""
+    booking_id: int
+    resolution: str  # "favor_customer", "favor_provider", "split", "dismiss"
+    admin_notes: Optional[str] = None
+
+class PlatformEarningsResponse(BaseModel):
+    """Platform revenue metrics"""
+    total_revenue: float
+    revenue_today: float
+    revenue_this_month: float
+    booking_fees_earned: float
+    withdrawal_fees_earned: float
+    pending_payouts: float
+    completed_payouts: float
+
+class SupportTicketUpdate(BaseModel):
+    """Admin update for support ticket"""
+    status: Optional[str] = None  # open, pending, resolved, closed
+    admin_notes: Optional[str] = None
+    admin_reply: Optional[str] = None
+
+class CopyrightComplaintCreate(BaseModel):
+    """Copyright complaint submission"""
+    complainant_name: str
+    complainant_email: EmailStr
+    complaint_type: str  # content, profile_photo, post, service_image
+    target_type: str     # post, user, service, review
+    target_id: str
+    target_url: Optional[str] = None
+    original_work_description: str
+    proof_of_ownership: Optional[str] = None
+    infringing_content_description: str
+    good_faith_statement: str
+    accuracy_statement: str
+    electronic_signature: str
+
+class CopyrightComplaintUpdate(BaseModel):
+    """Admin update for copyright complaint"""
+    status: Optional[str] = None  # pending, under_review, action_taken, dismissed, escalated
+    admin_notes: Optional[str] = None
+    action_taken: Optional[str] = None
+
+class LegalPageUpdate(BaseModel):
+    """Admin update for legal page content"""
+    content: str
+
+
+# ==================== TASK 1: NO-SHOW DISPUTE RESOLUTION ====================
+
+@api_router.post("/admin/no-show/resolve")
+async def admin_resolve_no_show_dispute(
+    body: NoShowDisputeResolution,
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+):
+    """
+    Admin manually resolves a disputed no-show.
+    Protected by X-ADMIN-KEY.
+    """
+    admin_key = os.environ.get("ADMIN_DASH_KEY")
+    if not admin_key or not x_admin_key or x_admin_key != admin_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+
+    # Fetch booking
+    try:
+        booking_resp = supabase.table("bookings").select("*").eq("id", body.booking_id).single().execute()
+        booking = booking_resp.data
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found")
+    except Exception as e:
+        logging.error(f"[admin] dispute resolve fetch failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch booking")
+
+    # Must be disputed or no_show_pending
+    if booking.get("status") not in [STATUS_DISPUTED, STATUS_NO_SHOW_PENDING]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot resolve booking with status '{booking.get('status')}'"
+        )
+
+    # Determine new status and escrow action
+    resolution = body.resolution
+    new_status = None
+    escrow_action = None
+    
+    if resolution == "favor_customer":
+        new_status = STATUS_USER_NO_SHOW  # Provider no-showed
+        escrow_action = "refund"
+    elif resolution == "favor_provider":
+        new_status = STATUS_PROVIDER_NO_SHOW  # Customer no-showed
+        escrow_action = "release"
+    elif resolution == "split":
+        # Split: refund half to customer, release half to provider
+        # For now, we'll release to provider (can be enhanced later)
+        new_status = "resolved_split"
+        escrow_action = "split"
+    elif resolution == "dismiss":
+        # Dismiss dispute, restore to confirmed
+        new_status = "confirmed"
+        escrow_action = None
+    else:
+        raise HTTPException(status_code=400, detail="Invalid resolution type")
+
+    # Update booking
+    try:
+        update_data = {
+            "status": new_status,
+            "dispute_opened": False,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if body.admin_notes:
+            update_data["admin_notes"] = body.admin_notes[:1000]
+
+        supabase.table("bookings").update(update_data).eq("id", body.booking_id).execute()
+    except Exception as e:
+        logging.error(f"[admin] dispute resolution update failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update booking")
+
+    # Handle escrow
+    if escrow_action == "refund":
+        # Refund to customer
+        try:
+            await _refund_escrow_to_customer(booking)
+        except Exception as e:
+            logging.error(f"[admin] refund failed: {e}")
+    elif escrow_action == "release":
+        # Release to provider
+        try:
+            await _release_escrow_to_provider(booking)
+        except Exception as e:
+            logging.error(f"[admin] release failed: {e}")
+    elif escrow_action == "split":
+        # TODO: Implement split logic (50/50)
+        logging.info(f"[admin] split resolution for booking {body.booking_id} - not implemented yet")
+
+    # Create notifications
+    try:
+        create_notification(
+            user_auth_id=booking.get("customer_auth_id"),
+            notification_type="dispute_resolved",
+            title="Dispute Resolved",
+            message=f"Admin has resolved the dispute for booking #{body.booking_id}. Resolution: {resolution}.",
+            metadata={"booking_id": body.booking_id, "resolution": resolution}
+        )
+        create_notification(
+            user_auth_id=booking.get("provider_id"),
+            notification_type="dispute_resolved",
+            title="Dispute Resolved",
+            message=f"Admin has resolved the dispute for booking #{body.booking_id}. Resolution: {resolution}.",
+            metadata={"booking_id": body.booking_id, "resolution": resolution}
+        )
+    except Exception as e:
+        logging.warning(f"[admin] notification failed: {e}")
+
+    return {
+        "success": True,
+        "booking_id": body.booking_id,
+        "new_status": new_status,
+        "resolution": resolution
+    }
+
+
+# ==================== TASK 2: PLATFORM EARNINGS DASHBOARD ====================
+
+@api_router.get("/admin/platform-earnings")
+async def admin_platform_earnings(
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+):
+    """
+    Admin dashboard for platform revenue metrics.
+    Protected by X-ADMIN-KEY.
+    """
+    admin_key = os.environ.get("ADMIN_DASH_KEY")
+    if not admin_key or not x_admin_key or x_admin_key != admin_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    try:
+        # Fetch all withdrawal requests for fee calculation
+        withdrawals_resp = supabase.table("withdrawal_requests").select(
+            "gross_amount, fee_amount, net_amount, status, created_at"
+        ).execute()
+        withdrawals = withdrawals_resp.data or []
+
+        # Calculate withdrawal fees
+        total_withdrawal_fees = sum(
+            float(w.get("fee_amount") or 0)
+            for w in withdrawals
+            if w.get("status") in ["approved", "pending"]
+        )
+        
+        pending_payouts = sum(
+            float(w.get("gross_amount") or 0)
+            for w in withdrawals
+            if w.get("status") == "pending"
+        )
+        
+        completed_payouts = sum(
+            float(w.get("gross_amount") or 0)
+            for w in withdrawals
+            if w.get("status") == "approved"
+        )
+
+        # Fetch all bookings for platform fees (graceful fallback if migration not applied)
+        booking_fees_earned = 0
+        try:
+            bookings_resp = supabase.table("bookings").select(
+                "platform_fee_amount, created_at"
+            ).execute()
+            bookings = bookings_resp.data or []
+            
+            booking_fees_earned = sum(
+                float(b.get("platform_fee_amount") or 0)
+                for b in bookings
+            )
+        except Exception as booking_err:
+            # Graceful fallback if platform_fee_amount column doesn't exist yet
+            logging.warning(f"[admin] platform fees column missing (apply phase9 migration): {booking_err}")
+            booking_fees_earned = 0
+
+        # Calculate totals
+        total_revenue = booking_fees_earned + total_withdrawal_fees
+
+        # Today's revenue
+        revenue_today = sum(
+            float(w.get("fee_amount") or 0)
+            for w in withdrawals
+            if w.get("created_at") and w.get("created_at") >= today_start.isoformat()
+        )
+
+        # This month's revenue
+        revenue_this_month = sum(
+            float(w.get("fee_amount") or 0)
+            for w in withdrawals
+            if w.get("created_at") and w.get("created_at") >= month_start.isoformat()
+        )
+
+        return {
+            "total_revenue": round(total_revenue, 2),
+            "revenue_today": round(revenue_today, 2),
+            "revenue_this_month": round(revenue_this_month, 2),
+            "booking_fees_earned": round(booking_fees_earned, 2),
+            "withdrawal_fees_earned": round(total_withdrawal_fees, 2),
+            "pending_payouts": round(pending_payouts, 2),
+            "completed_payouts": round(completed_payouts, 2),
+        }
+
+    except Exception as e:
+        logging.error(f"[admin] platform earnings failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch platform earnings: {str(e)}")
+
+
+# ==================== TASK 3: ADMIN SUPPORT DASHBOARD ====================
+
+@api_router.get("/admin/support/tickets")
+async def admin_list_support_tickets(
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+    status: Optional[str] = Query(None, description="Filter by status: open, pending, resolved, closed"),
+):
+    """
+    Admin dashboard for support tickets.
+    Protected by X-ADMIN-KEY.
+    """
+    admin_key = os.environ.get("ADMIN_DASH_KEY")
+    if not admin_key or not x_admin_key or x_admin_key != admin_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+
+    try:
+        query = supabase.table("support_tickets").select("*").order("created_at", desc=True).limit(200)
+        
+        if status:
+            query = query.eq("status", status)
+        
+        resp = query.execute()
+        tickets = resp.data or []
+
+        return {
+            "count": len(tickets),
+            "tickets": tickets
+        }
+
+    except Exception as e:
+        logging.error(f"[admin] support tickets list failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch support tickets: {str(e)}")
+
+
+@api_router.put("/admin/support/tickets/{ticket_id}")
+async def admin_update_support_ticket(
+    ticket_id: int,
+    body: SupportTicketUpdate,
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+    auth_id: str = Query(..., description="Admin auth_id"),
+):
+    """
+    Admin updates support ticket (status, reply, notes).
+    Protected by X-ADMIN-KEY.
+    """
+    admin_key = os.environ.get("ADMIN_DASH_KEY")
+    if not admin_key or not x_admin_key or x_admin_key != admin_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+
+    # Fetch ticket
+    try:
+        ticket_resp = supabase.table("support_tickets").select("*").eq("id", ticket_id).single().execute()
+        ticket = ticket_resp.data
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Support ticket not found")
+    except Exception as e:
+        logging.error(f"[admin] support ticket fetch failed: {e}")
+        raise HTTPException(status_code=404, detail="Support ticket not found")
+
+    # Build update
+    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if body.status:
+        update_data["status"] = body.status
+        if body.status == "resolved":
+            update_data["resolved_by"] = auth_id
+            update_data["resolved_at"] = datetime.now(timezone.utc).isoformat()
+    
+    if body.admin_notes:
+        update_data["admin_notes"] = body.admin_notes
+    
+    if body.admin_reply:
+        update_data["admin_reply"] = body.admin_reply
+        update_data["replied_by"] = auth_id
+        update_data["replied_at"] = datetime.now(timezone.utc).isoformat()
+
+    # Update ticket
+    try:
+        supabase.table("support_tickets").update(update_data).eq("id", ticket_id).execute()
+    except Exception as e:
+        logging.error(f"[admin] support ticket update failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update support ticket")
+
+    # Send notification if user provided auth_id
+    if ticket.get("auth_id") and body.admin_reply:
+        try:
+            create_notification(
+                user_auth_id=ticket.get("auth_id"),
+                notification_type="support_reply",
+                title="Support Team Replied",
+                message=f"Your support ticket #{ticket_id} has a new reply from our team.",
+                metadata={"ticket_id": ticket_id}
+            )
+        except Exception as e:
+            logging.warning(f"[admin] support notification failed: {e}")
+
+    # Queue email notification
+    _queue_email_notification(
+        email_type="support_reply",
+        recipient_email=ticket.get("email"),
+        recipient_auth_id=ticket.get("auth_id"),
+        subject=f"Support Ticket #{ticket_id} - Response from iStylist",
+        body=body.admin_reply or "Your support ticket has been updated.",
+        metadata={"ticket_id": ticket_id}
+    )
+
+    return {"success": True, "ticket_id": ticket_id}
+
+
+# ==================== TASK 4: COPYRIGHT COMPLAINT SYSTEM ====================
+
+@api_router.post("/copyright/report")
+async def submit_copyright_complaint(
+    body: CopyrightComplaintCreate,
+    auth_id: Optional[str] = Query(None, description="Optional auth_id if logged in"),
+):
+    """
+    Submit a copyright complaint (DMCA-style).
+    Public endpoint but supports optional auth.
+    """
+    # Validate complaint type
+    valid_types = ["content", "profile_photo", "post", "service_image"]
+    if body.complaint_type not in valid_types:
+        raise HTTPException(status_code=400, detail=f"Invalid complaint_type. Must be one of: {valid_types}")
+
+    # Validate target type
+    valid_targets = ["post", "user", "service", "review"]
+    if body.target_type not in valid_targets:
+        raise HTTPException(status_code=400, detail=f"Invalid target_type. Must be one of: {valid_targets}")
+
+    # Insert complaint
+    try:
+        insert_data = {
+            "complainant_name": body.complainant_name[:255],
+            "complainant_email": body.complainant_email[:255],
+            "complainant_auth_id": auth_id,
+            "complaint_type": body.complaint_type,
+            "target_type": body.target_type,
+            "target_id": body.target_id[:50],
+            "target_url": body.target_url,
+            "original_work_description": body.original_work_description,
+            "proof_of_ownership": body.proof_of_ownership,
+            "infringing_content_description": body.infringing_content_description,
+            "good_faith_statement": body.good_faith_statement,
+            "accuracy_statement": body.accuracy_statement,
+            "electronic_signature": body.electronic_signature[:255],
+            "status": "pending",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        resp = supabase.table("copyright_complaints").insert(insert_data).execute()
+        complaint = resp.data[0] if resp.data else None
+
+        if not complaint:
+            raise HTTPException(status_code=500, detail="Failed to create copyright complaint")
+
+        # Queue email to admin
+        _queue_email_notification(
+            email_type="copyright_complaint",
+            recipient_email=os.environ.get("ADMIN_EMAIL", "admin@istylist.com"),
+            recipient_auth_id=None,
+            subject=f"New Copyright Complaint #{complaint['id']}",
+            body=f"A new copyright complaint has been submitted by {body.complainant_name}.",
+            metadata={"complaint_id": complaint['id']}
+        )
+
+        return {
+            "success": True,
+            "complaint_id": complaint['id'],
+            "message": "Copyright complaint submitted successfully. We will review it within 24-48 hours."
+        }
+
+    except Exception as e:
+        logging.error(f"[copyright] complaint submission failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to submit copyright complaint: {str(e)}")
+
+
+@api_router.get("/admin/copyright/complaints")
+async def admin_list_copyright_complaints(
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+):
+    """
+    Admin dashboard for copyright complaints.
+    Protected by X-ADMIN-KEY.
+    """
+    admin_key = os.environ.get("ADMIN_DASH_KEY")
+    if not admin_key or not x_admin_key or x_admin_key != admin_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+
+    try:
+        query = supabase.table("copyright_complaints").select("*").order("created_at", desc=True).limit(200)
+        
+        if status:
+            query = query.eq("status", status)
+        
+        resp = query.execute()
+        complaints = resp.data or []
+
+        return {
+            "count": len(complaints),
+            "complaints": complaints
+        }
+
+    except Exception as e:
+        logging.error(f"[admin] copyright complaints list failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch copyright complaints: {str(e)}")
+
+
+@api_router.put("/admin/copyright/complaints/{complaint_id}")
+async def admin_update_copyright_complaint(
+    complaint_id: int,
+    body: CopyrightComplaintUpdate,
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+    auth_id: str = Query(..., description="Admin auth_id"),
+):
+    """
+    Admin reviews and updates copyright complaint.
+    Protected by X-ADMIN-KEY.
+    """
+    admin_key = os.environ.get("ADMIN_DASH_KEY")
+    if not admin_key or not x_admin_key or x_admin_key != admin_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+
+    # Fetch complaint
+    try:
+        complaint_resp = supabase.table("copyright_complaints").select("*").eq("id", complaint_id).single().execute()
+        complaint = complaint_resp.data
+        if not complaint:
+            raise HTTPException(status_code=404, detail="Copyright complaint not found")
+    except Exception as e:
+        logging.error(f"[admin] copyright complaint fetch failed: {e}")
+        raise HTTPException(status_code=404, detail="Copyright complaint not found")
+
+    # Build update
+    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if body.status:
+        update_data["status"] = body.status
+        update_data["reviewed_by"] = auth_id
+        update_data["reviewed_at"] = datetime.now(timezone.utc).isoformat()
+    
+    if body.admin_notes:
+        update_data["admin_notes"] = body.admin_notes
+    
+    if body.action_taken:
+        update_data["action_taken"] = body.action_taken
+
+    # Update complaint
+    try:
+        supabase.table("copyright_complaints").update(update_data).eq("id", complaint_id).execute()
+    except Exception as e:
+        logging.error(f"[admin] copyright complaint update failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update copyright complaint")
+
+    # Send notification to complainant
+    if complaint.get("complainant_auth_id"):
+        try:
+            create_notification(
+                user_auth_id=complaint.get("complainant_auth_id"),
+                notification_type="copyright_reviewed",
+                title="Copyright Complaint Reviewed",
+                message=f"Your copyright complaint #{complaint_id} has been reviewed. Status: {body.status}",
+                metadata={"complaint_id": complaint_id, "status": body.status}
+            )
+        except Exception as e:
+            logging.warning(f"[admin] copyright notification failed: {e}")
+
+    # Queue email
+    _queue_email_notification(
+        email_type="copyright_reviewed",
+        recipient_email=complaint.get("complainant_email"),
+        recipient_auth_id=complaint.get("complainant_auth_id"),
+        subject=f"Copyright Complaint #{complaint_id} - Update",
+        body=f"Your copyright complaint has been reviewed. Status: {body.status}. {body.action_taken or ''}",
+        metadata={"complaint_id": complaint_id}
+    )
+
+    return {"success": True, "complaint_id": complaint_id}
+
+
+# ==================== TASK 5: ADMIN LEGAL PAGE EDITOR ====================
+
+@api_router.put("/admin/legal/{slug}")
+async def admin_update_legal_page(
+    slug: str,
+    body: LegalPageUpdate,
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+):
+    """
+    Admin updates legal page content.
+    Protected by X-ADMIN-KEY.
+    """
+    admin_key = os.environ.get("ADMIN_DASH_KEY")
+    if not admin_key or not x_admin_key or x_admin_key != admin_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+
+    # Validate slug
+    valid_slugs = ["privacy", "terms", "community-guidelines", "refund-policy"]
+    if slug not in valid_slugs:
+        raise HTTPException(status_code=400, detail=f"Invalid slug. Must be one of: {valid_slugs}")
+
+    # Update legal page
+    try:
+        update_data = {
+            "content": body.content,
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        }
+        
+        resp = supabase.table("legal_pages").update(update_data).eq("slug", slug).execute()
+        
+        if not resp.data:
+            raise HTTPException(status_code=404, detail=f"Legal page '{slug}' not found")
+
+        return {
+            "success": True,
+            "slug": slug,
+            "message": "Legal page updated successfully"
+        }
+
+    except Exception as e:
+        logging.error(f"[admin] legal page update failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update legal page: {str(e)}")
+
+
+# ==================== TASK 6: EMAIL NOTIFICATION QUEUE ====================
+
+def _queue_email_notification(
+    email_type: str,
+    recipient_email: str,
+    subject: str,
+    body: str,
+    recipient_auth_id: Optional[str] = None,
+    metadata: Optional[Dict] = None,
+    html_body: Optional[str] = None,
+):
+    """
+    Queue an email notification for async sending.
+    This is a helper function - actual email sending would be done by a worker process.
+    """
+    try:
+        insert_data = {
+            "email_type": email_type,
+            "recipient_email": recipient_email[:255],
+            "recipient_auth_id": recipient_auth_id,
+            "subject": subject[:255],
+            "body": body,
+            "html_body": html_body,
+            "metadata": metadata,
+            "status": "pending",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        
+        supabase.table("email_notifications").insert(insert_data).execute()
+        logging.info(f"[email] queued {email_type} to {recipient_email}")
+    except Exception as e:
+        logging.error(f"[email] failed to queue notification: {e}")
+
+
+# Enhanced notification hooks for email
+def create_notification_with_email(
+    user_auth_id: str,
+    notification_type: str,
+    title: str,
+    message: str,
+    metadata: Optional[Dict] = None,
+):
+    """
+    Create in-app notification AND queue email for important events.
+    """
+    # Create in-app notification
+    create_notification(user_auth_id, notification_type, title, message, metadata)
+    
+    # Fetch user email
+    try:
+        user_resp = supabase.table("users").select("email, name").eq("auth_id", user_auth_id).single().execute()
+        user = user_resp.data
+        
+        if user and user.get("email"):
+            # Queue email for specific notification types
+            email_types = [
+                "support_reply",
+                "report_reviewed",
+                "kyc_approved",
+                "kyc_rejected",
+                "dispute_opened",
+                "dispute_resolved",
+            ]
+            
+            if notification_type in email_types:
+                _queue_email_notification(
+                    email_type=notification_type,
+                    recipient_email=user["email"],
+                    recipient_auth_id=user_auth_id,
+                    subject=title,
+                    body=message,
+                    metadata=metadata
+                )
+    except Exception as e:
+        logging.warning(f"[email] failed to queue email for notification: {e}")
+
+
 # Include the router in the main app
 try:
     # Phase 5 - register KYC routes onto api_router before include

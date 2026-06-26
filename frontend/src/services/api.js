@@ -506,6 +506,47 @@ export const reportsAPI = {
 
 export const supportAPI = {
   create: (payload) => api.post(`/support/tickets`, payload),
+  // Admin endpoints
+  adminList: (adminKey, status) => {
+    const qs = new URLSearchParams();
+    if (status) qs.append("status", status);
+    return api.get(`/admin/support/tickets?${qs.toString()}`, { headers: { "X-ADMIN-KEY": adminKey } });
+  },
+  adminUpdate: (adminKey, ticketId, authId, payload) =>
+    api.put(`/admin/support/tickets/${ticketId}?auth_id=${authId}`, payload, { headers: { "X-ADMIN-KEY": adminKey } }),
+};
+
+// Phase 9 - Platform Earnings
+export const earningsAPI = {
+  adminGet: (adminKey) =>
+    api.get(`/admin/platform-earnings`, { headers: { "X-ADMIN-KEY": adminKey } }),
+};
+
+// Phase 9 - No-Show Dispute Resolution
+export const noShowAPI = {
+  adminResolve: (adminKey, payload) =>
+    api.post(`/admin/no-show/resolve`, payload, { headers: { "X-ADMIN-KEY": adminKey } }),
+};
+
+// Phase 9 - Copyright Complaints
+export const copyrightAPI = {
+  submit: (payload, authId = null) => {
+    const qs = authId ? `?auth_id=${authId}` : "";
+    return api.post(`/copyright/report${qs}`, payload);
+  },
+  adminList: (adminKey, status) => {
+    const qs = new URLSearchParams();
+    if (status) qs.append("status", status);
+    return api.get(`/admin/copyright/complaints?${qs.toString()}`, { headers: { "X-ADMIN-KEY": adminKey } });
+  },
+  adminUpdate: (adminKey, complaintId, authId, payload) =>
+    api.put(`/admin/copyright/complaints/${complaintId}?auth_id=${authId}`, payload, { headers: { "X-ADMIN-KEY": adminKey } }),
+};
+
+// Phase 9 - Legal Pages Editor
+export const legalPagesAPI = {
+  adminUpdate: (adminKey, slug, content) =>
+    api.put(`/admin/legal/${slug}`, { content }, { headers: { "X-ADMIN-KEY": adminKey } }),
 };
 
 export default api;
