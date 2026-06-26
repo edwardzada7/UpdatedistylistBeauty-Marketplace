@@ -10,7 +10,7 @@ import sys
 from typing import Dict, Any, List
 
 # Backend URL
-BACKEND_URL = "https://db-integration-26.preview.emergentagent.com/api"
+BACKEND_URL = "https://mongo-supabase-api.preview.emergentagent.com/api"
 
 # Test data from existing database
 PROVIDER_AUTH_ID = "15fcb394-64cb-41d7-bdb4-90678e4f4fcc"  # Provider 13 (Amaka Beauty Pro)
