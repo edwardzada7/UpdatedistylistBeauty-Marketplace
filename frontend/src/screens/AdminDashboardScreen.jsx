@@ -303,6 +303,34 @@ export default function AdminDashboardScreen() {
           >
             Reports Moderation →
           </button>
+          {/* Phase 9 - Platform Earnings */}
+          <button
+            onClick={() => navigate("/admin/earnings")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 text-sm font-medium"
+          >
+            Platform Earnings →
+          </button>
+          {/* Phase 9 - Support Tickets */}
+          <button
+            onClick={() => navigate("/admin/support")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium"
+          >
+            Support Tickets →
+          </button>
+          {/* Phase 9 - Copyright */}
+          <button
+            onClick={() => navigate("/admin/copyright")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600 text-white hover:bg-orange-700 text-sm font-medium"
+          >
+            Copyright →
+          </button>
+          {/* Phase 9 - Legal Editor */}
+          <button
+            onClick={() => navigate("/admin/legal-editor")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 text-sm font-medium"
+          >
+            Legal Editor →
+          </button>
         </div>
 
         <Tabs defaultValue="bookings" className="w-full" onValueChange={(v) => { if (v === "deleted") loadDeletedUsers(); }}>

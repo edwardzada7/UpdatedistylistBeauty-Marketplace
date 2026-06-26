@@ -50,6 +50,12 @@ import SafetyCenterScreen from "@/screens/SafetyCenterScreen";
 import SupportScreen from "@/screens/SupportScreen";
 import AdminReportsScreen from "@/screens/AdminReportsScreen";
 
+// Phase 9 - Pre-Launch Admin Screens
+import AdminPlatformEarningsScreen from "@/screens/AdminPlatformEarningsScreen";
+import AdminSupportDashboardScreen from "@/screens/AdminSupportDashboardScreen";
+import AdminCopyrightScreen from "@/screens/AdminCopyrightScreen";
+import AdminLegalEditorScreen from "@/screens/AdminLegalEditorScreen";
+
 // Components
 import LoadingSpinner from "@/components/LoadingSpinner";
 
@@ -334,6 +340,11 @@ function AppRoutes() {
       <Route path="/admin/settings" element={<AdminFinancialSettingsScreen />} />
       {/* Phase 8 Lean - Admin reports moderation */}
       <Route path="/admin/reports" element={<AdminReportsScreen />} />
+      {/* Phase 9 - Pre-Launch Admin Features */}
+      <Route path="/admin/earnings" element={<AdminPlatformEarningsScreen />} />
+      <Route path="/admin/support" element={<AdminSupportDashboardScreen />} />
+      <Route path="/admin/copyright" element={<AdminCopyrightScreen />} />
+      <Route path="/admin/legal-editor" element={<AdminLegalEditorScreen />} />
     </Routes>
   );
 }
