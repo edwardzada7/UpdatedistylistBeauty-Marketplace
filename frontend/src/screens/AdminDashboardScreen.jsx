@@ -19,6 +19,9 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Shield,
   LogOut,
@@ -33,9 +36,10 @@ import {
   Star,
   Search,
   ChevronRight,
+  Gavel,
 } from "lucide-react";
 import { toast } from "sonner";
-import { adminAPI } from "@/services/api";
+import { adminAPI, noShowAPI } from "@/services/api";
 import { timeAgoShort } from "@/utils/timeAgo";
 import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
 
@@ -62,6 +66,13 @@ export default function AdminDashboardScreen() {
   // Phase 6 - soft-deleted users
   const [deletedUsers, setDeletedUsers] = useState([]);
   const [loadingDeleted, setLoadingDeleted] = useState(false);
+  
+  // Phase 10 - No-show dispute resolution
+  const [selectedDispute, setSelectedDispute] = useState(null);
+  const [disputeDialogOpen, setDisputeDialogOpen] = useState(false);
+  const [resolution, setResolution] = useState("favor_customer");
+  const [adminNotes, setAdminNotes] = useState("");
+  const [resolving, setResolving] = useState(false);
 
   // Pull admin key on mount; bounce to /admin if missing.
   useEffect(() => {
@@ -130,6 +141,33 @@ export default function AdminDashboardScreen() {
       else toast.error("Search failed");
     }
   };
+
+  // Phase 10 - Dispute Resolution Handler
+  const handleResolveDispute = useCallback(async () => {
+    if (!selectedDispute || !adminKey) return;
+    
+    try {
+      setResolving(true);
+      await noShowAPI.adminResolve(adminKey, {
+        booking_id: selectedDispute.id,
+        resolution,
+        admin_notes: adminNotes || undefined,
+      });
+      
+      toast.success("Dispute resolved successfully");
+      setDisputeDialogOpen(false);
+      setSelectedDispute(null);
+      setResolution("favor_customer");
+      setAdminNotes("");
+      
+      // Refresh dashboard
+      loadAll(adminKey);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to resolve dispute");
+    } finally {
+      setResolving(false);
+    }
+  }, [selectedDispute, adminKey, resolution, adminNotes, loadAll]);
 
   // Phase 6 - load deleted users on demand
   const loadDeletedUsers = useCallback(async () => {
@@ -483,17 +521,35 @@ export default function AdminDashboardScreen() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {recentNoShows.map((b) => (
-                          <TableRow key={b.id} data-testid={`admin-noshow-row-${b.id}`}>
-                            <TableCell className="font-mono text-xs">{b.id}</TableCell>
-                            <TableCell>{b.customer_name || "—"}</TableCell>
-                            <TableCell>{b.provider_name || "—"}</TableCell>
-                            <TableCell>{statusBadge(b.status)}</TableCell>
-                            <TableCell className="text-xs text-gray-500">
-                              {timeAgoShort(b.updated_at || b.created_at)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {recentNoShows.map((b) => {
+                          const isDisputed = b.status === "disputed" || b.dispute_opened;
+                          return (
+                            <TableRow 
+                              key={b.id} 
+                              data-testid={`admin-noshow-row-${b.id}`}
+                              onClick={() => {
+                                if (isDisputed) {
+                                  setSelectedDispute(b);
+                                  setResolution("favor_customer");
+                                  setAdminNotes("");
+                                  setDisputeDialogOpen(true);
+                                }
+                              }}
+                              className={isDisputed ? "cursor-pointer hover:bg-purple-50" : ""}
+                            >
+                              <TableCell className="font-mono text-xs">
+                                {b.id}
+                                {isDisputed && <Gavel className="inline h-3 w-3 ml-1 text-orange-600" />}
+                              </TableCell>
+                              <TableCell>{b.customer_name || "—"}</TableCell>
+                              <TableCell>{b.provider_name || "—"}</TableCell>
+                              <TableCell>{statusBadge(b.status)}</TableCell>
+                              <TableCell className="text-xs text-gray-500">
+                                {timeAgoShort(b.updated_at || b.created_at)}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -655,6 +711,163 @@ export default function AdminDashboardScreen() {
           </TabsContent>
         </Tabs>
       </div>
+      
+      {/* Phase 10 - Dispute Resolution Dialog */}
+      <Dialog open={disputeDialogOpen} onOpenChange={setDisputeDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Gavel className="h-5 w-5 mr-2 text-orange-600" />
+              Resolve No-Show Dispute
+            </DialogTitle>
+            <DialogDescription>
+              Review the booking details and choose a resolution. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedDispute && (
+            <div className="space-y-4">
+              {/* Booking Details */}
+              <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-500 text-xs">Booking ID</p>
+                    <p className="font-mono font-semibold">#{selectedDispute.id}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500 text-xs">Amount</p>
+                    <p className="font-semibold">{CURRENCY}{selectedDispute.price?.toLocaleString() || "0"}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500 text-xs">Customer</p>
+                    <p className="font-medium">{selectedDispute.customer_name || "Unknown"}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500 text-xs">Provider</p>
+                    <p className="font-medium">{selectedDispute.provider_name || "Unknown"}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-gray-500 text-xs">Service</p>
+                    <p className="font-medium">{selectedDispute.service_title || "—"}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-gray-500 text-xs">Current Status</p>
+                    <div>{statusBadge(selectedDispute.status)}</div>
+                  </div>
+                </div>
+                
+                {selectedDispute.dispute_reason && (
+                  <div className="pt-2 mt-2 border-t border-gray-200">
+                    <p className="text-gray-500 text-xs mb-1">Dispute Reason:</p>
+                    <p className="text-sm text-gray-700">{selectedDispute.dispute_reason}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Resolution Options */}
+              <div>
+                <Label className="text-base font-semibold mb-3 block">Choose Resolution</Label>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setResolution("favor_customer")}
+                    className={`w-full p-3 text-left rounded-lg border-2 transition-colors ${
+                      resolution === "favor_customer"
+                        ? "border-green-500 bg-green-50"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="font-medium text-sm">✅ Favor Customer (Refund)</div>
+                    <div className="text-xs text-gray-600 mt-1">
+                      Provider no-showed. Refund escrow to customer.
+                    </div>
+                  </button>
+                  
+                  <button
+                    onClick={() => setResolution("favor_provider")}
+                    className={`w-full p-3 text-left rounded-lg border-2 transition-colors ${
+                      resolution === "favor_provider"
+                        ? "border-blue-500 bg-blue-50"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="font-medium text-sm">✅ Favor Provider (Pay)</div>
+                    <div className="text-xs text-gray-600 mt-1">
+                      Customer no-showed. Release escrow to provider.
+                    </div>
+                  </button>
+                  
+                  <button
+                    onClick={() => setResolution("split")}
+                    className={`w-full p-3 text-left rounded-lg border-2 transition-colors ${
+                      resolution === "split"
+                        ? "border-purple-500 bg-purple-50"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="font-medium text-sm">⚖️ Split 50/50</div>
+                    <div className="text-xs text-gray-600 mt-1">
+                      Both parties partially at fault. Split escrow equally.
+                    </div>
+                  </button>
+                  
+                  <button
+                    onClick={() => setResolution("dismiss")}
+                    className={`w-full p-3 text-left rounded-lg border-2 transition-colors ${
+                      resolution === "dismiss"
+                        ? "border-gray-500 bg-gray-50"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="font-medium text-sm">❌ Dismiss Dispute</div>
+                    <div className="text-xs text-gray-600 mt-1">
+                      Dispute invalid. Close and restore to confirmed.
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Admin Notes */}
+              <div>
+                <Label>Internal Notes (Optional)</Label>
+                <Textarea
+                  value={adminNotes}
+                  onChange={(e) => setAdminNotes(e.target.value)}
+                  placeholder="Add notes about your resolution decision..."
+                  rows={3}
+                  className="mt-1"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setDisputeDialogOpen(false)} 
+              disabled={resolving}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleResolveDispute} 
+              disabled={resolving}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              {resolving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Gavel className="h-4 w-4 mr-2" />
+                  Confirm Resolution
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

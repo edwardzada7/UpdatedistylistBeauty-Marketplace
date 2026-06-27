@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { lazy, Suspense } from "react";
 import "@/App.css";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -29,35 +30,31 @@ import BookingDetailsScreen from "@/screens/BookingDetailsScreen";
 import NotificationsScreen from "@/screens/NotificationsScreen";
 import BookingChatScreen from "@/screens/BookingChatScreen";
 
-// Admin Screens
-import AdminLoginScreen from "@/screens/AdminLoginScreen";
-import AdminWithdrawalsScreen from "@/screens/AdminWithdrawalsScreen";
-import AdminDashboardScreen from "@/screens/AdminDashboardScreen";
-
 // Phase 4 - Social Feed
 import FeedScreen from "@/screens/FeedScreen";
 
 // Phase 5 - KYC
 import KYCScreen from "@/screens/KYCScreen";
-import AdminKYCScreen from "@/screens/AdminKYCScreen";
-
-// Phase 7 - Admin financial settings
-import AdminFinancialSettingsScreen from "@/screens/AdminFinancialSettingsScreen";
 
 // Phase 8 Lean - Trust, Safety, Support, Reports
 import LegalPageScreen from "@/screens/LegalPageScreen";
 import SafetyCenterScreen from "@/screens/SafetyCenterScreen";
 import SupportScreen from "@/screens/SupportScreen";
-import AdminReportsScreen from "@/screens/AdminReportsScreen";
-
-// Phase 9 - Pre-Launch Admin Screens
-import AdminPlatformEarningsScreen from "@/screens/AdminPlatformEarningsScreen";
-import AdminSupportDashboardScreen from "@/screens/AdminSupportDashboardScreen";
-import AdminCopyrightScreen from "@/screens/AdminCopyrightScreen";
-import AdminLegalEditorScreen from "@/screens/AdminLegalEditorScreen";
 
 // Components
 import LoadingSpinner from "@/components/LoadingSpinner";
+
+// Phase 10 - Lazy load admin screens for better performance
+const AdminLoginScreen = lazy(() => import("@/screens/AdminLoginScreen"));
+const AdminDashboardScreen = lazy(() => import("@/screens/AdminDashboardScreen"));
+const AdminWithdrawalsScreen = lazy(() => import("@/screens/AdminWithdrawalsScreen"));
+const AdminKYCScreen = lazy(() => import("@/screens/AdminKYCScreen"));
+const AdminFinancialSettingsScreen = lazy(() => import("@/screens/AdminFinancialSettingsScreen"));
+const AdminReportsScreen = lazy(() => import("@/screens/AdminReportsScreen"));
+const AdminPlatformEarningsScreen = lazy(() => import("@/screens/AdminPlatformEarningsScreen"));
+const AdminSupportDashboardScreen = lazy(() => import("@/screens/AdminSupportDashboardScreen"));
+const AdminCopyrightScreen = lazy(() => import("@/screens/AdminCopyrightScreen"));
+const AdminLegalEditorScreen = lazy(() => import("@/screens/AdminLegalEditorScreen"));
 
 /**
  * ProtectedRoute - Requires authentication
@@ -330,21 +327,22 @@ function AppRoutes() {
 
       {/* ============================================= */}
       {/* ADMIN ROUTES - Separate from user auth */}
+      {/* Phase 10 - Lazy loaded with Suspense */}
       {/* ============================================= */}
-      <Route path="/admin" element={<AdminLoginScreen />} />
-      <Route path="/admin/dashboard" element={<AdminDashboardScreen />} />
-      <Route path="/admin/withdrawals" element={<AdminWithdrawalsScreen />} />
+      <Route path="/admin" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminLoginScreen /></Suspense>} />
+      <Route path="/admin/dashboard" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminDashboardScreen /></Suspense>} />
+      <Route path="/admin/withdrawals" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminWithdrawalsScreen /></Suspense>} />
       {/* Phase 5 - Admin KYC review */}
-      <Route path="/admin/kyc" element={<AdminKYCScreen />} />
+      <Route path="/admin/kyc" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminKYCScreen /></Suspense>} />
       {/* Phase 7 - Admin financial settings */}
-      <Route path="/admin/settings" element={<AdminFinancialSettingsScreen />} />
+      <Route path="/admin/settings" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminFinancialSettingsScreen /></Suspense>} />
       {/* Phase 8 Lean - Admin reports moderation */}
-      <Route path="/admin/reports" element={<AdminReportsScreen />} />
+      <Route path="/admin/reports" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminReportsScreen /></Suspense>} />
       {/* Phase 9 - Pre-Launch Admin Features */}
-      <Route path="/admin/earnings" element={<AdminPlatformEarningsScreen />} />
-      <Route path="/admin/support" element={<AdminSupportDashboardScreen />} />
-      <Route path="/admin/copyright" element={<AdminCopyrightScreen />} />
-      <Route path="/admin/legal-editor" element={<AdminLegalEditorScreen />} />
+      <Route path="/admin/earnings" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminPlatformEarningsScreen /></Suspense>} />
+      <Route path="/admin/support" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminSupportDashboardScreen /></Suspense>} />
+      <Route path="/admin/copyright" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminCopyrightScreen /></Suspense>} />
+      <Route path="/admin/legal-editor" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminLegalEditorScreen /></Suspense>} />
     </Routes>
   );
 }
