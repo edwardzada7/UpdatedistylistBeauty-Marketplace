@@ -228,9 +228,10 @@ export default function AdminDashboardScreen() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="bg-white border-b sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between max-w-6xl">
+      <div className="min-h-screen overflow-y-auto">
+        {/* Header */}
+        <header className="bg-white border-b sticky top-0 z-10">
+          <div className="container mx-auto px-4 py-3 flex items-center justify-between max-w-6xl">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
               <Shield className="h-5 w-5 text-purple-600" />
