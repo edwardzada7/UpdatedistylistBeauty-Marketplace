@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, validator
 from typing import List, Optional, Dict, Any
+import json
 from datetime import datetime, date, time, timedelta, timezone
 from supabase import create_client, Client
 import re
@@ -4128,6 +4129,33 @@ def parse_service_record(item):
         "is_active": "(disabled)" not in (item.get("name") or "")
     }
 
+
+def parse_product_record(item):
+    """Parse a products table record into a normalized product dict."""
+    # image_urls may be stored as JSON string or array
+    imgs = item.get("image_urls") or item.get("image_url") or []
+    if isinstance(imgs, str):
+        try:
+            imgs = json.loads(imgs)
+        except Exception:
+            # fallback: comma-separated
+            imgs = [s.strip() for s in imgs.split(",") if s.strip()]
+    # seller may be referenced by seller_id or provider_id
+    seller_id = item.get("seller_id") or item.get("provider_id") or item.get("user_id")
+    return {
+        "id": item.get("id"),
+        "name": item.get("name") or item.get("title") or "",
+        "description": item.get("description") or None,
+        "price": float(item.get("price") or 0),
+        "stock": int(item.get("stock") or item.get("quantity") or 0),
+        "image_urls": imgs or [],
+        "is_active": bool(item.get("is_active") if item.get("is_active") is not None else True),
+        "is_approved": bool(item.get("is_approved") if item.get("is_approved") is not None else False),
+        "seller_id": seller_id,
+        "seller_auth_id": item.get("seller_auth_id") or item.get("provider_auth_id") or None,
+        "raw": item,
+    }
+
 def build_service_name(sub_service_name, description, in_store, home_service, travel_service, is_active):
     """Build the service name field with metadata"""
     name = sub_service_name if is_active else f"{sub_service_name} (disabled)"
@@ -7675,6 +7703,155 @@ async def admin_recent_payments(
         raise HTTPException(status_code=500, detail=f"Failed: {e}")
 
 
+@api_router.get("/admin/feed-posts")
+async def admin_list_feed_posts(
+    status_filter: Optional[str] = Query("all", alias="status_filter", description="Filter by active/inactive/all"),
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+):
+    """Admin: list social feed posts for moderation."""
+    _require_admin_key(x_admin_key)
+    _require_feed_tables()
+    if status_filter not in {"all", "active", "inactive"}:
+        raise HTTPException(status_code=400, detail="status_filter must be one of ['all', 'active', 'inactive']")
+    try:
+        q = supabase.table("provider_posts").select("*", count="exact").order("created_at", desc=True).range(offset, offset + limit - 1)
+        if status_filter == "active":
+            q = q.eq("is_active", True)
+        elif status_filter == "inactive":
+            q = q.eq("is_active", False)
+        res = q.execute()
+        posts = res.data or []
+        enriched = [_enrich_post(p) for p in posts]
+        return {"posts": enriched, "total": res.count or len(enriched), "limit": limit, "offset": offset}
+    except Exception as e:
+        logging.error(f"admin_feed_posts failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list feed posts: {e}")
+
+
+@api_router.put("/admin/feed-posts/{post_id}")
+async def admin_update_feed_post(
+    post_id: int,
+    body: AdminFeedPostUpdate,
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+):
+    """Admin: update feed post moderation fields."""
+    _require_admin_key(x_admin_key)
+    _require_feed_tables()
+    res = supabase.table("provider_posts").select("*").eq("id", post_id).limit(1).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Feed post not found")
+    update_data = {k: v for k, v in body.dict(exclude_unset=True).items()}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    try:
+        updated = supabase.table("provider_posts").update(update_data).eq("id", post_id).execute()
+        if not updated.data:
+            raise HTTPException(status_code=500, detail="Failed to update feed post")
+        return _enrich_post(updated.data[0])
+    except Exception as e:
+        logging.error(f"admin_update_feed_post failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update feed post: {e}")
+
+
+@api_router.get("/admin/shop-services")
+async def admin_list_shop_services(
+    status_filter: Optional[str] = Query("all", alias="status_filter", description="Filter by active/inactive/all"),
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+):
+    """Admin: list marketplace products for shop moderation (reads from `products`)."""
+    _require_admin_key(x_admin_key)
+    if not check_table_exists("products"):
+        raise HTTPException(status_code=503, detail="Products table not provisioned.")
+    if status_filter not in {"all", "active", "inactive"}:
+        raise HTTPException(status_code=400, detail="status_filter must be one of ['all', 'active', 'inactive']")
+    try:
+        res = supabase.table("products").select("*", count="exact").order("id", desc=True).range(offset, offset + limit - 1).execute()
+        products = [parse_product_record(item) for item in (res.data or [])]
+        if status_filter == "active":
+            products = [p for p in products if p["is_active"]]
+        elif status_filter == "inactive":
+            products = [p for p in products if not p["is_active"]]
+
+        seller_ids = [p["seller_id"] for p in products if p.get("seller_id")]
+        seller_names = {}
+        if seller_ids:
+            try:
+                users_res = supabase.table("users").select("id,name").in_("id", seller_ids).execute()
+                for u in (users_res.data or []):
+                    seller_names[u["id"]] = u.get("name")
+            except Exception:
+                pass
+
+        enriched = [
+            {
+                **p,
+                "seller_name": seller_names.get(p.get("seller_id")) or None,
+            }
+            for p in products
+        ]
+        return {"services": enriched, "total": res.count or len(enriched), "limit": limit, "offset": offset}
+    except Exception as e:
+        logging.error(f"admin_shop_services failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list shop services: {e}")
+
+
+@api_router.put("/admin/shop-services/{service_id}")
+async def admin_update_shop_service(
+    service_id: int,
+    body: ShopServiceAdminUpdate,
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+):
+    """Admin: update marketplace product metadata or perform moderation actions (approve/hide/etc)."""
+    _require_admin_key(x_admin_key)
+    if not check_table_exists("products"):
+        raise HTTPException(status_code=503, detail="Products table not provisioned.")
+    existing = supabase.table("products").select("*").eq("id", service_id).limit(1).execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Product not found")
+    current = parse_product_record(existing.data[0])
+    update_data = {}
+
+    # Administrative action shortcuts
+    if body.action:
+        act = body.action.lower()
+        if act == "approve":
+            update_data["is_approved"] = True
+        elif act == "unapprove":
+            update_data["is_approved"] = False
+        elif act == "hide":
+            update_data["is_active"] = False
+        elif act == "restore":
+            update_data["is_active"] = True
+        else:
+            raise HTTPException(status_code=400, detail="Unknown action")
+
+    # Field updates
+    if body.price is not None:
+        update_data["price"] = body.price
+    if body.description is not None:
+        update_data["description"] = body.description
+    if body.stock is not None:
+        update_data["stock"] = body.stock
+    if body.is_active is not None:
+        update_data["is_active"] = body.is_active
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+
+    try:
+        updated = supabase.table("products").update(update_data).eq("id", service_id).execute()
+        if not updated.data:
+            raise HTTPException(status_code=500, detail="Failed to update product")
+        return parse_product_record(updated.data[0])
+    except Exception as e:
+        logging.error(f"admin_update_shop_service failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update shop service: {e}")
+
+
 @api_router.get("/admin/reported-no-shows")
 async def admin_reported_no_shows(
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
@@ -7808,6 +7985,20 @@ class ReportAdminUpdate(BaseModel):
     status: Optional[str] = None     # 'pending' | 'under_review' | 'resolved' | 'dismissed'
     admin_notes: Optional[str] = None
     resolved_by_auth_id: Optional[str] = None
+
+
+class AdminFeedPostUpdate(BaseModel):
+    is_active: Optional[bool] = None
+    caption: Optional[str] = None
+
+
+class ShopServiceAdminUpdate(BaseModel):
+    is_active: Optional[bool] = None
+    price: Optional[float] = None
+    duration_minutes: Optional[int] = None
+    description: Optional[str] = None
+    action: Optional[str] = None  # 'approve' | 'unapprove' | 'hide' | 'restore'
+    stock: Optional[int] = None
 
 
 class SupportTicketCreate(BaseModel):
