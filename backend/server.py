@@ -4150,7 +4150,7 @@ def parse_product_record(item):
         "stock": int(item.get("stock") or item.get("quantity") or 0),
         "image_urls": imgs or [],
         "is_active": bool(item.get("is_active") if item.get("is_active") is not None else True),
-        "is_approved": bool(item.get("is_approved") if item.get("is_approved") is not None else False),
+        "approved": bool(item.get("approved") if item.get("approved") is not None else False),
         "seller_id": seller_id,
         "seller_auth_id": item.get("seller_auth_id") or item.get("provider_auth_id") or None,
         "raw": item,
@@ -7833,9 +7833,9 @@ async def admin_update_shop_service(
     if body.action:
         act = body.action.lower()
         if act == "approve":
-            update_data["is_approved"] = True
+            update_data["approved"] = True
         elif act == "unapprove":
-            update_data["is_approved"] = False
+            update_data["approved"] = False
         elif act == "hide":
             update_data["is_active"] = False
         elif act == "restore":
