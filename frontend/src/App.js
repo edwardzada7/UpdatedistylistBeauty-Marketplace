@@ -51,6 +51,8 @@ const AdminWithdrawalsScreen = lazy(() => import("@/screens/AdminWithdrawalsScre
 const AdminKYCScreen = lazy(() => import("@/screens/AdminKYCScreen"));
 const AdminFinancialSettingsScreen = lazy(() => import("@/screens/AdminFinancialSettingsScreen"));
 const AdminReportsScreen = lazy(() => import("@/screens/AdminReportsScreen"));
+const AdminFeedModerationScreen = lazy(() => import("@/screens/AdminFeedModerationScreen"));
+const AdminShopModerationScreen = lazy(() => import("@/screens/AdminShopModerationScreen"));
 const AdminPlatformEarningsScreen = lazy(() => import("@/screens/AdminPlatformEarningsScreen"));
 const AdminSupportDashboardScreen = lazy(() => import("@/screens/AdminSupportDashboardScreen"));
 const AdminCopyrightScreen = lazy(() => import("@/screens/AdminCopyrightScreen"));
@@ -334,10 +336,12 @@ function AppRoutes() {
       <Route path="/admin/withdrawals" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminWithdrawalsScreen /></Suspense>} />
       {/* Phase 5 - Admin KYC review */}
       <Route path="/admin/kyc" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminKYCScreen /></Suspense>} />
-      {/* Phase 7 - Admin financial settings */}
-      <Route path="/admin/settings" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminFinancialSettingsScreen /></Suspense>} />
       {/* Phase 8 Lean - Admin reports moderation */}
       <Route path="/admin/reports" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminReportsScreen /></Suspense>} />
+      <Route path="/admin/feed-moderation" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminFeedModerationScreen /></Suspense>} />
+      <Route path="/admin/shop-moderation" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminShopModerationScreen /></Suspense>} />
+      {/* Phase 7 - Admin financial settings */}
+      <Route path="/admin/settings" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminFinancialSettingsScreen /></Suspense>} />
       {/* Phase 9 - Pre-Launch Admin Features */}
       <Route path="/admin/earnings" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminPlatformEarningsScreen /></Suspense>} />
       <Route path="/admin/support" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminSupportDashboardScreen /></Suspense>} />

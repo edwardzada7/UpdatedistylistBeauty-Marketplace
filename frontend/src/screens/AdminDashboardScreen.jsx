@@ -341,6 +341,20 @@ export default function AdminDashboardScreen() {
           >
             Reports Moderation →
           </button>
+          <button
+            onClick={() => navigate("/admin/feed-moderation")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-pink-600 text-white hover:bg-pink-700 text-sm font-medium"
+            data-testid="admin-feed-moderation-link"
+          >
+            Feed Moderation →
+          </button>
+          <button
+            onClick={() => navigate("/admin/shop-moderation")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 text-white hover:bg-slate-800 text-sm font-medium"
+            data-testid="admin-shop-moderation-link"
+          >
+            Shop Moderation →
+          </button>
           {/* Phase 9 - Platform Earnings */}
           <button
             onClick={() => navigate("/admin/earnings")}

@@ -410,6 +410,24 @@ export const adminAPI = {
     if (search) qs.append("search", search);
     return api.get(`/admin/providers?${qs.toString()}`, withAdminKey(adminKey));
   },
+  feedPosts: {
+    list: (adminKey, statusFilter = "all", limit = 100, offset = 0) => {
+      const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+      if (statusFilter) qs.append("status_filter", statusFilter);
+      return api.get(`/admin/feed-posts?${qs.toString()}`, withAdminKey(adminKey));
+    },
+    update: (adminKey, postId, payload) =>
+      api.put(`/admin/feed-posts/${postId}`, payload, withAdminKey(adminKey)),
+  },
+  shopServices: {
+    list: (adminKey, statusFilter = "all", limit = 100, offset = 0) => {
+      const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+      if (statusFilter) qs.append("status_filter", statusFilter);
+      return api.get(`/admin/shop-services?${qs.toString()}`, withAdminKey(adminKey));
+    },
+    update: (adminKey, serviceId, payload) =>
+      api.put(`/admin/shop-services/${serviceId}`, payload, withAdminKey(adminKey)),
+  },
   // Existing endpoint (kept for reuse from the new dashboard)
   withdrawals: (adminKey, statusFilter = null, limit = 50, offset = 0) => {
     const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
