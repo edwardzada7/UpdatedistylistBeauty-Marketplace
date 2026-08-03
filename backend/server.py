@@ -7123,6 +7123,20 @@ async def get_staff_available_slots(
 # All endpoints fail gracefully with 503 if tables are missing.
 # ====================================================================
 
+class ReportAdminUpdate(BaseModel):
+    status: Optional[str] = None     # 'pending' | 'under_review' | 'resolved' | 'dismissed'
+    admin_notes: Optional[str] = None
+    resolved_by_auth_id: Optional[str] = None
+
+
+class ShopServiceAdminUpdate(BaseModel):
+    is_active: Optional[bool] = None
+    price: Optional[float] = None
+    duration_minutes: Optional[int] = None
+    description: Optional[str] = None
+    action: Optional[str] = None  # 'approve' | 'unapprove' | 'hide' | 'restore'
+    stock: Optional[int] = None
+
 # Models
 class FeedPostCreate(BaseModel):
     image_url: str = Field(..., min_length=1)
@@ -7733,7 +7747,7 @@ async def admin_list_feed_posts(
 @api_router.put("/admin/feed-posts/{post_id}")
 async def admin_update_feed_post(
     post_id: int,
-    body: AdminFeedPostUpdate,
+    body: FeedPostUpdate,
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
 ):
     """Admin: update feed post moderation fields."""
@@ -7979,26 +7993,6 @@ class ReportCreate(BaseModel):
     target_id: str
     reason: str            # one of REPORT_REASONS
     description: Optional[str] = None
-
-
-class ReportAdminUpdate(BaseModel):
-    status: Optional[str] = None     # 'pending' | 'under_review' | 'resolved' | 'dismissed'
-    admin_notes: Optional[str] = None
-    resolved_by_auth_id: Optional[str] = None
-
-
-class AdminFeedPostUpdate(BaseModel):
-    is_active: Optional[bool] = None
-    caption: Optional[str] = None
-
-
-class ShopServiceAdminUpdate(BaseModel):
-    is_active: Optional[bool] = None
-    price: Optional[float] = None
-    duration_minutes: Optional[int] = None
-    description: Optional[str] = None
-    action: Optional[str] = None  # 'approve' | 'unapprove' | 'hide' | 'restore'
-    stock: Optional[int] = None
 
 
 class SupportTicketCreate(BaseModel):
