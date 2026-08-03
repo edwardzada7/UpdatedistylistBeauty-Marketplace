@@ -4142,6 +4142,7 @@ def parse_product_record(item):
             imgs = [s.strip() for s in imgs.split(",") if s.strip()]
     # seller may be referenced by seller_id or provider_id
     seller_id = item.get("seller_id") or item.get("provider_id") or item.get("user_id")
+    approved = bool(item.get("approved") if item.get("approved") is not None else False)
     return {
         "id": item.get("id"),
         "name": item.get("name") or item.get("title") or "",
@@ -4149,8 +4150,8 @@ def parse_product_record(item):
         "price": float(item.get("price") or 0),
         "stock": int(item.get("stock") or item.get("quantity") or 0),
         "image_urls": imgs or [],
-        "is_active": bool(item.get("is_active") if item.get("is_active") is not None else True),
-        "approved": bool(item.get("approved") if item.get("approved") is not None else False),
+        "is_active": approved,
+        "approved": approved,
         "seller_id": seller_id,
         "seller_auth_id": item.get("seller_auth_id") or item.get("provider_auth_id") or None,
         "raw": item,
@@ -7837,9 +7838,9 @@ async def admin_update_shop_service(
         elif act == "unapprove":
             update_data["approved"] = False
         elif act == "hide":
-            update_data["is_active"] = False
+            update_data["approved"] = False
         elif act == "restore":
-            update_data["is_active"] = True
+            update_data["approved"] = True
         else:
             raise HTTPException(status_code=400, detail="Unknown action")
 
@@ -7851,7 +7852,7 @@ async def admin_update_shop_service(
     if body.stock is not None:
         update_data["stock"] = body.stock
     if body.is_active is not None:
-        update_data["is_active"] = body.is_active
+        update_data["approved"] = body.is_active
 
     if not update_data:
         raise HTTPException(status_code=400, detail="Nothing to update")
