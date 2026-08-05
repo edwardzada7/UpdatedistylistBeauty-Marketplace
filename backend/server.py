@@ -176,6 +176,49 @@ class PaymentVerifyResponse(BaseModel):
     amount: Optional[float] = None
 
 
+# ==================== SHOP ORDER / REVIEW / STATUS MODELS ====================
+
+class ShopReviewCreate(BaseModel):
+    rating: int = Field(..., ge=1, le=5, description="Rating from 1 to 5")
+    comment: Optional[str] = None
+
+class ShopReviewUpdate(BaseModel):
+    rating: Optional[int] = Field(None, ge=1, le=5, description="Rating from 1 to 5")
+    comment: Optional[str] = None
+
+class ShopOrderItem(BaseModel):
+    product_id: int
+    quantity: int = Field(..., ge=1)
+
+class ShopOrderCreate(BaseModel):
+    customer_auth_id: str
+    items: List[ShopOrderItem]
+    shipping_address: Optional[str] = None
+    note: Optional[str] = None
+
+class ShopOrderUpdate(BaseModel):
+    status: Optional[str] = None
+    shipping_address: Optional[str] = None
+    payment_reference: Optional[str] = None
+    note: Optional[str] = None
+
+class ShopPaystackInitRequest(BaseModel):
+    amount: float
+    email: EmailStr
+    order_id: int
+    callback_url: Optional[str] = None
+
+class StatusCreateRequest(BaseModel):
+    status: str = Field(..., min_length=1)
+    message: Optional[str] = None
+    meta: Optional[Dict[str, Any]] = None
+
+class ChatMessageCreate(BaseModel):
+    auth_id: str
+    booking_id: int
+    message: str = Field(..., min_length=1, max_length=2000)
+
+
 # ==================== WITHDRAWAL REQUEST MODELS (Phase A) ====================
 
 class WithdrawalRequestCreate(BaseModel):
@@ -4157,6 +4200,61 @@ def parse_product_record(item):
         "raw": item,
     }
 
+def parse_shop_review(item):
+    """Parse a shop review row into a normalized review dict."""
+    return {
+        "id": item.get("id"),
+        "product_id": item.get("product_id"),
+        "reviewer_auth_id": item.get("reviewer_auth_id"),
+        "rating": int(item.get("rating") or 0),
+        "comment": item.get("comment"),
+        "created_at": item.get("created_at"),
+        "updated_at": item.get("updated_at"),
+    }
+
+
+def parse_shop_order(item, items=None):
+    """Parse a shop order row into a normalized order dict."""
+    order = {
+        "id": item.get("id"),
+        "customer_auth_id": item.get("customer_auth_id"),
+        "status": item.get("status"),
+        "total_amount": float(item.get("total_amount") or 0),
+        "shipping_address": item.get("shipping_address"),
+        "note": item.get("note"),
+        "payment_reference": item.get("payment_reference"),
+        "created_at": item.get("created_at"),
+        "updated_at": item.get("updated_at"),
+    }
+    if items is not None:
+        order["items"] = items
+    return order
+
+def _require_products_table():
+    if not check_table_exists("products"):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Products table not provisioned.")
+
+
+def _require_shop_order_tables():
+    if not check_table_exists("shop_orders") or not check_table_exists("shop_order_items"):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Shop order service not provisioned. Apply migration phase23_shop.sql.")
+
+
+def _require_shop_review_table():
+    if not check_table_exists("shop_reviews"):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Shop review service not provisioned. Apply migration phase23_shop.sql.")
+
+
+def _load_shop_order(order_id: int) -> dict:
+    order_response = supabase.table("shop_orders").select("*").eq("id", order_id).limit(1).execute()
+    if not order_response.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shop order not found")
+    order = order_response.data[0]
+    items_response = supabase.table("shop_order_items").select("*").eq("order_id", order_id).execute()
+    order_items = items_response.data or []
+    return parse_shop_order(order, items=order_items)
+
+
 def build_service_name(sub_service_name, description, in_store, home_service, travel_service, is_active):
     """Build the service name field with metadata"""
     name = sub_service_name if is_active else f"{sub_service_name} (disabled)"
@@ -7865,6 +7963,472 @@ async def admin_update_shop_service(
     except Exception as e:
         logging.error(f"admin_update_shop_service failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to update shop service: {e}")
+
+
+@api_router.get("/shop/products/{product_id}/reviews")
+async def get_shop_product_reviews(product_id: int):
+    """Get product reviews for a shop product."""
+    _require_products_table()
+    _require_shop_review_table()
+
+    product_response = supabase.table("products").select("id").eq("id", product_id).limit(1).execute()
+    if not product_response.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    try:
+        review_response = supabase.table("shop_reviews").select("*").eq("product_id", product_id).order("created_at", desc=True).execute()
+        reviews = [parse_shop_review(item) for item in (review_response.data or [])]
+        reviewer_ids = [r["reviewer_auth_id"] for r in reviews if r.get("reviewer_auth_id")]
+        reviewer_names = {}
+        if reviewer_ids:
+            users_response = supabase.table("users").select("auth_id, name").in_("auth_id", reviewer_ids).execute()
+            for u in (users_response.data or []):
+                reviewer_names[u["auth_id"]] = u.get("name") or "Anonymous"
+
+        for review in reviews:
+            review["reviewer_name"] = reviewer_names.get(review.get("reviewer_auth_id"), "Anonymous")
+
+        total_reviews = len(reviews)
+        avg_rating = round(sum(r.get("rating", 0) for r in reviews) / total_reviews, 1) if total_reviews else 0
+
+        return {
+            "product_id": product_id,
+            "reviews": reviews,
+            "total_reviews": total_reviews,
+            "avg_rating": avg_rating,
+        }
+    except Exception as e:
+        logging.error(f"Failed to fetch shop product reviews: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch product reviews: {e}")
+
+
+@api_router.post("/shop/products/{product_id}/reviews", status_code=status.HTTP_201_CREATED)
+async def create_shop_product_review(
+    product_id: int,
+    review: ShopReviewCreate,
+    auth_id: str = Query(..., description="Reviewer's auth_id (UUID)")
+):
+    """Create a review for a shop product."""
+    _require_products_table()
+    _require_shop_review_table()
+
+    product_response = supabase.table("products").select("id").eq("id", product_id).limit(1).execute()
+    if not product_response.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    try:
+        insert_data = {
+            "product_id": product_id,
+            "reviewer_auth_id": auth_id,
+            "rating": review.rating,
+            "comment": review.comment,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        result = supabase.table("shop_reviews").insert(insert_data).execute()
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to create review")
+        return parse_shop_review(result.data[0])
+    except Exception as e:
+        if "duplicate" in str(e).lower() or "unique" in str(e).lower() or "23505" in str(e):
+            raise HTTPException(status_code=409, detail="You have already reviewed this product")
+        logging.error(f"Failed to create shop review: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create review: {e}")
+
+
+@api_router.patch("/shop/products/{product_id}/reviews/{review_id}")
+async def update_shop_product_review(
+    product_id: int,
+    review_id: int,
+    review_update: ShopReviewUpdate,
+    auth_id: str = Query(..., description="Reviewer's auth_id (UUID)")
+):
+    """Update a shop product review."""
+    _require_products_table()
+    _require_shop_review_table()
+
+    existing_response = supabase.table("shop_reviews").select("*").eq("id", review_id).limit(1).execute()
+    if not existing_response.data:
+        raise HTTPException(status_code=404, detail="Review not found")
+
+    existing = existing_response.data[0]
+    if existing.get("product_id") != product_id:
+        raise HTTPException(status_code=400, detail="Review does not belong to the specified product")
+    if existing.get("reviewer_auth_id") != auth_id:
+        raise HTTPException(status_code=403, detail="You can only update your own review")
+
+    update_data = {}
+    if review_update.rating is not None:
+        update_data["rating"] = review_update.rating
+    if review_update.comment is not None:
+        update_data["comment"] = review_update.comment
+    if update_data:
+        update_data["updated_at"] = datetime.utcnow().isoformat()
+
+    if not update_data:
+        return parse_shop_review(existing)
+
+    try:
+        updated = supabase.table("shop_reviews").update(update_data).eq("id", review_id).execute()
+        if not updated.data:
+            raise HTTPException(status_code=500, detail="Failed to update review")
+        return parse_shop_review(updated.data[0])
+    except Exception as e:
+        logging.error(f"Failed to update shop review: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update review: {e}")
+
+
+@api_router.delete("/shop/products/{product_id}/reviews/{review_id}")
+async def delete_shop_product_review(
+    product_id: int,
+    review_id: int,
+    auth_id: str = Query(..., description="Reviewer's auth_id (UUID)")
+):
+    """Delete a shop product review."""
+    _require_products_table()
+    _require_shop_review_table()
+
+    existing_response = supabase.table("shop_reviews").select("*").eq("id", review_id).limit(1).execute()
+    if not existing_response.data:
+        raise HTTPException(status_code=404, detail="Review not found")
+
+    existing = existing_response.data[0]
+    if existing.get("product_id") != product_id:
+        raise HTTPException(status_code=400, detail="Review does not belong to the specified product")
+    if existing.get("reviewer_auth_id") != auth_id:
+        raise HTTPException(status_code=403, detail="You can only delete your own review")
+
+    try:
+        supabase.table("shop_reviews").delete().eq("id", review_id).execute()
+        return {"success": True, "review_id": review_id}
+    except Exception as e:
+        logging.error(f"Failed to delete shop review: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete review: {e}")
+
+
+@api_router.post("/shop/orders", status_code=status.HTTP_201_CREATED)
+async def create_shop_order(order: ShopOrderCreate):
+    """Create a new shop order."""
+    _require_products_table()
+    _require_shop_order_tables()
+
+    if not order.items:
+        raise HTTPException(status_code=400, detail="Order must include at least one item")
+
+    # Validate customer exists
+    user_response = supabase.table("users").select("auth_id").eq("auth_id", order.customer_auth_id).limit(1).execute()
+    if not user_response.data:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    total_amount = 0.0
+    items_data = []
+    for item in order.items:
+        product_response = supabase.table("products").select("*").eq("id", item.product_id).limit(1).execute()
+        if not product_response.data:
+            raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found")
+        product = parse_product_record(product_response.data[0])
+        if not product.get("is_active"):
+            raise HTTPException(status_code=400, detail=f"Product {item.product_id} is not available")
+        unit_price = product.get("price", 0)
+        quantity = item.quantity
+        total_price = round(unit_price * quantity, 2)
+        total_amount += total_price
+        items_data.append({
+            "product_id": item.product_id,
+            "quantity": quantity,
+            "unit_price": unit_price,
+            "total_price": total_price,
+        })
+
+    total_amount = round(total_amount, 2)
+    try:
+        order_data = {
+            "customer_auth_id": order.customer_auth_id,
+            "status": "pending",
+            "total_amount": total_amount,
+            "shipping_address": order.shipping_address,
+            "note": order.note,
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        order_response = supabase.table("shop_orders").insert(order_data).execute()
+        if not order_response.data:
+            raise HTTPException(status_code=500, detail="Failed to create shop order")
+        created_order = order_response.data[0]
+        for item_data in items_data:
+            supabase.table("shop_order_items").insert({
+                "order_id": created_order["id"],
+                **item_data,
+                "created_at": datetime.utcnow().isoformat(),
+            }).execute()
+
+        return _load_shop_order(created_order["id"])
+    except Exception as e:
+        logging.error(f"Failed to create shop order: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create shop order: {e}")
+
+
+@api_router.patch("/shop/orders/{order_id}")
+async def update_shop_order(order_id: int, order_update: ShopOrderUpdate):
+    """Update a shop order."""
+    _require_shop_order_tables()
+
+    existing_response = supabase.table("shop_orders").select("*").eq("id", order_id).limit(1).execute()
+    if not existing_response.data:
+        raise HTTPException(status_code=404, detail="Shop order not found")
+
+    existing = existing_response.data[0]
+    update_data = {}
+    if order_update.status is not None:
+        allowed_statuses = {"pending", "confirmed", "processing", "shipped", "delivered", "canceled", "returned"}
+        if order_update.status not in allowed_statuses:
+            raise HTTPException(status_code=400, detail=f"Invalid order status. Must be one of: {', '.join(sorted(allowed_statuses))}")
+        update_data["status"] = order_update.status
+    if order_update.shipping_address is not None:
+        update_data["shipping_address"] = order_update.shipping_address
+    if order_update.payment_reference is not None:
+        update_data["payment_reference"] = order_update.payment_reference
+    if order_update.note is not None:
+        update_data["note"] = order_update.note
+    if update_data:
+        update_data["updated_at"] = datetime.utcnow().isoformat()
+
+    if not update_data:
+        return _load_shop_order(order_id)
+
+    try:
+        updated = supabase.table("shop_orders").update(update_data).eq("id", order_id).execute()
+        if not updated.data:
+            raise HTTPException(status_code=500, detail="Failed to update shop order")
+        return _load_shop_order(order_id)
+    except Exception as e:
+        logging.error(f"Failed to update shop order: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update shop order: {e}")
+
+
+@api_router.post("/chat/messages", status_code=status.HTTP_201_CREATED)
+async def create_chat_message(
+    chat_message: ChatMessageCreate
+):
+    """Send a chat message for a booking via the generic chat endpoint."""
+    try:
+        booking_response = supabase.table("bookings").select("id, customer_auth_id, provider_id, stylist_auth_id").eq("id", chat_message.booking_id).execute()
+        if not booking_response.data:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        booking = booking_response.data[0]
+        if not is_chat_participant(booking, chat_message.auth_id):
+            raise HTTPException(status_code=403, detail="You are not a participant in this booking")
+
+        customer_auth_id = booking.get("customer_auth_id")
+        provider_uuid = get_booking_provider_uuid(booking)
+        receiver_auth_id = provider_uuid if chat_message.auth_id == customer_auth_id else customer_auth_id
+
+        if not check_table_exists("chats"):
+            raise HTTPException(status_code=503, detail="Chat service not available")
+
+        chat_data = {
+            "booking_id": chat_message.booking_id,
+            "sender_auth_id": chat_message.auth_id,
+            "receiver_auth_id": receiver_auth_id,
+            "message": chat_message.message.strip(),
+            "read": False,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        result = supabase.table("chats").insert(chat_data).execute()
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to send message")
+        inserted = result.data[0]
+        try:
+            sender_name = "Someone"
+            sender_response = supabase.table("users").select("name").eq("auth_id", chat_message.auth_id).limit(1).execute()
+            if sender_response.data:
+                sender_name = sender_response.data[0].get("name") or sender_name
+            await create_notification(
+                recipient_auth_id=receiver_auth_id,
+                notification_type="chat_message",
+                title="New Message",
+                message=f"{sender_name} sent you a message about your booking",
+                actor_auth_id=chat_message.auth_id,
+                metadata={"booking_id": chat_message.booking_id, "chat_id": inserted.get("id")}
+            )
+        except Exception:
+            pass
+        return inserted
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to create chat message: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create chat message: {e}")
+
+
+@api_router.post("/payments/paystack/shop/initialize")
+async def initialize_paystack_shop_payment(request: ShopPaystackInitRequest):
+    """Initialize a Paystack transaction for a shop order."""
+    headers = get_paystack_headers()
+    if not headers:
+        raise HTTPException(status_code=503, detail="Payment gateway not configured. PAYSTACK_SECRET_KEY is missing.")
+
+    if request.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+
+    _require_shop_order_tables()
+    order_response = supabase.table("shop_orders").select("*").eq("id", request.order_id).limit(1).execute()
+    if not order_response.data:
+        raise HTTPException(status_code=404, detail="Shop order not found")
+
+    reference = f"istylist_shop_order_{uuid.uuid4().hex[:12]}"
+    amount_kobo = int(request.amount * 100)
+    payload = {
+        "email": request.email,
+        "amount": amount_kobo,
+        "reference": reference,
+        "metadata": {
+            "purpose": "shop_order",
+            "order_id": request.order_id,
+        }
+    }
+    if request.callback_url:
+        payload["callback_url"] = request.callback_url
+
+    response = requests.post(
+        "https://api.paystack.co/transaction/initialize",
+        json=payload,
+        headers=headers,
+        timeout=30,
+    )
+    if response.status_code != 200:
+        logging.error(f"Paystack shop initialize failed: {response.text}")
+        raise HTTPException(status_code=502, detail="Failed to initialize payment with Paystack")
+
+    paystack_data = response.json()
+    if not paystack_data.get("status"):
+        raise HTTPException(status_code=400, detail=paystack_data.get("message", "Paystack initialization failed"))
+
+    payment_record = {
+        "reference": reference,
+        "email": request.email,
+        "amount": request.amount,
+        "purpose": "shop_order",
+        "booking_id": request.order_id,
+        "status": "pending",
+        "paystack_access_code": paystack_data["data"].get("access_code"),
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    try:
+        if check_table_exists("payments"):
+            supabase.table("payments").insert(payment_record).execute()
+    except Exception as e:
+        logging.warning(f"Could not insert shop payment row: {e}")
+
+    return {
+        "status": True,
+        "message": "Authorization URL created",
+        "authorization_url": paystack_data["data"].get("authorization_url"),
+        "access_code": paystack_data["data"].get("access_code"),
+        "reference": reference,
+    }
+
+
+@api_router.get("/payments/paystack/shop/verify")
+async def verify_paystack_shop_payment(reference: str = Query(..., description="Payment reference")):
+    """Verify a Paystack shop order payment."""
+    headers = get_paystack_headers()
+    if not headers:
+        raise HTTPException(status_code=503, detail="Payment gateway not configured")
+
+    try:
+        existing = None
+        if check_table_exists("payments"):
+            existing_resp = supabase.table("payments").select("*").eq("reference", reference).limit(1).execute()
+            if existing_resp.data:
+                existing = existing_resp.data[0]
+                if existing.get("status") == "success" and existing.get("processed"):
+                    return {
+                        "status": "success",
+                        "message": "Payment already verified and processed",
+                        "reference": reference,
+                        "amount": existing.get("amount"),
+                    }
+
+        response = requests.get(
+            f"https://api.paystack.co/transaction/verify/{reference}",
+            headers=headers,
+            timeout=30,
+        )
+        if response.status_code != 200:
+            raise HTTPException(status_code=502, detail="Failed to verify payment with Paystack")
+        paystack_data = response.json()
+        if not paystack_data.get("status"):
+            raise HTTPException(status_code=400, detail="Payment verification failed")
+
+        transaction = paystack_data["data"]
+        tx_status = transaction.get("status")
+        amount_naira = transaction.get("amount", 0) / 100
+        metadata = transaction.get("metadata", {}) or {}
+        order_id = metadata.get("order_id") or (existing.get("booking_id") if existing else None)
+
+        if check_table_exists("payments"):
+            supabase.table("payments").update({
+                "status": tx_status,
+                "paystack_response": transaction,
+                "verified_at": datetime.utcnow().isoformat(),
+            }).eq("reference", reference).execute()
+
+        if tx_status == "success" and order_id:
+            try:
+                if check_table_exists("shop_orders"):
+                    supabase.table("shop_orders").update({
+                        "status": "confirmed",
+                        "payment_reference": reference,
+                        "updated_at": datetime.utcnow().isoformat(),
+                    }).eq("id", int(order_id)).execute()
+            except Exception as inner_e:
+                logging.warning(f"Failed to update shop order after payment verify: {inner_e}")
+
+        if check_table_exists("payments"):
+            supabase.table("payments").update({
+                "processed": True,
+                "processed_at": datetime.utcnow().isoformat(),
+            }).eq("reference", reference).execute()
+
+        return {
+            "status": tx_status,
+            "message": f"Payment {tx_status}",
+            "reference": reference,
+            "amount": amount_naira,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to verify shop payment: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to verify payment: {e}")
+
+
+@api_router.get("/status")
+async def get_system_status():
+    """Get backend status information."""
+    connected = check_table_exists("users") and check_table_exists("payments")
+    return {
+        "status": "ok",
+        "service": app.title,
+        "version": app.version,
+        "timestamp": datetime.utcnow().isoformat(),
+        "supabase_tables_available": connected,
+    }
+
+
+@api_router.post("/status")
+async def post_system_status(payload: StatusCreateRequest):
+    """Accept a status update from a client."""
+    logging.info(f"Status update received: status={payload.status} message={payload.message}")
+    return {
+        "status": "ok",
+        "received": {
+            "status": payload.status,
+            "message": payload.message,
+            "meta": payload.meta,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    }
 
 
 @api_router.get("/admin/reported-no-shows")
