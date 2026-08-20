@@ -8616,10 +8616,14 @@ async def admin_user_detail(auth_id: str, x_admin_key: str = Header(None, alias=
     user_res = supabase.table("users").select("*").eq("auth_id", auth_id).limit(1).execute()
     if not user_res.data:
         raise HTTPException(status_code=404, detail="User not found")
-    bookings = supabase.table("bookings").select("*").or_(f"customer_auth_id.eq.{auth_id},provider_id.eq.{auth_id}").order("created_at", desc=True).limit(100).execute()
+    customer_bookings = supabase.table("bookings").select("*").eq("customer_auth_id", auth_id).order("created_at", desc=True).limit(100).execute()
+    provider_bookings = supabase.table("bookings").select("*").eq("provider_id", auth_id).order("created_at", desc=True).limit(100).execute()
+    bookings_by_id = {b.get("id"): b for b in (customer_bookings.data or []) + (provider_bookings.data or [])}
     payments = []
     if check_table_exists("payments"):
-        payments = supabase.table("payments").select("*").eq("user_auth_id", auth_id).order("created_at", desc=True).limit(100).execute().data or []
+        booking_ids = list(bookings_by_id)
+        if booking_ids:
+            payments = supabase.table("payments").select("*").in_("booking_id", booking_ids).order("created_at", desc=True).limit(100).execute().data or []
     services = []
     earnings = []
     user = user_res.data[0]
@@ -8633,8 +8637,8 @@ async def admin_user_detail(auth_id: str, x_admin_key: str = Header(None, alias=
         if stylist.data and check_table_exists("services"):
             services = supabase.table("services").select("*").eq("stylist_id", stylist.data[0]["id"]).execute().data or []
         if check_table_exists("wallet_transactions"):
-            earnings = supabase.table("wallet_transactions").select("*").or_(f"auth_id.eq.{auth_id},user_auth_id.eq.{auth_id}").order("created_at", desc=True).limit(100).execute().data or []
-    return {"user": user, "kyc": kyc_status, "bookings": bookings.data or [], "payments": payments, "services": services, "earnings": earnings}
+            earnings = supabase.table("wallet_transactions").select("*").eq("user_auth_id", auth_id).order("created_at", desc=True).limit(100).execute().data or []
+    return {"user": user, "kyc": kyc_status, "bookings": list(bookings_by_id.values()), "payments": payments, "services": services, "earnings": earnings}
 
 
 @api_router.post("/admin/{account_type}/{auth_id}/moderation")

@@ -844,7 +844,7 @@ export default function AdminDashboardScreen() {
       
       {/* Phase 10 - Dispute Resolution Dialog */}
       <Dialog open={disputeDialogOpen} onOpenChange={setDisputeDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center">
               <Gavel className="h-5 w-5 mr-2 text-orange-600" />
