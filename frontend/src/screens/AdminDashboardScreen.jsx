@@ -63,6 +63,12 @@ export default function AdminDashboardScreen() {
   const [recentPayments, setRecentPayments] = useState([]);
   const [providers, setProviders] = useState([]);
   const [providerSearch, setProviderSearch] = useState("");
+  const [users, setUsers] = useState([]);
+  const [userSearch, setUserSearch] = useState("");
+  const [selectedAccount, setSelectedAccount] = useState(null);
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+  const [moderationReason, setModerationReason] = useState("");
+  const [moderating, setModerating] = useState(false);
   // Phase 6 - soft-deleted users
   const [deletedUsers, setDeletedUsers] = useState([]);
   const [loadingDeleted, setLoadingDeleted] = useState(false);
@@ -95,18 +101,20 @@ export default function AdminDashboardScreen() {
       if (!key) return;
       try {
         setRefreshing(true);
-        const [s, b, p, ns, prov] = await Promise.all([
+        const [s, b, p, ns, prov, usr] = await Promise.all([
           adminAPI.stats(key),
           adminAPI.recentBookings(key, 10),
           adminAPI.recentPayments(key, 10).catch((e) => ({ data: { payments: [] } })),
           adminAPI.reportedNoShows(key, 10).catch((e) => ({ data: { items: [] } })),
           adminAPI.providers(key, 25, 0, ""),
+          adminAPI.users(key, 25, 0, ""),
         ]);
         setStats(s.data || null);
         setRecentBookings(b.data?.bookings || []);
         setRecentPayments(p.data?.payments || []);
         setRecentNoShows(ns.data?.items || []);
         setProviders(prov.data?.providers || []);
+        setUsers(usr.data?.users || []);
       } catch (e) {
         if (e?.response?.status === 401) {
           handleUnauthorized();
@@ -139,6 +147,52 @@ export default function AdminDashboardScreen() {
     } catch (e) {
       if (e?.response?.status === 401) handleUnauthorized();
       else toast.error("Search failed");
+    }
+  };
+
+  const handleUserSearch = async () => {
+    if (!adminKey) return;
+    try {
+      const res = await adminAPI.users(adminKey, 25, 0, userSearch.trim());
+      setUsers(res.data?.users || []);
+    } catch (e) {
+      if (e?.response?.status === 401) handleUnauthorized();
+      else toast.error("Search failed");
+    }
+  };
+
+  const openAccount = async (account, type) => {
+    try {
+      const res = await adminAPI.userDetail(adminKey, account.auth_id);
+      setSelectedAccount({ ...res.data, account, type });
+      setModerationReason(account.moderation_reason || "");
+      setAccountDialogOpen(true);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to load account details");
+    }
+  };
+
+  const moderateAccount = async (action) => {
+    if (!selectedAccount) return;
+    const needsReason = action === "suspend" || action === "deactivate" || action === "reject";
+    if (needsReason && !moderationReason.trim()) {
+      toast.error("A reason is required");
+      return;
+    }
+    if ((action === "suspend" || action === "deactivate") && !window.confirm(`Confirm ${action} account?`)) return;
+    try {
+      setModerating(true);
+      await adminAPI.moderate(adminKey, selectedAccount.type, selectedAccount.account.auth_id, {
+        action,
+        reason: moderationReason.trim() || undefined,
+      });
+      toast.success("Moderation action completed");
+      setAccountDialogOpen(false);
+      loadAll(adminKey);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Moderation action failed");
+    } finally {
+      setModerating(false);
     }
   };
 
@@ -387,7 +441,7 @@ export default function AdminDashboardScreen() {
         </div>
 
         <Tabs defaultValue="bookings" className="w-full" onValueChange={(v) => { if (v === "deleted") loadDeletedUsers(); }}>
-          <TabsList className="grid grid-cols-5 w-full max-w-3xl">
+          <TabsList className="grid grid-cols-6 w-full max-w-4xl">
             <TabsTrigger value="bookings" data-testid="tab-bookings">
               Recent Bookings
             </TabsTrigger>
@@ -399,6 +453,9 @@ export default function AdminDashboardScreen() {
             </TabsTrigger>
             <TabsTrigger value="providers" data-testid="tab-providers">
               Providers
+            </TabsTrigger>
+            <TabsTrigger value="users" data-testid="tab-users">
+              Users
             </TabsTrigger>
             <TabsTrigger value="deleted" data-testid="tab-deleted-users">
               Deleted Users
@@ -453,6 +510,25 @@ export default function AdminDashboardScreen() {
                     </Table>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="users" className="mt-4">
+            <Card>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:space-y-0">
+                <div><CardTitle className="text-base">Users</CardTitle><CardDescription>Customer and provider accounts</CardDescription></div>
+                <div className="flex gap-2">
+                  <Input placeholder="Search name, email or phone" value={userSearch} onChange={(e) => setUserSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleUserSearch()} className="w-56" />
+                  <Button onClick={handleUserSearch}>Search</Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Phone</TableHead><TableHead>Role</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+                    <TableBody>{users.map((u) => <TableRow key={u.id}><TableCell className="font-medium">{u.name || "—"}</TableCell><TableCell className="text-xs">{u.email || "—"}</TableCell><TableCell className="text-xs">{u.phone || "—"}</TableCell><TableCell className="capitalize text-xs">{u.role || "customer"}</TableCell><TableCell><Badge>{u.moderation_status || "Active"}</Badge></TableCell><TableCell><Button size="sm" variant="outline" onClick={() => openAccount(u, u.role === "stylist" ? "provider" : "user")}>View / Actions</Button></TableCell></TableRow>)}</TableBody>
+                  </Table>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -615,6 +691,8 @@ export default function AdminDashboardScreen() {
                           <TableHead className="text-right">Rate</TableHead>
                           <TableHead>Rating</TableHead>
                           <TableHead>Verified</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -644,12 +722,18 @@ export default function AdminDashboardScreen() {
                               )}
                             </TableCell>
                             <TableCell>
-                              {p.is_verified ? (
+                              {p.kyc_status === "verified" || p.is_verified ? (
                                 <Badge className="bg-green-100 text-green-700">Verified</Badge>
+                              ) : p.kyc_status === "rejected" ? (
+                                <Badge className="bg-red-100 text-red-700">Rejected</Badge>
+                              ) : p.kyc_status === "pending" ? (
+                                <Badge className="bg-yellow-100 text-yellow-700">Pending KYC</Badge>
                               ) : (
-                                <span className="text-xs text-gray-400">No</span>
+                                <span className="text-xs text-gray-400">Not submitted</span>
                               )}
                             </TableCell>
+                            <TableCell><Badge>{p.moderation_status || "active"}</Badge></TableCell>
+                            <TableCell><Button size="sm" variant="outline" onClick={() => openAccount(p, "provider")}>View / Actions</Button></TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -726,6 +810,37 @@ export default function AdminDashboardScreen() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <Dialog open={accountDialogOpen} onOpenChange={setAccountDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{selectedAccount?.user?.name || selectedAccount?.account?.name || "Account details"}</DialogTitle>
+            <DialogDescription>Profile, booking history, payment history and moderation status.</DialogDescription>
+          </DialogHeader>
+          {selectedAccount && (
+            <div className="space-y-4 text-sm">
+              <div className="grid grid-cols-2 gap-3 bg-gray-50 p-4 rounded-lg">
+                <div><span className="text-gray-500">Email</span><p>{selectedAccount.user?.email || "—"}</p></div>
+                <div><span className="text-gray-500">Phone</span><p>{selectedAccount.user?.phone || "—"}</p></div>
+                <div><span className="text-gray-500">Role</span><p className="capitalize">{selectedAccount.user?.role || "customer"}</p></div>
+                <div><span className="text-gray-500">Status</span><p><Badge>{selectedAccount.user?.moderation_status || selectedAccount.account?.moderation_status || "active"}</Badge></p></div>
+                {selectedAccount.type === "provider" && <div><span className="text-gray-500">KYC</span><p className="capitalize">{selectedAccount.kyc?.status || "not submitted"}</p></div>}
+              </div>
+              <div><Label>Reason for next moderation action</Label><Textarea value={moderationReason} onChange={(e) => setModerationReason(e.target.value)} placeholder="Required for suspension, deactivation or rejection" rows={3} className="mt-1" /></div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => moderateAccount("unsuspend")} disabled={moderating}>Unsuspend / Activate</Button>
+                <Button size="sm" variant="outline" onClick={() => moderateAccount("suspend")} disabled={moderating}>Suspend</Button>
+                <Button size="sm" variant="destructive" onClick={() => moderateAccount("deactivate")} disabled={moderating}>Deactivate</Button>
+                {selectedAccount.type === "provider" && <><Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => moderateAccount("approve")} disabled={moderating}>Approve KYC</Button><Button size="sm" variant="outline" onClick={() => moderateAccount("reject")} disabled={moderating}>Reject KYC</Button></>}
+              </div>
+              <div><Label>Existing bookings</Label><p className="text-gray-600">{selectedAccount.bookings?.length || 0} booking records available</p></div>
+              <div><Label>Existing payments</Label><p className="text-gray-600">{selectedAccount.payments?.length || 0} payment records available</p></div>
+              {selectedAccount.type === "provider" && <><div><Label>Existing services</Label><p className="text-gray-600">{selectedAccount.services?.length || 0} service records available</p></div><div><Label>Earnings / wallet transactions</Label><p className="text-gray-600">{selectedAccount.earnings?.length || 0} transaction records available</p></div></>}
+            </div>
+          )}
+          <DialogFooter><Button variant="outline" onClick={() => setAccountDialogOpen(false)}>Close</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
       
       {/* Phase 10 - Dispute Resolution Dialog */}
       <Dialog open={disputeDialogOpen} onOpenChange={setDisputeDialogOpen}>
@@ -883,6 +998,7 @@ export default function AdminDashboardScreen() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
     </div>
   );
 }

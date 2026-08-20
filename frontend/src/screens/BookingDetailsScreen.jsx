@@ -997,7 +997,7 @@ const BookingDetailsScreen = () => {
           data-testid="noshow-report-modal"
         >
           <div
-            className="bg-white rounded-lg max-w-md w-full p-6 shadow-xl"
+            className="bg-white rounded-lg max-w-md w-full max-h-[calc(100vh-2rem)] overflow-y-auto p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-3 mb-3">
@@ -1060,7 +1060,7 @@ const BookingDetailsScreen = () => {
           data-testid="noshow-confirm-modal"
         >
           <div
-            className="bg-white rounded-lg max-w-md w-full p-6 shadow-xl"
+            className="bg-white rounded-lg max-w-md w-full max-h-[calc(100vh-2rem)] overflow-y-auto p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold mb-2">Confirm no-show?</h3>
@@ -1101,7 +1101,7 @@ const BookingDetailsScreen = () => {
           data-testid="noshow-dispute-modal"
         >
           <div
-            className="bg-white rounded-lg max-w-md w-full p-6 shadow-xl"
+            className="bg-white rounded-lg max-w-md w-full max-h-[calc(100vh-2rem)] overflow-y-auto p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold mb-2">Dispute this claim</h3>

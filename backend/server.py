@@ -5255,6 +5255,15 @@ async def create_booking(booking: BookingCreate):
                 detail="Provider not found"
             )
 
+        provider_status = supabase.table("users").select("moderation_status").eq(
+            "auth_id", provider_uuid
+        ).limit(1).execute()
+        if provider_status.data and provider_status.data[0].get("moderation_status") in {"suspended", "deactivated"}:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This provider is not accepting new bookings"
+            )
+
         # Phase 4 - Multi-staff: validate staff_id belongs to this provider and is active
         if booking.staff_id is not None:
             if not check_table_exists("staff"):
@@ -7646,6 +7655,26 @@ def _require_admin_key(x_admin_key: Optional[str]):
         )
 
 
+class AdminModerationAction(BaseModel):
+    action: str
+    reason: Optional[str] = None
+
+
+def _admin_log(account_type: str, auth_id: str, action: str, reason: Optional[str] = None):
+    if not check_table_exists("admin_logs"):
+        return
+    try:
+        supabase.table("admin_logs").insert({
+            "admin_identifier": "admin_dashboard",
+            "affected_account_type": account_type,
+            "affected_account_auth_id": auth_id,
+            "action": action,
+            "reason": reason,
+        }).execute()
+    except Exception as exc:
+        logging.warning(f"Failed to write admin moderation log: {exc}")
+
+
 def _safe_count(table: str, filters: Optional[List[tuple]] = None) -> int:
     """Return COUNT of rows in `table`. Returns 0 if table missing or any error."""
     try:
@@ -8488,7 +8517,7 @@ async def admin_list_providers(
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    search: Optional[str] = Query(None, description="Name fragment"),
+    search: Optional[str] = Query(None, description="Name, email, or phone fragment"),
 ):
     """Paginated list of providers with stylists join (best-effort)."""
     _require_admin_key(x_admin_key)
@@ -8497,7 +8526,8 @@ async def admin_list_providers(
     try:
         q = supabase.table("users").select("*", count="exact").eq("role", "stylist")
         if search:
-            q = q.ilike("name", f"%{search}%")
+            term = search.strip().replace(",", "")
+            q = q.or_(f"name.ilike.%{term}%,email.ilike.%{term}%,phone.ilike.%{term}%")
         q = q.order("id", desc=True).range(offset, offset + limit - 1)
         res = q.execute()
         users = res.data or []
@@ -8510,6 +8540,16 @@ async def admin_list_providers(
                 s_res = supabase.table("stylists").select("*").in_("user_id", user_ids).execute()
                 for s in (s_res.data or []):
                     stylists_map[s["user_id"]] = s
+            except Exception:
+                pass
+
+        kyc_map = {}
+        if user_ids and check_table_exists("kyc_submissions"):
+            try:
+                kyc_res = supabase.table("kyc_submissions").select("user_auth_id,status,rejection_reason").in_(
+                    "user_auth_id", [u.get("auth_id") for u in users if u.get("auth_id")]
+                ).execute()
+                kyc_map = {row["user_auth_id"]: row for row in (kyc_res.data or [])}
             except Exception:
                 pass
 
@@ -8531,6 +8571,10 @@ async def admin_list_providers(
                 "business_name": s.get("business_name"),
                 "hourly_rate": s.get("hourly_rate"),
                 "rating": s.get("rating"),
+                "moderation_status": u.get("moderation_status") or "active",
+                "moderation_reason": u.get("moderation_reason"),
+                "kyc_status": (kyc_map.get(u.get("auth_id")) or {}).get("status") or "not_submitted",
+                "kyc_rejection_reason": (kyc_map.get(u.get("auth_id")) or {}).get("rejection_reason"),
             })
         return {
             "providers": out,
@@ -8541,6 +8585,98 @@ async def admin_list_providers(
     except Exception as e:
         logging.error(f"admin_list_providers failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed: {e}")
+
+
+@api_router.get("/admin/users")
+async def admin_list_users(
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    search: Optional[str] = Query(None),
+):
+    _require_admin_key(x_admin_key)
+    try:
+        q = supabase.table("users").select("*", count="exact").order("id", desc=True)
+        if search:
+            term = search.strip().replace(",", "")
+            q = q.or_(f"name.ilike.%{term}%,email.ilike.%{term}%,phone.ilike.%{term}%")
+        res = q.range(offset, offset + limit - 1).execute()
+        users = [{
+            **u,
+            "moderation_status": u.get("moderation_status") or ("deactivated" if u.get("is_deleted") else "active"),
+        } for u in (res.data or [])]
+        return {"users": users, "total": res.count or len(users), "limit": limit, "offset": offset}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to list users: {exc}")
+
+
+@api_router.get("/admin/users/{auth_id}")
+async def admin_user_detail(auth_id: str, x_admin_key: str = Header(None, alias="X-ADMIN-KEY")):
+    _require_admin_key(x_admin_key)
+    user_res = supabase.table("users").select("*").eq("auth_id", auth_id).limit(1).execute()
+    if not user_res.data:
+        raise HTTPException(status_code=404, detail="User not found")
+    bookings = supabase.table("bookings").select("*").or_(f"customer_auth_id.eq.{auth_id},provider_id.eq.{auth_id}").order("created_at", desc=True).limit(100).execute()
+    payments = []
+    if check_table_exists("payments"):
+        payments = supabase.table("payments").select("*").eq("user_auth_id", auth_id).order("created_at", desc=True).limit(100).execute().data or []
+    services = []
+    earnings = []
+    user = user_res.data[0]
+    kyc_status = None
+    if user.get("role") == "stylist":
+        if check_table_exists("kyc_submissions"):
+            kyc = supabase.table("kyc_submissions").select("status,rejection_reason").eq("user_auth_id", auth_id).limit(1).execute()
+            if kyc.data:
+                kyc_status = kyc.data[0]
+        stylist = supabase.table("stylists").select("id").eq("user_id", user.get("id")).limit(1).execute()
+        if stylist.data and check_table_exists("services"):
+            services = supabase.table("services").select("*").eq("stylist_id", stylist.data[0]["id"]).execute().data or []
+        if check_table_exists("wallet_transactions"):
+            earnings = supabase.table("wallet_transactions").select("*").or_(f"auth_id.eq.{auth_id},user_auth_id.eq.{auth_id}").order("created_at", desc=True).limit(100).execute().data or []
+    return {"user": user, "kyc": kyc_status, "bookings": bookings.data or [], "payments": payments, "services": services, "earnings": earnings}
+
+
+@api_router.post("/admin/{account_type}/{auth_id}/moderation")
+async def admin_moderate_account(
+    account_type: str,
+    auth_id: str,
+    body: AdminModerationAction,
+    x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
+):
+    _require_admin_key(x_admin_key)
+    if account_type not in {"user", "provider"}:
+        raise HTTPException(status_code=400, detail="Invalid account type")
+    action = body.action.lower()
+    action_map = {"suspend": "suspended", "unsuspend": "active", "deactivate": "deactivated"}
+    if action not in action_map and action not in {"approve", "reject"}:
+        raise HTTPException(status_code=400, detail="Invalid moderation action")
+    if action in {"suspend", "deactivate", "reject"} and not (body.reason or "").strip():
+        raise HTTPException(status_code=400, detail="A reason is required")
+    existing = supabase.table("users").select("auth_id, role").eq("auth_id", auth_id).limit(1).execute()
+    if not existing.data or (account_type == "provider" and existing.data[0].get("role") != "stylist"):
+        raise HTTPException(status_code=404, detail="Account not found")
+    if action in {"approve", "reject"} and account_type != "provider":
+        raise HTTPException(status_code=400, detail="Verification actions are for providers only")
+    if action in {"approve", "reject"}:
+        if not check_table_exists("kyc_submissions"):
+            raise HTTPException(status_code=503, detail="KYC tables not provisioned")
+        kyc_update = {"status": "verified" if action == "approve" else "rejected", "reviewed_at": datetime.now(timezone.utc).isoformat()}
+        if action == "reject":
+            kyc_update["rejection_reason"] = body.reason
+        kyc_res = supabase.table("kyc_submissions").update(kyc_update).eq("user_auth_id", auth_id).execute()
+        if not kyc_res.data:
+            raise HTTPException(status_code=404, detail="KYC submission not found")
+        _admin_log(account_type, auth_id, "provider_approved" if action == "approve" else "provider_verification_rejected", body.reason)
+        return kyc_res.data[0]
+    updated = supabase.table("users").update({
+        "moderation_status": action_map[action],
+        "moderation_reason": body.reason,
+        "moderation_at": datetime.now(timezone.utc).isoformat(),
+        "moderation_by": "admin_dashboard",
+    }).eq("auth_id", auth_id).execute()
+    _admin_log(account_type, auth_id, f"{account_type}_{action}", body.reason)
+    return updated.data[0] if updated.data else {"auth_id": auth_id, "moderation_status": action_map[action]}
 
 
 # ====================================================================

@@ -410,6 +410,14 @@ export const adminAPI = {
     if (search) qs.append("search", search);
     return api.get(`/admin/providers?${qs.toString()}`, withAdminKey(adminKey));
   },
+  users: (adminKey, limit = 50, offset = 0, search = "") => {
+    const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (search) qs.append("search", search);
+    return api.get(`/admin/users?${qs.toString()}`, withAdminKey(adminKey));
+  },
+  userDetail: (adminKey, authId) => api.get(`/admin/users/${authId}`, withAdminKey(adminKey)),
+  moderate: (adminKey, accountType, authId, payload) =>
+    api.post(`/admin/${accountType}/${authId}/moderation`, payload, withAdminKey(adminKey)),
   feedPosts: {
     list: (adminKey, statusFilter = "all", limit = 100, offset = 0) => {
       const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
