@@ -177,7 +177,7 @@ export default function AdminPlatformEarningsScreen() {
         {/* Revenue Sources */}
         <div className="mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Revenue Sources</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Booking Fees */}
             <Card>
               <CardHeader className="pb-3">
@@ -214,6 +214,24 @@ export default function AdminPlatformEarningsScreen() {
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">Fees from provider withdrawals</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-medium text-gray-500">Shop Earnings</CardTitle>
+                  <DollarSign className="h-5 w-5 text-blue-600" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-baseline">
+                  <span className="text-2xl font-bold text-gray-900">
+                    {CURRENCY}{earnings?.shop_platform_earnings?.toLocaleString() || "0"}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Recorded platform commission from shop orders</p>
+                <p className="text-xs text-gray-600 mt-2">Shop order volume: {CURRENCY}{earnings?.shop_order_revenue?.toLocaleString() || "0"}</p>
               </CardContent>
             </Card>
           </div>

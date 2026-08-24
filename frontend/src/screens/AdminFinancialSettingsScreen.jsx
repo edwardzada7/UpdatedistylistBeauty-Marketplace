@@ -21,6 +21,7 @@ export default function AdminFinancialSettingsScreen() {
   const [feePercentage, setFeePercentage] = useState("0");
   const [minWithdrawal, setMinWithdrawal] = useState("0");
   const [maxWithdrawal, setMaxWithdrawal] = useState(""); // empty = no max
+  const [shopCommissionPercentage, setShopCommissionPercentage] = useState("0");
 
   useEffect(() => {
     if (!adminKey) {
@@ -37,6 +38,7 @@ export default function AdminFinancialSettingsScreen() {
       setFeePercentage(String(wf.fee_percentage ?? 0));
       setMinWithdrawal(String(wf.min_withdrawal ?? 0));
       setMaxWithdrawal(wf.max_withdrawal == null ? "" : String(wf.max_withdrawal));
+      setShopCommissionPercentage(String(res.data?.shop?.commission_percentage ?? wf.shop_commission_percentage ?? 0));
     } catch (err) {
       if (err?.response?.status === 401) {
         sessionStorage.removeItem(ADMIN_KEY_STORAGE);
@@ -55,6 +57,7 @@ export default function AdminFinancialSettingsScreen() {
     const feePct = parseFloat(feePercentage);
     const minW = parseFloat(minWithdrawal);
     const maxW = maxWithdrawal === "" ? 0 : parseFloat(maxWithdrawal);
+    const shopPct = parseFloat(shopCommissionPercentage);
     // Client-side validation
     if (isNaN(feePct) || feePct < 0 || feePct > 100) {
       toast.error("Fee percentage must be between 0 and 100");
@@ -72,6 +75,10 @@ export default function AdminFinancialSettingsScreen() {
       toast.error("Maximum cannot be less than minimum");
       return;
     }
+    if (isNaN(shopPct) || shopPct < 0 || shopPct > 100) {
+      toast.error("Shop commission percentage must be between 0 and 100");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -80,6 +87,7 @@ export default function AdminFinancialSettingsScreen() {
         min_withdrawal: minW,
         max_withdrawal: maxW,
         enabled: true,
+        shop_commission_percentage: shopPct,
       });
       toast.success("Financial settings saved");
       await load();
@@ -181,6 +189,22 @@ export default function AdminFinancialSettingsScreen() {
                   <p className="text-xs text-gray-500 mt-1">
                     Cap individual withdrawal requests. Blank or 0 means no maximum.
                   </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="shop-commission">Shop Commission (%)</Label>
+                  <Input
+                    id="shop-commission"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    value={shopCommissionPercentage}
+                    onChange={(e) => setShopCommissionPercentage(e.target.value)}
+                    className="mt-2"
+                    data-testid="shop-commission-input"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Recorded shop commission rate for shop orders.</p>
                 </div>
 
                 <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg text-amber-800 text-sm">

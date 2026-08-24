@@ -2861,6 +2861,7 @@ class FinancialSettingsUpdate(BaseModel):
     min_withdrawal: Optional[float] = None
     max_withdrawal: Optional[float] = None  # use 0/null to disable
     enabled: Optional[bool] = None
+    shop_commission_percentage: Optional[float] = None
 
 
 @api_router.get("/settings/withdrawal-fee")
@@ -2888,7 +2889,8 @@ async def admin_get_financial_settings(
     admin_dash_key = os.environ.get("ADMIN_DASH_KEY", "")
     if not x_admin_key or x_admin_key != admin_dash_key:
         raise HTTPException(status_code=401, detail="Invalid or missing admin key")
-    return {"withdrawal_fee": _load_withdrawal_fee_settings()}
+    settings = _load_withdrawal_fee_settings()
+    return {"withdrawal_fee": settings, "shop": {"commission_percentage": float(settings.get("shop_commission_percentage") or 0)}}
 
 
 @api_router.put("/admin/settings/financial")
@@ -2919,6 +2921,10 @@ async def admin_update_financial_settings(
         updated["max_withdrawal"] = float(payload.max_withdrawal) if payload.max_withdrawal > 0 else None
     if payload.enabled is not None:
         updated["enabled"] = bool(payload.enabled)
+    if payload.shop_commission_percentage is not None:
+        if payload.shop_commission_percentage < 0 or payload.shop_commission_percentage > 100:
+            raise HTTPException(status_code=400, detail="shop_commission_percentage must be between 0 and 100")
+        updated["shop_commission_percentage"] = float(payload.shop_commission_percentage)
 
     # Cross-field validation
     if (updated.get("max_withdrawal") is not None
@@ -7660,6 +7666,37 @@ class AdminModerationAction(BaseModel):
     reason: Optional[str] = None
 
 
+def _enrich_admin_booking_people(items):
+    """Resolve booking people through the auth and stylist relationships."""
+    provider_refs = {get_booking_provider_uuid(item) for item in items if get_booking_provider_uuid(item)}
+    customer_refs = {item.get("customer_auth_id") for item in items if item.get("customer_auth_id")}
+    name_map = {}
+    try:
+        users = supabase.table("users").select("id,auth_id,name").in_("auth_id", list(provider_refs | customer_refs)).execute().data or []
+        for user in users:
+            if user.get("name"):
+                name_map[str(user.get("id"))] = user["name"]
+                name_map[str(user.get("auth_id"))] = user["name"]
+    except Exception:
+        pass
+    if provider_refs and check_table_exists("stylists"):
+        try:
+            stylists = supabase.table("stylists").select("id,user_id,auth_id,name,business_name").in_("auth_id", list(provider_refs)).execute().data or []
+            for stylist in stylists:
+                name = stylist.get("business_name") or stylist.get("name")
+                if name:
+                    for ref in (stylist.get("id"), stylist.get("user_id"), stylist.get("auth_id")):
+                        if ref is not None:
+                            name_map[str(ref)] = name
+        except Exception:
+            pass
+    return [{
+        **item,
+        "provider_name": name_map.get(str(get_booking_provider_uuid(item))),
+        "customer_name": name_map.get(str(item.get("customer_auth_id"))),
+    } for item in items]
+
+
 def _admin_log(account_type: str, auth_id: str, action: str, reason: Optional[str] = None):
     if not check_table_exists("admin_logs"):
         return
@@ -7812,14 +7849,7 @@ async def admin_recent_bookings(
                     name_map[u["auth_id"]] = u.get("name")
             except Exception:
                 pass
-
-        out = []
-        for b in items:
-            out.append({
-                **b,
-                "provider_name": name_map.get(b.get("provider_auth_id")),
-                "customer_name": name_map.get(b.get("customer_auth_id")),
-            })
+        out = _enrich_admin_booking_people(items)
         return {"bookings": out, "total": res.count or len(out)}
     except Exception as e:
         logging.error(f"admin_recent_bookings failed: {e}")
@@ -8499,14 +8529,7 @@ async def admin_reported_no_shows(
                     name_map[u["auth_id"]] = u.get("name")
             except Exception:
                 pass
-        out = []
-        for b in items:
-            out.append({
-                **b,
-                "provider_name": name_map.get(b.get("provider_auth_id")),
-                "customer_name": name_map.get(b.get("customer_auth_id")),
-            })
-        return {"items": out, "total": res.count or len(out)}
+        out = _enrich_admin_booking_people(items)
     except Exception as e:
         logging.error(f"admin_reported_no_shows failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed: {e}")
@@ -8615,9 +8638,21 @@ async def admin_user_detail(auth_id: str, x_admin_key: str = Header(None, alias=
     _require_admin_key(x_admin_key)
     user_res = supabase.table("users").select("*").eq("auth_id", auth_id).limit(1).execute()
     if not user_res.data:
+        user_res = supabase.table("users").select("*").eq("id", auth_id).limit(1).execute()
+    if not user_res.data:
         raise HTTPException(status_code=404, detail="User not found")
-    customer_bookings = supabase.table("bookings").select("*").eq("customer_auth_id", auth_id).order("created_at", desc=True).limit(100).execute()
-    provider_bookings = supabase.table("bookings").select("*").eq("provider_id", auth_id).order("created_at", desc=True).limit(100).execute()
+    user = user_res.data[0]
+    canonical_auth_id = user.get("auth_id")
+    customer_bookings = supabase.table("bookings").select("*").eq("customer_auth_id", canonical_auth_id).order("created_at", desc=True).limit(100).execute()
+    provider_refs = [canonical_auth_id, user.get("id")]
+    stylist = None
+    if user.get("role") == "stylist" and check_table_exists("stylists"):
+        stylist_res = supabase.table("stylists").select("*").eq("user_id", user.get("id")).limit(1).execute()
+        stylist = (stylist_res.data or [None])[0]
+        if stylist:
+            provider_refs.extend([stylist.get("id"), stylist.get("auth_id"), stylist.get("user_id")])
+    provider_refs = [str(ref) for ref in provider_refs if ref is not None]
+    provider_bookings = supabase.table("bookings").select("*").in_("provider_id", provider_refs).order("created_at", desc=True).limit(100).execute()
     bookings_by_id = {b.get("id"): b for b in (customer_bookings.data or []) + (provider_bookings.data or [])}
     payments = []
     if check_table_exists("payments"):
@@ -8626,19 +8661,20 @@ async def admin_user_detail(auth_id: str, x_admin_key: str = Header(None, alias=
             payments = supabase.table("payments").select("*").in_("booking_id", booking_ids).order("created_at", desc=True).limit(100).execute().data or []
     services = []
     earnings = []
-    user = user_res.data[0]
     kyc_status = None
     if user.get("role") == "stylist":
         if check_table_exists("kyc_submissions"):
             kyc = supabase.table("kyc_submissions").select("status,rejection_reason").eq("user_auth_id", auth_id).limit(1).execute()
             if kyc.data:
                 kyc_status = kyc.data[0]
-        stylist = supabase.table("stylists").select("id").eq("user_id", user.get("id")).limit(1).execute()
-        if stylist.data and check_table_exists("services"):
-            services = supabase.table("services").select("*").eq("stylist_id", stylist.data[0]["id"]).execute().data or []
+        if stylist and check_table_exists("services"):
+            services = supabase.table("services").select("*").eq("stylist_id", stylist.get("id")).execute().data or []
         if check_table_exists("wallet_transactions"):
             earnings = supabase.table("wallet_transactions").select("*").eq("user_auth_id", auth_id).order("created_at", desc=True).limit(100).execute().data or []
-    return {"user": user, "kyc": kyc_status, "bookings": list(bookings_by_id.values()), "payments": payments, "services": services, "earnings": earnings}
+    availability = []
+    if stylist and check_table_exists("provider_availability"):
+        availability = supabase.table("provider_availability").select("*").in_("provider_id", provider_refs).execute().data or []
+    return {"user": user, "provider": stylist, "kyc": kyc_status, "availability": availability, "bookings": list(bookings_by_id.values()), "payments": payments, "services": services, "earnings": earnings}
 
 
 @api_router.post("/admin/{account_type}/{auth_id}/moderation")
@@ -8657,7 +8693,9 @@ async def admin_moderate_account(
         raise HTTPException(status_code=400, detail="Invalid moderation action")
     if action in {"suspend", "deactivate", "reject"} and not (body.reason or "").strip():
         raise HTTPException(status_code=400, detail="A reason is required")
-    existing = supabase.table("users").select("auth_id, role").eq("auth_id", auth_id).limit(1).execute()
+    existing = supabase.table("users").select("id, auth_id, role").eq("auth_id", auth_id).limit(1).execute()
+    if not existing.data:
+        existing = supabase.table("users").select("id, auth_id, role").eq("id", auth_id).limit(1).execute()
     if not existing.data or (account_type == "provider" and existing.data[0].get("role") != "stylist"):
         raise HTTPException(status_code=404, detail="Account not found")
     if action in {"approve", "reject"} and account_type != "provider":
@@ -8665,22 +8703,24 @@ async def admin_moderate_account(
     if action in {"approve", "reject"}:
         if not check_table_exists("kyc_submissions"):
             raise HTTPException(status_code=503, detail="KYC tables not provisioned")
+        canonical_auth_id = existing.data[0].get("auth_id")
         kyc_update = {"status": "verified" if action == "approve" else "rejected", "reviewed_at": datetime.now(timezone.utc).isoformat()}
         if action == "reject":
             kyc_update["rejection_reason"] = body.reason
-        kyc_res = supabase.table("kyc_submissions").update(kyc_update).eq("user_auth_id", auth_id).execute()
+        kyc_res = supabase.table("kyc_submissions").update(kyc_update).eq("user_auth_id", canonical_auth_id).execute()
         if not kyc_res.data:
             raise HTTPException(status_code=404, detail="KYC submission not found")
-        _admin_log(account_type, auth_id, "provider_approved" if action == "approve" else "provider_verification_rejected", body.reason)
+        _admin_log(account_type, canonical_auth_id, "provider_approved" if action == "approve" else "provider_verification_rejected", body.reason)
         return kyc_res.data[0]
+    canonical_auth_id = existing.data[0].get("auth_id")
     updated = supabase.table("users").update({
         "moderation_status": action_map[action],
         "moderation_reason": body.reason,
         "moderation_at": datetime.now(timezone.utc).isoformat(),
         "moderation_by": "admin_dashboard",
-    }).eq("auth_id", auth_id).execute()
-    _admin_log(account_type, auth_id, f"{account_type}_{action}", body.reason)
-    return updated.data[0] if updated.data else {"auth_id": auth_id, "moderation_status": action_map[action]}
+    }).eq("auth_id", canonical_auth_id).execute()
+    _admin_log(account_type, canonical_auth_id, f"{account_type}_{action}", body.reason)
+    return updated.data[0] if updated.data else {"auth_id": canonical_auth_id, "moderation_status": action_map[action]}
 
 
 # ====================================================================
@@ -8916,6 +8956,8 @@ class PlatformEarningsResponse(BaseModel):
     withdrawal_fees_earned: float
     pending_payouts: float
     completed_payouts: float
+    shop_order_revenue: float = 0
+    shop_platform_earnings: float = 0
 
 class SupportTicketUpdate(BaseModel):
     """Admin update for support ticket"""
@@ -9124,8 +9166,16 @@ async def admin_platform_earnings(
             logging.warning(f"[admin] platform fees column missing (apply phase9 migration): {booking_err}")
             booking_fees_earned = 0
 
-        # Calculate totals
-        total_revenue = booking_fees_earned + total_withdrawal_fees
+        shop_order_revenue = 0
+        shop_platform_earnings = 0
+        if check_table_exists("shop_orders"):
+            shop_orders = supabase.table("shop_orders").select("*").execute().data or []
+            for order in shop_orders:
+                shop_order_revenue += float(order.get("total_amount") or order.get("amount") or 0)
+                shop_platform_earnings += float(order.get("platform_fee_amount") or order.get("commission_amount") or order.get("shop_commission_amount") or 0)
+
+        # Calculate totals from recorded platform-fee fields
+        total_revenue = booking_fees_earned + total_withdrawal_fees + shop_platform_earnings
 
         # Today's revenue
         revenue_today = sum(
@@ -9149,6 +9199,8 @@ async def admin_platform_earnings(
             "withdrawal_fees_earned": round(total_withdrawal_fees, 2),
             "pending_payouts": round(pending_payouts, 2),
             "completed_payouts": round(completed_payouts, 2),
+            "shop_order_revenue": round(shop_order_revenue, 2),
+            "shop_platform_earnings": round(shop_platform_earnings, 2),
         }
 
     except Exception as e:

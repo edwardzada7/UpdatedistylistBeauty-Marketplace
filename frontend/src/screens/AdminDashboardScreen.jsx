@@ -163,7 +163,7 @@ export default function AdminDashboardScreen() {
 
   const openAccount = async (account, type) => {
     try {
-      const res = await adminAPI.userDetail(adminKey, account.auth_id);
+      const res = await adminAPI.userDetail(adminKey, account.auth_id || account.user_auth_id || account.id);
       setSelectedAccount({ ...res.data, account, type });
       setModerationReason(account.moderation_reason || "");
       setAccountDialogOpen(true);
@@ -182,7 +182,7 @@ export default function AdminDashboardScreen() {
     if ((action === "suspend" || action === "deactivate") && !window.confirm(`Confirm ${action} account?`)) return;
     try {
       setModerating(true);
-      await adminAPI.moderate(adminKey, selectedAccount.type, selectedAccount.account.auth_id, {
+      await adminAPI.moderate(adminKey, selectedAccount.type, selectedAccount.user?.auth_id || selectedAccount.account.auth_id || selectedAccount.account.id, {
         action,
         reason: moderationReason.trim() || undefined,
       });
@@ -820,11 +820,14 @@ export default function AdminDashboardScreen() {
           {selectedAccount && (
             <div className="space-y-4 text-sm">
               <div className="grid grid-cols-2 gap-3 bg-gray-50 p-4 rounded-lg">
+                <div><span className="text-gray-500">Full name</span><p>{selectedAccount.user?.name || selectedAccount.provider?.name || "—"}</p></div>
                 <div><span className="text-gray-500">Email</span><p>{selectedAccount.user?.email || "—"}</p></div>
                 <div><span className="text-gray-500">Phone</span><p>{selectedAccount.user?.phone || "—"}</p></div>
+                <div><span className="text-gray-500">City</span><p>{selectedAccount.user?.city || "—"}</p></div>
+                <div><span className="text-gray-500">Location</span><p>{selectedAccount.provider?.location || selectedAccount.user?.location || "—"}</p></div>
                 <div><span className="text-gray-500">Role</span><p className="capitalize">{selectedAccount.user?.role || "customer"}</p></div>
                 <div><span className="text-gray-500">Status</span><p><Badge>{selectedAccount.user?.moderation_status || selectedAccount.account?.moderation_status || "active"}</Badge></p></div>
-                {selectedAccount.type === "provider" && <div><span className="text-gray-500">KYC</span><p className="capitalize">{selectedAccount.kyc?.status || "not submitted"}</p></div>}
+                {selectedAccount.type === "provider" && <><div><span className="text-gray-500">Provider type</span><p className="capitalize">{selectedAccount.provider?.provider_type || "individual"}</p></div><div><span className="text-gray-500">KYC</span><p className="capitalize">{selectedAccount.kyc?.status || "not submitted"}</p></div><div><span className="text-gray-500">Profile image</span>{(selectedAccount.provider?.profile_image || selectedAccount.provider?.profile_image_url || selectedAccount.user?.profile_image) ? <img src={selectedAccount.provider?.profile_image || selectedAccount.provider?.profile_image_url || selectedAccount.user?.profile_image} alt="Provider profile" className="mt-1 h-12 w-12 rounded-full object-cover" /> : <p>—</p>}</div><div><span className="text-gray-500">Business</span><p>{selectedAccount.provider?.business_name || "—"}</p></div><div><span className="text-gray-500">Rating</span><p>{selectedAccount.provider?.rating ?? "—"}</p></div><div><span className="text-gray-500">Rate</span><p>{selectedAccount.provider?.hourly_rate ?? "—"}</p></div><div className="col-span-2"><span className="text-gray-500">Bio / About</span><p>{selectedAccount.provider?.bio || "—"}</p></div></>}
               </div>
               <div><Label>Reason for next moderation action</Label><Textarea value={moderationReason} onChange={(e) => setModerationReason(e.target.value)} placeholder="Required for suspension, deactivation or rejection" rows={3} className="mt-1" /></div>
               <div className="flex flex-wrap gap-2">
@@ -835,7 +838,7 @@ export default function AdminDashboardScreen() {
               </div>
               <div><Label>Existing bookings</Label><p className="text-gray-600">{selectedAccount.bookings?.length || 0} booking records available</p></div>
               <div><Label>Existing payments</Label><p className="text-gray-600">{selectedAccount.payments?.length || 0} payment records available</p></div>
-              {selectedAccount.type === "provider" && <><div><Label>Existing services</Label><p className="text-gray-600">{selectedAccount.services?.length || 0} service records available</p></div><div><Label>Earnings / wallet transactions</Label><p className="text-gray-600">{selectedAccount.earnings?.length || 0} transaction records available</p></div></>}
+              {selectedAccount.type === "provider" && <><div><Label>Existing services and rates</Label>{selectedAccount.services?.length ? <div className="mt-1 space-y-1">{selectedAccount.services.map((service) => <p key={service.id} className="text-gray-600">{service.name || service.title || "Service"}: {service.price ?? service.rate ?? service.hourly_rate ?? "—"}</p>)}</div> : <p className="text-gray-600">No service records available</p>}</div><div><Label>Earnings / wallet transactions</Label><p className="text-gray-600">{selectedAccount.earnings?.length || 0} transaction records available</p></div><div><Label>Availability</Label>{selectedAccount.availability?.length ? <div className="mt-1 space-y-1">{selectedAccount.availability.map((slot) => <p key={slot.id || slot.day_of_week} className="text-gray-600">{slot.day_of_week || slot.day || "Schedule"}: {slot.start_time || "—"} - {slot.end_time || "—"}</p>)}</div> : <p className="text-gray-600">No availability records available</p>}</div></>}
             </div>
           )}
           <DialogFooter><Button variant="outline" onClick={() => setAccountDialogOpen(false)}>Close</Button></DialogFooter>
