@@ -438,6 +438,20 @@ export default function AdminDashboardScreen() {
           >
             Legal Editor →
           </button>
+          <button
+            onClick={() => navigate("/admin/certifications")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-teal-600 text-white hover:bg-teal-700 text-sm font-medium"
+            data-testid="admin-certifications-link"
+          >
+            Certificate Verification →
+          </button>
+          <button
+            onClick={() => navigate("/admin/consultations")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-700 text-white hover:bg-cyan-800 text-sm font-medium"
+            data-testid="admin-consultations-link"
+          >
+            Professional Consultation →
+          </button>
         </div>
 
         <Tabs defaultValue="bookings" className="w-full" onValueChange={(v) => { if (v === "deleted") loadDeletedUsers(); }}>

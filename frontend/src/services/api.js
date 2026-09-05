@@ -492,6 +492,29 @@ export const kycAPI = {
     ),
 };
 
+// Admin certificate verification and professional consultation views.
+// The backend remains authoritative for status and eligibility.
+export const professionalAPI = {
+  certifications: {
+    list: (adminKey) => api.get("/admin/certifications", withAdminKey(adminKey)),
+    get: (adminKey, certificationId) =>
+      api.get(`/admin/certifications/${encodeURIComponent(certificationId)}`, withAdminKey(adminKey)),
+    approve: (adminKey, certificationId) =>
+      api.post(`/admin/certifications/${encodeURIComponent(certificationId)}/approve`, {}, withAdminKey(adminKey)),
+    reject: (adminKey, certificationId, reason) =>
+      api.post(
+        `/admin/certifications/${encodeURIComponent(certificationId)}/reject`,
+        { rejection_reason: reason },
+        withAdminKey(adminKey)
+      ),
+  },
+  consultations: {
+    list: (adminKey) => api.get("/admin/consultations", withAdminKey(adminKey)),
+    get: (adminKey, providerAuthId) =>
+      api.get(`/admin/consultations/${encodeURIComponent(providerAuthId)}`, withAdminKey(adminKey)),
+  },
+};
+
 // ==================== PHASE 7 - FINANCIAL SETTINGS API ====================
 
 export const settingsAPI = {
