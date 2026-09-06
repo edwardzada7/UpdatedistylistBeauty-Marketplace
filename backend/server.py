@@ -226,6 +226,17 @@ class ChatMessageCreate(BaseModel):
     recommendation_data: Optional[Dict[str, Any]] = None
 
 
+class FeedCommentCreate(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2000)
+
+
+class NotificationTokenCreate(BaseModel):
+    auth_id: str = Field(..., min_length=1)
+    token: str = Field(..., min_length=1, max_length=4096)
+    platform: Optional[str] = None
+    device_id: Optional[str] = None
+
+
 # ==================== WITHDRAWAL REQUEST MODELS (Phase A) ====================
 
 class WithdrawalRequestCreate(BaseModel):
@@ -688,6 +699,12 @@ async def delete_my_account(payload: DeleteAccountRequest):
     }
 
 
+@api_router.delete("/users/delete-account")
+async def delete_my_account_compatibility(payload: DeleteAccountRequest):
+    """Compatibility method that preserves the existing soft-delete logic."""
+    return await delete_my_account(payload)
+
+
 @api_router.get("/admin/users/deleted")
 async def admin_list_deleted_users(
     limit: int = 100,
@@ -911,6 +928,14 @@ async def get_stylist(user_id: int):
 async def get_stylist_by_user_id(user_id: int):
     """Get stylist profile by user_id (alias for consistency)"""
     return await get_stylist(user_id)
+
+@api_router.get("/stylists/by-auth/{auth_id}", response_model=StylistResponse)
+async def get_stylist_by_auth_id(auth_id: str):
+    """Compatibility lookup for clients that identify providers by Supabase auth UUID."""
+    user = supabase.table("users").select("id").eq("auth_id", auth_id).limit(1).execute()
+    if not user.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stylist not found")
+    return await get_stylist(user.data[0]["id"])
 
 @api_router.put("/stylists/{user_id}", response_model=StylistResponse)
 async def update_stylist(user_id: int, stylist_update: StylistUpdate):
@@ -3856,6 +3881,36 @@ async def mark_notifications_read(request: MarkReadRequest):
         return {"success": False, "message": str(e)}
 
 
+@api_router.post("/notifications/register-token", status_code=status.HTTP_201_CREATED)
+async def register_notification_token(request: NotificationTokenCreate):
+    """Register or refresh a mobile push token for a Supabase auth UUID."""
+    user = supabase.table("users").select("auth_id").eq("auth_id", request.auth_id).limit(1).execute()
+    if not user.data:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not check_table_exists("notification_tokens"):
+        raise HTTPException(status_code=503, detail="Notification token service not provisioned")
+
+    data = {
+        "auth_id": request.auth_id,
+        "token": request.token,
+        "platform": request.platform,
+        "device_id": request.device_id,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        existing = supabase.table("notification_tokens").select("id").eq(
+            "auth_id", request.auth_id
+        ).eq("token", request.token).limit(1).execute()
+        if existing.data:
+            result = supabase.table("notification_tokens").update(data).eq("id", existing.data[0]["id"]).execute()
+        else:
+            result = supabase.table("notification_tokens").insert(data).execute()
+        return {"ok": True, "token": result.data[0] if result.data else data}
+    except Exception as e:
+        logging.error(f"[notifications/register-token] failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to register notification token")
+
+
 # ==================== BOOKING CHAT ENDPOINTS (Phase 2C) ====================
 
 def get_booking_provider_uuid(booking: dict) -> Optional[str]:
@@ -4402,6 +4457,11 @@ async def update_provider_service(service_id: int, service_update: ProviderServi
             detail=f"Failed to update provider service: {str(e)}"
         )
 
+@api_router.patch("/provider-services/{service_id}", response_model=ProviderServiceResponse)
+async def patch_provider_service(service_id: int, service_update: ProviderServiceUpdate):
+    """Compatibility alias for mobile clients using PATCH for service updates."""
+    return await update_provider_service(service_id, service_update)
+
 @api_router.post("/provider-services/toggle/{provider_id}")
 async def toggle_provider_services(provider_id: int, request: BulkServiceToggleRequest):
     """Bulk toggle services for a provider - upsert behavior"""
@@ -4485,6 +4545,11 @@ async def get_service_categories():
     """Get all service categories"""
     from service_catalog import get_all_categories
     return get_all_categories()
+
+@api_router.get("/categories")
+async def get_categories_compatibility():
+    """Compatibility alias for the authoritative catalog categories route."""
+    return await get_service_categories()
 
 @api_router.get("/catalog/categories/{category_id}")
 async def get_category(category_id: str):
@@ -7475,6 +7540,86 @@ async def get_feed_post(
     except Exception as e:
         logging.error(f"get_feed_post failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get post: {e}")
+
+
+def _get_active_feed_post(post_id: int) -> dict:
+    _require_feed_tables()
+    result = supabase.table("provider_posts").select("*").eq("id", post_id).limit(1).execute()
+    if not result.data or not result.data[0].get("is_active", True):
+        raise HTTPException(status_code=404, detail="Post not found")
+    return result.data[0]
+
+
+@api_router.get("/feed/posts/{post_id}/comments")
+async def list_feed_post_comments(
+    post_id: int,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    """List comments for an active feed post, oldest first within a page."""
+    _get_active_feed_post(post_id)
+    if not check_table_exists("provider_post_comments"):
+        raise HTTPException(status_code=503, detail="Feed comments service not provisioned")
+    try:
+        result = supabase.table("provider_post_comments").select("*", count="exact").eq(
+            "post_id", post_id
+        ).order("created_at").range(offset, offset + limit - 1).execute()
+        comments = result.data or []
+        author_ids = list({row.get("author_auth_id") for row in comments if row.get("author_auth_id")})
+        names = {}
+        if author_ids:
+            users = supabase.table("users").select("auth_id,name").in_("auth_id", author_ids).execute()
+            names = {row["auth_id"]: row.get("name") or "Anonymous" for row in (users.data or [])}
+        for comment in comments:
+            comment["author_name"] = names.get(comment.get("author_auth_id"), "Anonymous")
+        return {"post_id": post_id, "comments": comments, "total": result.count or 0, "limit": limit, "offset": offset}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"list_feed_post_comments failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list post comments")
+
+
+@api_router.post("/feed/posts/{post_id}/comments", status_code=status.HTTP_201_CREATED)
+async def create_feed_post_comment(
+    post_id: int,
+    payload: FeedCommentCreate,
+    auth_id: Optional[str] = Query(None, description="Comment author auth_id (UUID)"),
+):
+    """Create a comment for an active feed post."""
+    _get_active_feed_post(post_id)
+    if not auth_id:
+        raise HTTPException(status_code=401, detail="Comment author auth_id is required")
+    author = await _get_user_by_auth_id(auth_id)
+    if not author:
+        raise HTTPException(status_code=401, detail="Valid author auth_id is required")
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Comment content is required")
+    if not check_table_exists("provider_post_comments"):
+        raise HTTPException(status_code=503, detail="Feed comments service not provisioned")
+    try:
+        result = supabase.table("provider_post_comments").insert({
+            "post_id": post_id,
+            "author_auth_id": auth_id,
+            "content": content,
+        }).execute()
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to create comment")
+        try:
+            post = supabase.table("provider_posts").select("comments_count").eq("id", post_id).limit(1).execute()
+            count = (post.data[0].get("comments_count") or 0) + 1 if post.data else 1
+            supabase.table("provider_posts").update({"comments_count": count}).eq("id", post_id).execute()
+        except Exception as count_error:
+            logging.warning(f"comments_count update failed for post {post_id}: {count_error}")
+        comment = result.data[0]
+        comment["author_name"] = author.get("name") or "Anonymous"
+        return comment
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"create_feed_post_comment failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create comment")
 
 
 @api_router.put("/feed/posts/{post_id}")

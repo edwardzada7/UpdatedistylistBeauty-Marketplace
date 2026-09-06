@@ -100,6 +100,20 @@ class CompleteProductInvoiceInput(BaseModel):
     payment_reference: Optional[str] = None
 
 
+SHARED_MESSAGE_TYPE_ALIASES = {
+    "TEXT": "text",
+    "IMAGE": "image",
+    "INVOICE": "invoice",
+    "PROVIDER_RECOMMENDATION": "provider_recommendation",
+    "SYSTEM": "system",
+}
+
+
+def _normalize_shared_message_type(message_type: str) -> str:
+    normalized = (message_type or "text").strip()
+    return SHARED_MESSAGE_TYPE_ALIASES.get(normalized.upper(), normalized.lower())
+
+
 def _headers() -> Dict[str, str]:
     key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
     return {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json", "Prefer": "return=representation"}
@@ -185,6 +199,7 @@ def _consultation_eligibility(provider_auth_id: str) -> dict:
 def send_shared_chat_message(conversation_id: int, auth_id: str, message: str, message_type: str = "text", location_data: Optional[Dict[str, Any]] = None, invoice_data: Optional[Dict[str, Any]] = None, recommendation_data: Optional[Dict[str, Any]] = None) -> dict:
     """Send a typed message through the existing generic chat endpoint."""
     conversation = _participant(conversation_id, auth_id)
+    message_type = _normalize_shared_message_type(message_type)
     allowed_types = {"text", "image", "invoice", "provider_recommendation", "system"}
     if message_type not in allowed_types:
         raise HTTPException(status_code=400, detail="Unsupported message type")
@@ -311,20 +326,21 @@ def register_consultation_routes(api_router: APIRouter, supabase: Any) -> None:
     def send_message(conversation_id: int, payload: SendConversationMessageInput, authorization: Optional[str] = Header(None)):
         auth_id = _current_auth_id(authorization)
         conversation = _participant(conversation_id, auth_id)
-        if payload.message_type not in {"text", "image", "invoice", "provider_recommendation", "system"}:
+        message_type = _normalize_shared_message_type(payload.message_type)
+        if message_type not in {"text", "image", "invoice", "provider_recommendation", "system"}:
             raise HTTPException(status_code=400, detail="Unsupported message type")
         if conversation.get("type") == "consultation" and not _request("GET", "consultations", params={"conversation_id": f"eq.{conversation_id}", "status": "eq.active", "select": "id", "limit": "1"}):
             raise HTTPException(status_code=403, detail="Consultation payment is required before chatting")
         receiver = conversation["provider_auth_id"] if auth_id == conversation["customer_auth_id"] else conversation["customer_auth_id"]
         message = payload.message.strip()
-        if payload.message_type == "provider_recommendation":
+        if message_type == "provider_recommendation":
             recommendation = payload.recommendation_data or {}
             recommended = recommendation.get("recommended_provider_auth_id")
             if not recommended or recommended == auth_id or not _request("GET", "stylists", params={"auth_id": f"eq.{recommended}", "select": "auth_id", "limit": "1"}):
                 raise HTTPException(status_code=400, detail="A valid different provider is required")
             recommendation_row = _request("POST", "provider_recommendations", json={"conversation_id": conversation_id, "sender_auth_id": auth_id, "recommended_provider_auth_id": recommended, "message": message})
             message = json.dumps({**recommendation, "recommendation_id": recommendation_row[0].get("id"), "message": message})
-        data = {"conversation_id": conversation_id, "sender_auth_id": auth_id, "receiver_auth_id": receiver, "message": message, "message_type": payload.message_type, "location_data": payload.location_data, "invoice_data": payload.invoice_data, "is_read": False, "read": False}
+        data = {"conversation_id": conversation_id, "sender_auth_id": auth_id, "receiver_auth_id": receiver, "message": message, "message_type": message_type, "location_data": payload.location_data, "invoice_data": payload.invoice_data, "is_read": False, "read": False}
         return _request("POST", "chats", json=data)[0]
 
     @api_router.get("/conversations/unread-count")
@@ -345,12 +361,13 @@ def register_consultation_routes(api_router: APIRouter, supabase: Any) -> None:
     @api_router.post("/invoices")
     def create_invoice(payload: CreateInvoiceInput, authorization: Optional[str] = Header(None)):
         provider = _current_auth_id(authorization)
-        if provider != payload.provider_auth_id or payload.invoice_type not in ("service", "product"):
+        invoice_type = (payload.invoice_type or "").strip().lower()
+        if provider != payload.provider_auth_id or invoice_type not in ("service", "product"):
             raise HTTPException(status_code=403, detail="Only the provider can create this invoice")
         conversation = _participant(payload.conversation_id, provider)
         if conversation["customer_auth_id"] != payload.customer_auth_id or conversation["provider_auth_id"] != provider:
             raise HTTPException(status_code=403, detail="Invoice participants do not match the conversation")
-        if payload.invoice_type == "service":
+        if invoice_type == "service":
             if len(payload.items) != 1 or not payload.items[0].service_id:
                 raise HTTPException(status_code=400, detail="A provider service is required")
             stylist = _request("GET", "stylists", params={"auth_id": f"eq.{provider}", "select": "id", "limit": "1"})
@@ -364,7 +381,7 @@ def register_consultation_routes(api_router: APIRouter, supabase: Any) -> None:
                 products = _request("GET", "products", params={"id": f"eq.{item.product_id}", "stylist_auth_id": f"eq.{provider}", "select": "id,price,stock", "limit": "1"})
                 if not products or (products[0].get("stock") is not None and products[0]["stock"] < item.quantity):
                     raise HTTPException(status_code=400, detail="Product is unavailable or not sold by this provider")
-        invoice = _request("POST", "invoices", json={"conversation_id": payload.conversation_id, "customer_auth_id": payload.customer_auth_id, "provider_auth_id": provider, "invoice_type": payload.invoice_type, "payment_provider": payment_provider, "amount": payload.amount, "status": "pending", "service_date": payload.service_date, "service_time": payload.service_time, "location": payload.location, "service_type": payload.service_type, "note": payload.note})[0]
+        invoice = _request("POST", "invoices", json={"conversation_id": payload.conversation_id, "customer_auth_id": payload.customer_auth_id, "provider_auth_id": provider, "invoice_type": invoice_type, "payment_provider": payment_provider, "amount": payload.amount, "status": "pending", "service_date": payload.service_date, "service_time": payload.service_time, "location": payload.location, "service_type": payload.service_type, "note": payload.note})[0]
         items = _request("POST", "invoice_items", json=[{"invoice_id": invoice["id"], "service_id": item.service_id, "product_id": item.product_id, "quantity": item.quantity} for item in payload.items])
         return {**invoice, "items": items}
 

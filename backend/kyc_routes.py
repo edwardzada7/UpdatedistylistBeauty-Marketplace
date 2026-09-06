@@ -232,6 +232,12 @@ def register_kyc_routes(api_router, supabase, admin_dash_key: str, create_notifi
         return {"status": row.get("status") or "not_submitted", "submission": row}
 
 
+    @api_router.get("/kyc/status")
+    async def kyc_status(auth_id: str):
+        """Compatibility alias for the authoritative KYC submission status."""
+        return await kyc_me(auth_id)
+
+
     @api_router.get("/admin/kyc")
     async def admin_list_kyc(
         status_filter: Optional[str] = None,
