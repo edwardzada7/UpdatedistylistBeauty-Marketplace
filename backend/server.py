@@ -45,6 +45,8 @@ from no_show_helpers import (
     ROLE_PROVIDER,
 )
 
+from consultation_routes import register_consultation_routes, send_shared_chat_message
+
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -215,8 +217,13 @@ class StatusCreateRequest(BaseModel):
 
 class ChatMessageCreate(BaseModel):
     auth_id: str
-    booking_id: int
+    booking_id: Optional[int] = None
+    conversation_id: Optional[int] = None
     message: str = Field(..., min_length=1, max_length=2000)
+    message_type: str = "text"
+    location_data: Optional[Dict[str, Any]] = None
+    invoice_data: Optional[Dict[str, Any]] = None
+    recommendation_data: Optional[Dict[str, Any]] = None
 
 
 # ==================== WITHDRAWAL REQUEST MODELS (Phase A) ====================
@@ -8270,6 +8277,18 @@ async def create_chat_message(
 ):
     """Send a chat message for a booking via the generic chat endpoint."""
     try:
+        if chat_message.conversation_id is not None:
+            return send_shared_chat_message(
+                conversation_id=chat_message.conversation_id,
+                auth_id=chat_message.auth_id,
+                message=chat_message.message,
+                message_type=chat_message.message_type,
+                location_data=chat_message.location_data,
+                invoice_data=chat_message.invoice_data,
+                recommendation_data=chat_message.recommendation_data,
+            )
+        if chat_message.booking_id is None:
+            raise HTTPException(status_code=400, detail="booking_id or conversation_id is required")
         booking_response = supabase.table("bookings").select("id, customer_auth_id, provider_id, stylist_auth_id").eq("id", chat_message.booking_id).execute()
         if not booking_response.data:
             raise HTTPException(status_code=404, detail="Booking not found")
@@ -9620,6 +9639,9 @@ try:
     except Exception as _ke:
         import traceback as _kt
         logging.warning("[startup] KYC routes NOT registered: %s\n%s", _ke, _kt.format_exc())
+
+    register_consultation_routes(api_router, supabase)
+    logging.info("[startup] certification, consultation, conversation, and invoice routes registered")
 
     app.include_router(api_router)
     logging.info("[startup] api_router included successfully (%d routes)", len(api_router.routes))
