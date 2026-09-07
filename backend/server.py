@@ -2896,6 +2896,192 @@ class FinancialSettingsUpdate(BaseModel):
     shop_commission_percentage: Optional[float] = None
 
 
+class PlatformReferralSettingUpdate(BaseModel):
+    referral_type: str
+    recipient_type: str
+    reward_type: str
+    reward_value: float
+    currency: str = "NGN"
+    pending_days: int = 0
+    is_active: bool = True
+
+
+REFERRAL_TYPES = {
+    "provider_shop": "Provider Shop Referral",
+    "provider_service": "Provider Service Referral",
+    "user_referral": "User Referral",
+}
+REFERRAL_STATUSES = {"pending", "available", "paid", "cancelled", "reversed"}
+
+
+def _require_admin_key(x_admin_key: Optional[str]):
+    admin_dash_key = os.environ.get("ADMIN_DASH_KEY", "")
+    if not x_admin_key or x_admin_key != admin_dash_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin key")
+
+
+def _validate_referral_setting(payload: PlatformReferralSettingUpdate):
+    if payload.referral_type not in REFERRAL_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported referral_type")
+    if payload.recipient_type not in {"provider", "user"}:
+        raise HTTPException(status_code=400, detail="recipient_type must be provider or user")
+    if payload.reward_type not in {"percentage", "fixed"}:
+        raise HTTPException(status_code=400, detail="reward_type must be percentage or fixed")
+    if payload.reward_type == "percentage" and not 0 <= payload.reward_value <= 100:
+        raise HTTPException(status_code=400, detail="Percentage reward must be between 0 and 100")
+    if payload.reward_type == "fixed" and payload.reward_value < 0:
+        raise HTTPException(status_code=400, detail="Fixed reward must be >= 0")
+    if payload.pending_days < 0:
+        raise HTTPException(status_code=400, detail="pending_days must be >= 0")
+
+
+def _referral_attribution(earning: dict):
+    """Enrich an earning without using order-level provider ownership."""
+    result = dict(earning)
+    order_item_id = earning.get("order_item_id")
+    listing_id = earning.get("listing_id")
+    order_id = earning.get("order_id")
+    if order_id:
+        for table in ("orders", "shop_orders"):
+            try:
+                order = (supabase.table(table).select("*").eq("id", order_id).limit(1).execute().data or [None])[0]
+                if order:
+                    result["order"] = order
+                    result["customer_auth_id"] = order.get("customer_auth_id") or order.get("customer_id")
+                    break
+            except Exception:
+                continue
+    if order_item_id:
+        for table in ("order_items", "shop_order_items"):
+            try:
+                item = (supabase.table(table).select("*").eq("id", order_item_id).limit(1).execute().data or [None])[0]
+                if item:
+                    result["order_item"] = item
+                    listing_id = listing_id or item.get("listing_id")
+                    result["product_id"] = result.get("product_id") or item.get("product_id")
+                    break
+            except Exception:
+                continue
+    if listing_id:
+        result["listing_id"] = listing_id
+        try:
+            listing = (supabase.table("product_listings").select("*").eq("id", listing_id).limit(1).execute().data or [None])[0]
+            if listing:
+                result["listing"] = listing
+                result["product_id"] = result.get("product_id") or listing.get("product_id")
+                seller_id = listing.get("shop_seller_id") or listing.get("seller_id")
+                if seller_id:
+                    seller = (supabase.table("shop_sellers").select("*").eq("id", seller_id).limit(1).execute().data or [None])[0]
+                    if seller:
+                        result["provider_auth_id"] = seller.get("provider_auth_id") or seller.get("auth_id")
+        except Exception:
+            pass
+    return result
+
+
+@api_router.get("/admin/referrals/settings")
+async def admin_get_referral_settings(
+    x_admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY"),
+):
+    _require_admin_key(x_admin_key)
+    try:
+        rows = supabase.table("platform_referral_settings").select("*").order("referral_type").order("updated_at", desc=True).execute().data or []
+    except Exception as exc:
+        logging.error(f"[admin/referrals/settings] read failed: {exc}")
+        raise HTTPException(status_code=503, detail="platform_referral_settings table is not available")
+    latest = {}
+    for row in rows:
+        latest.setdefault(row.get("referral_type"), row)
+    return {"settings": [latest.get(referral_type) for referral_type in REFERRAL_TYPES]}
+
+
+@api_router.put("/admin/referrals/settings/{referral_type}")
+async def admin_update_referral_setting(
+    referral_type: str,
+    payload: PlatformReferralSettingUpdate,
+    x_admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY"),
+):
+    _require_admin_key(x_admin_key)
+    if referral_type != payload.referral_type:
+        raise HTTPException(status_code=400, detail="referral_type does not match the URL")
+    _validate_referral_setting(payload)
+    now = datetime.now(timezone.utc).isoformat()
+    values = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+    values["updated_at"] = now
+    try:
+        existing = supabase.table("platform_referral_settings").select("id").eq("referral_type", referral_type).order("updated_at", desc=True).limit(1).execute().data or []
+        # Retire older rows first so there is one active configuration per program.
+        supabase.table("platform_referral_settings").update({"is_active": False, "updated_at": now}).eq("referral_type", referral_type).execute()
+        if existing:
+            row = supabase.table("platform_referral_settings").update(values).eq("id", existing[0]["id"]).execute().data
+        else:
+            values["created_at"] = now
+            row = supabase.table("platform_referral_settings").insert(values).execute().data
+        return {"setting": (row or [values])[0]}
+    except Exception as exc:
+        logging.error(f"[admin/referrals/settings] update failed: {exc}")
+        raise HTTPException(status_code=500, detail="Unable to save referral setting")
+
+
+@api_router.get("/admin/referrals/earnings")
+async def admin_list_referral_earnings(
+    referral_type: Optional[str] = Query(None),
+    recipient_type: Optional[str] = Query(None),
+    status_filter: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    recipient: Optional[str] = Query(None),
+    order_booking_id: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    x_admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY"),
+):
+    _require_admin_key(x_admin_key)
+    try:
+        query = supabase.table("platform_referral_earnings").select("*").order("created_at", desc=True)
+        if referral_type:
+            query = query.eq("referral_type", referral_type)
+        if recipient_type:
+            query = query.eq("recipient_type", recipient_type)
+        if status_filter:
+            if status_filter not in REFERRAL_STATUSES:
+                raise HTTPException(status_code=400, detail="Invalid referral earning status")
+            query = query.eq("status", status_filter)
+        if recipient:
+            query = query.ilike("recipient_auth_id", f"%{recipient}%")
+        if start_date:
+            query = query.gte("created_at", start_date)
+        if end_date:
+            query = query.lte("created_at", end_date)
+        rows = query.range(offset, offset + limit - 1).execute().data or []
+        if order_booking_id:
+            rows = [row for row in rows if str(row.get("order_id")) == order_booking_id or str(row.get("booking_id")) == order_booking_id]
+        return {"earnings": [_referral_attribution(row) for row in rows], "count": len(rows)}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logging.error(f"[admin/referrals/earnings] read failed: {exc}")
+        raise HTTPException(status_code=503, detail="platform_referral_earnings table is not available")
+
+
+@api_router.get("/admin/referrals/earnings/{earning_id}")
+async def admin_get_referral_earning(
+    earning_id: int,
+    x_admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY"),
+):
+    _require_admin_key(x_admin_key)
+    try:
+        rows = supabase.table("platform_referral_earnings").select("*").eq("id", earning_id).limit(1).execute().data or []
+        if not rows:
+            raise HTTPException(status_code=404, detail="Referral earning not found")
+        return {"earning": _referral_attribution(rows[0])}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logging.error(f"[admin/referrals/earnings/{earning_id}] read failed: {exc}")
+        raise HTTPException(status_code=503, detail="Unable to load referral earning")
+
+
 @api_router.get("/settings/withdrawal-fee")
 async def get_withdrawal_fee_public():
     """

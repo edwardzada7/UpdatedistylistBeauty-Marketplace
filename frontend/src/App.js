@@ -59,6 +59,8 @@ const AdminCopyrightScreen = lazy(() => import("@/screens/AdminCopyrightScreen")
 const AdminLegalEditorScreen = lazy(() => import("@/screens/AdminLegalEditorScreen"));
 const AdminCertificateVerificationScreen = lazy(() => import("@/screens/AdminCertificateVerificationScreen"));
 const AdminProfessionalConsultationScreen = lazy(() => import("@/screens/AdminProfessionalConsultationScreen"));
+const AdminReferralSettingsScreen = lazy(() => import("@/screens/AdminReferralSettingsScreen"));
+const AdminReferralEarningsScreen = lazy(() => import("@/screens/AdminReferralEarningsScreen"));
 
 /**
  * ProtectedRoute - Requires authentication
@@ -346,6 +348,8 @@ function AppRoutes() {
       <Route path="/admin/settings" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminFinancialSettingsScreen /></Suspense>} />
       {/* Phase 9 - Pre-Launch Admin Features */}
       <Route path="/admin/earnings" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminPlatformEarningsScreen /></Suspense>} />
+      <Route path="/admin/referrals/settings" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminReferralSettingsScreen /></Suspense>} />
+      <Route path="/admin/referrals/earnings" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminReferralEarningsScreen /></Suspense>} />
       <Route path="/admin/support" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminSupportDashboardScreen /></Suspense>} />
       <Route path="/admin/copyright" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminCopyrightScreen /></Suspense>} />
       <Route path="/admin/legal-editor" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminLegalEditorScreen /></Suspense>} />

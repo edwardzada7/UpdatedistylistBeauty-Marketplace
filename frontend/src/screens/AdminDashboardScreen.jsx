@@ -417,6 +417,13 @@ export default function AdminDashboardScreen() {
           >
             Platform Earnings →
           </button>
+          <button
+            onClick={() => navigate("/admin/referrals/settings")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 text-sm font-medium"
+            data-testid="admin-platform-referrals-link"
+          >
+            Platform Referrals →
+          </button>
           {/* Phase 9 - Support Tickets */}
           <button
             onClick={() => navigate("/admin/support")}

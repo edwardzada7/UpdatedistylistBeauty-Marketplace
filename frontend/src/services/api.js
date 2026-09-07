@@ -571,6 +571,22 @@ export const earningsAPI = {
     api.get(`/admin/platform-earnings`, { headers: { "X-ADMIN-KEY": adminKey } }),
 };
 
+// Platform referrals are separate liabilities paid by iStylist to recipients.
+export const referralAPI = {
+  settings: (adminKey) => api.get(`/admin/referrals/settings`, withAdminKey(adminKey)),
+  updateSetting: (adminKey, referralType, payload) =>
+    api.put(`/admin/referrals/settings/${encodeURIComponent(referralType)}`, payload, withAdminKey(adminKey)),
+  earnings: (adminKey, filters = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") qs.append(key, value);
+    });
+    return api.get(`/admin/referrals/earnings?${qs.toString()}`, withAdminKey(adminKey));
+  },
+  earning: (adminKey, earningId) =>
+    api.get(`/admin/referrals/earnings/${earningId}`, withAdminKey(adminKey)),
+};
+
 // Phase 9 - No-Show Dispute Resolution
 export const noShowAPI = {
   adminResolve: (adminKey, payload) =>
