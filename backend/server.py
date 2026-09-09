@@ -3052,10 +3052,12 @@ async def admin_list_referral_earnings(
         if start_date:
             query = query.gte("created_at", start_date)
         if end_date:
-            query = query.lte("created_at", end_date)
-        rows = query.range(offset, offset + limit - 1).execute().data or []
+            query = query.lte("created_at", f"{end_date}T23:59:59.999999+00:00")
         if order_booking_id:
-            rows = [row for row in rows if str(row.get("order_id")) == order_booking_id or str(row.get("booking_id")) == order_booking_id]
+            if not order_booking_id.isdigit():
+                return {"earnings": [], "count": 0}
+            query = query.or_(f"order_id.eq.{order_booking_id},booking_id.eq.{order_booking_id}")
+        rows = query.range(offset, offset + limit - 1).execute().data or []
         return {"earnings": [_referral_attribution(row) for row in rows], "count": len(rows)}
     except HTTPException:
         raise

@@ -54,8 +54,10 @@ export default function AdminReferralSettingsScreen() {
       setLoading(true);
       const response = await referralAPI.settings(adminKey);
       const next = {};
-      PROGRAMS.forEach((program, index) => {
-        next[program.type] = response.data?.settings?.[index] || emptySetting(program);
+      const returnedSettings = response.data?.settings || [];
+      PROGRAMS.forEach((program) => {
+        const setting = returnedSettings.find((item) => item?.referral_type === program.type);
+        next[program.type] = setting || emptySetting(program);
       });
       setSettings(next);
     } catch (error) {
