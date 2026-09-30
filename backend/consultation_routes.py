@@ -153,7 +153,8 @@ def _admin_key(admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY")) -> 
 
 
 def _active_certification(row: dict) -> bool:
-    if (row.get("status") or row.get("verification_status")) != "approved" or row.get("is_active") is not True:
+    # Use verification_status as the primary field for certification approval
+    if row.get("verification_status") != "approved" or row.get("is_active") is not True:
         return False
     expiry = row.get("expiry_date") or row.get("expires_at")
     if not expiry:
@@ -181,10 +182,10 @@ def _provider_info(auth_id: str) -> dict:
 
 
 def _conversation(customer_auth_id: str, provider_auth_id: str, conversation_type: str) -> dict:
-    rows = _request("GET", "conversations", params={"customer_auth_id": f"eq.{customer_auth_id}", "provider_auth_id": f"eq.{provider_auth_id}", "type": f"eq.{conversation_type}", "select": "*", "limit": "1"})
+    rows = _request("GET", "conversations", params={"customer_auth_id": f"eq.{customer_auth_id}", "provider_auth_id": f"eq.{provider_auth_id}", "conversation_type": f"eq.{conversation_type}", "select": "*", "limit": "1"})
     if rows:
         return rows[0]
-    created = _request("POST", "conversations", json={"customer_auth_id": customer_auth_id, "provider_auth_id": provider_auth_id, "type": conversation_type})
+    created = _request("POST", "conversations", json={"customer_auth_id": customer_auth_id, "provider_auth_id": provider_auth_id, "conversation_type": conversation_type})
     return created[0]
 
 
@@ -196,6 +197,23 @@ def _consultation_eligibility(provider_auth_id: str) -> dict:
     return {"eligible": bool(active and setting.get("enabled") is True), "specialty": (active or {}).get("specialty") or setting.get("specialty"), "consultation_fee": setting.get("consultation_fee"), "currency": setting.get("currency") or "NGN"}
 
 
+def _normalize_chat_message(chat_row: dict) -> dict:
+    """Normalize a chat row from the database to the frontend-compatible API structure."""
+    metadata = chat_row.get("metadata") or {}
+    normalized = {
+        **chat_row,
+        "is_read": chat_row.get("read", False),
+    }
+    # Expose metadata fields at the top level for frontend compatibility
+    if metadata.get("location_data") is not None:
+        normalized["location_data"] = metadata["location_data"]
+    if metadata.get("invoice_data") is not None:
+        normalized["invoice_data"] = metadata["invoice_data"]
+    if metadata.get("recommendation_data") is not None:
+        normalized["recommendation_data"] = metadata["recommendation_data"]
+    return normalized
+
+
 def send_shared_chat_message(conversation_id: int, auth_id: str, message: str, message_type: str = "text", location_data: Optional[Dict[str, Any]] = None, invoice_data: Optional[Dict[str, Any]] = None, recommendation_data: Optional[Dict[str, Any]] = None) -> dict:
     """Send a typed message through the existing generic chat endpoint."""
     conversation = _participant(conversation_id, auth_id)
@@ -203,7 +221,7 @@ def send_shared_chat_message(conversation_id: int, auth_id: str, message: str, m
     allowed_types = {"text", "image", "invoice", "provider_recommendation", "system"}
     if message_type not in allowed_types:
         raise HTTPException(status_code=400, detail="Unsupported message type")
-    if conversation.get("type") == "consultation" and not _request("GET", "consultations", params={"conversation_id": f"eq.{conversation_id}", "status": "eq.active", "select": "id", "limit": "1"}):
+    if conversation.get("conversation_type") == "consultation" and not _request("GET", "consultations", params={"conversation_id": f"eq.{conversation_id}", "status": "eq.active", "select": "id", "limit": "1"}):
         raise HTTPException(status_code=403, detail="Consultation payment is required before chatting")
     receiver = conversation["provider_auth_id"] if auth_id == conversation["customer_auth_id"] else conversation["customer_auth_id"]
     content = message.strip()
@@ -214,7 +232,26 @@ def send_shared_chat_message(conversation_id: int, auth_id: str, message: str, m
             raise HTTPException(status_code=400, detail="A valid different provider is required")
         recommendation_row = _request("POST", "provider_recommendations", json={"conversation_id": conversation_id, "sender_auth_id": auth_id, "recommended_provider_auth_id": recommended, "message": content})
         content = json.dumps({**recommendation, "recommendation_id": recommendation_row[0].get("id"), "message": content})
-    return _request("POST", "chats", json={"conversation_id": conversation_id, "sender_auth_id": auth_id, "receiver_auth_id": receiver, "message": content, "message_type": message_type, "location_data": location_data, "invoice_data": invoice_data, "is_read": False, "read": False})[0]
+    # Build metadata from structured fields
+    metadata = {}
+    if location_data:
+        metadata["location_data"] = location_data
+    if invoice_data:
+        metadata["invoice_data"] = invoice_data
+    if recommendation_data:
+        metadata["recommendation_data"] = recommendation_data
+    chat_data = {
+        "conversation_id": conversation_id,
+        "sender_auth_id": auth_id,
+        "receiver_auth_id": receiver,
+        "message": content,
+        "message_type": message_type,
+        "read": False,
+    }
+    if metadata:
+        chat_data["metadata"] = metadata
+    inserted = _request("POST", "chats", json=chat_data)[0]
+    return _normalize_chat_message(inserted)
 
 
 def register_consultation_routes(api_router: APIRouter, supabase: Any) -> None:
@@ -277,7 +314,15 @@ def register_consultation_routes(api_router: APIRouter, supabase: Any) -> None:
             raise HTTPException(status_code=403, detail="That product does not belong to this provider")
         conversation = _conversation(customer, payload.provider_auth_id, "inquiry")
         if payload.product_id is not None:
-            _request("POST", "chats", json={"conversation_id": conversation["id"], "sender_auth_id": customer, "receiver_auth_id": payload.provider_auth_id, "message": f"Product inquiry: {payload.product_name or f'Product #{payload.product_id}'} (product ID {payload.product_id})", "message_type": "text", "is_read": False, "read": False})
+            chat_data = {
+                "conversation_id": conversation["id"],
+                "sender_auth_id": customer,
+                "receiver_auth_id": payload.provider_auth_id,
+                "message": f"Product inquiry: {payload.product_name or f'Product #{payload.product_id}'} (product ID {payload.product_id})",
+                "message_type": "text",
+                "read": False,
+            }
+            _request("POST", "chats", json=chat_data)
         return conversation
 
     @api_router.get("/conversations")
@@ -286,7 +331,7 @@ def register_consultation_routes(api_router: APIRouter, supabase: Any) -> None:
         rows = _request("GET", "conversations", params={"or": f"(customer_auth_id.eq.{auth_id},provider_auth_id.eq.{auth_id})", "select": "*", "order": "updated_at.desc"})
         for row in rows:
             messages = _request("GET", "chats", params={"conversation_id": f"eq.{row['id']}", "select": "*", "order": "created_at.desc", "limit": "1"})
-            row["last_message"] = messages[0] if messages else None
+            row["last_message"] = _normalize_chat_message(messages[0]) if messages else None
         return rows
 
     @api_router.post("/consultations")
@@ -320,7 +365,9 @@ def register_consultation_routes(api_router: APIRouter, supabase: Any) -> None:
     def get_messages(conversation_id: int, authorization: Optional[str] = Header(None)):
         auth_id = _current_auth_id(authorization)
         conversation = _participant(conversation_id, auth_id)
-        return {"conversation": conversation, "messages": _request("GET", "chats", params={"conversation_id": f"eq.{conversation_id}", "select": "*", "order": "created_at.asc"})}
+        messages = _request("GET", "chats", params={"conversation_id": f"eq.{conversation_id}", "select": "*", "order": "created_at.asc"})
+        normalized_messages = [_normalize_chat_message(msg) for msg in messages]
+        return {"conversation": conversation, "messages": normalized_messages}
 
     @api_router.post("/conversations/{conversation_id}/messages")
     def send_message(conversation_id: int, payload: SendConversationMessageInput, authorization: Optional[str] = Header(None)):
@@ -329,7 +376,7 @@ def register_consultation_routes(api_router: APIRouter, supabase: Any) -> None:
         message_type = _normalize_shared_message_type(payload.message_type)
         if message_type not in {"text", "image", "invoice", "provider_recommendation", "system"}:
             raise HTTPException(status_code=400, detail="Unsupported message type")
-        if conversation.get("type") == "consultation" and not _request("GET", "consultations", params={"conversation_id": f"eq.{conversation_id}", "status": "eq.active", "select": "id", "limit": "1"}):
+        if conversation.get("conversation_type") == "consultation" and not _request("GET", "consultations", params={"conversation_id": f"eq.{conversation_id}", "status": "eq.active", "select": "id", "limit": "1"}):
             raise HTTPException(status_code=403, detail="Consultation payment is required before chatting")
         receiver = conversation["provider_auth_id"] if auth_id == conversation["customer_auth_id"] else conversation["customer_auth_id"]
         message = payload.message.strip()
@@ -340,13 +387,31 @@ def register_consultation_routes(api_router: APIRouter, supabase: Any) -> None:
                 raise HTTPException(status_code=400, detail="A valid different provider is required")
             recommendation_row = _request("POST", "provider_recommendations", json={"conversation_id": conversation_id, "sender_auth_id": auth_id, "recommended_provider_auth_id": recommended, "message": message})
             message = json.dumps({**recommendation, "recommendation_id": recommendation_row[0].get("id"), "message": message})
-        data = {"conversation_id": conversation_id, "sender_auth_id": auth_id, "receiver_auth_id": receiver, "message": message, "message_type": message_type, "location_data": payload.location_data, "invoice_data": payload.invoice_data, "is_read": False, "read": False}
-        return _request("POST", "chats", json=data)[0]
+        # Build metadata from structured fields
+        metadata = {}
+        if payload.location_data:
+            metadata["location_data"] = payload.location_data
+        if payload.invoice_data:
+            metadata["invoice_data"] = payload.invoice_data
+        if payload.recommendation_data:
+            metadata["recommendation_data"] = payload.recommendation_data
+        chat_data = {
+            "conversation_id": conversation_id,
+            "sender_auth_id": auth_id,
+            "receiver_auth_id": receiver,
+            "message": message,
+            "message_type": message_type,
+            "read": False,
+        }
+        if metadata:
+            chat_data["metadata"] = metadata
+        inserted = _request("POST", "chats", json=chat_data)[0]
+        return _normalize_chat_message(inserted)
 
     @api_router.get("/conversations/unread-count")
     def unread_count(authorization: Optional[str] = Header(None)):
         auth_id = _current_auth_id(authorization)
-        rows = _request("GET", "chats", params={"receiver_auth_id": f"eq.{auth_id}", "is_read": "eq.false", "select": "id"})
+        rows = _request("GET", "chats", params={"receiver_auth_id": f"eq.{auth_id}", "read": "eq.false", "select": "id"})
         return {"unreadCount": len(rows)}
 
     @api_router.post("/conversations/{conversation_id}/mark-read")
@@ -355,7 +420,7 @@ def register_consultation_routes(api_router: APIRouter, supabase: Any) -> None:
         if conversation_type not in ("inquiry", "consultation"):
             raise HTTPException(status_code=400, detail="conversation_type is required")
         _participant(conversation_id, auth_id)
-        updated = _request("PATCH", "chats", params={"conversation_id": f"eq.{conversation_id}", "receiver_auth_id": f"eq.{auth_id}", "is_read": "eq.false"}, json={"is_read": True, "read": True, "read_at": datetime.utcnow().isoformat()})
+        updated = _request("PATCH", "chats", params={"conversation_id": f"eq.{conversation_id}", "receiver_auth_id": f"eq.{auth_id}", "read": "eq.false"}, json={"read": True, "read_at": datetime.utcnow().isoformat()})
         return {"conversationId": conversation_id, "clearedCount": len(updated)}
 
     @api_router.post("/invoices")
