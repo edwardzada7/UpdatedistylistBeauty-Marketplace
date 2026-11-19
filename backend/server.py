@@ -45,7 +45,7 @@ from no_show_helpers import (
     ROLE_PROVIDER,
 )
 
-from consultation_routes import register_consultation_routes, send_shared_chat_message
+from consultation_routes import register_consultation_routes, send_shared_chat_message, _assert_not_blocked
 
 
 ROOT_DIR = Path(__file__).parent
@@ -703,6 +703,46 @@ async def delete_my_account(payload: DeleteAccountRequest):
 async def delete_my_account_compatibility(payload: DeleteAccountRequest):
     """Compatibility method that preserves the existing soft-delete logic."""
     return await delete_my_account(payload)
+
+
+@api_router.delete("/users/by-auth/{auth_id}")
+async def delete_user_by_auth_id(auth_id: str):
+    """Delete the account the mobile app asks for (App Store 5.1.1(v)).
+
+    Soft-deletes the users row (bookings, wallet and audit history are kept),
+    scrubs personal details when the schema allows it, and removes the Supabase
+    login so the person can no longer sign in.
+    """
+    res = supabase.table("users").select("*").eq("auth_id", auth_id).execute()
+    if not res.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    user_row = res.data[0]
+    deleted_at = datetime.now(timezone.utc).isoformat()
+    try:
+        supabase.table("users").update({"is_deleted": True, "deleted_at": deleted_at}).eq("auth_id", auth_id).execute()
+    except Exception as e:
+        msg = str(e).lower()
+        if "is_deleted" in msg or "deleted_at" in msg or "column" in msg:
+            raise HTTPException(status_code=503, detail="Account deletion not provisioned. Apply phase6_account_deletion.sql migration.")
+        logging.error(f"[delete-by-auth] update failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete account")
+    # Best-effort scrub of personal details (columns/constraints may differ).
+    try:
+        supabase.table("users").update({
+            "name": "Deleted user",
+            "email": f"deleted-{user_row.get('id')}@deleted.invalid",
+            "phone": None,
+        }).eq("auth_id", auth_id).execute()
+    except Exception as e:
+        logging.warning(f"[delete-by-auth] scrub skipped: {e}")
+    try:
+        supabase.auth.admin.delete_user(auth_id)
+    except Exception as e:
+        msg = str(e).lower()
+        if "not found" not in msg and "404" not in msg:
+            logging.error(f"[delete-by-auth] auth delete failed: {e}")
+            raise HTTPException(status_code=502, detail="Account deactivated but sign-in removal failed. Please try again.")
+    return {"ok": True, "auth_id": auth_id, "deleted_at": deleted_at}
 
 
 @api_router.get("/admin/users/deleted")
@@ -4222,6 +4262,7 @@ async def send_chat_message(
         
         sender_auth_id = request.auth_id
         receiver_auth_id = provider_uuid if request.auth_id == customer_auth_id else customer_auth_id
+        _assert_not_blocked(request.auth_id, receiver_auth_id)
         
         # 4. Insert chat message
         if not check_table_exists("chats"):
@@ -8632,6 +8673,7 @@ async def create_chat_message(
         customer_auth_id = booking.get("customer_auth_id")
         provider_uuid = get_booking_provider_uuid(booking)
         receiver_auth_id = provider_uuid if chat_message.auth_id == customer_auth_id else customer_auth_id
+        _assert_not_blocked(chat_message.auth_id, receiver_auth_id)
 
         if not check_table_exists("chats"):
             raise HTTPException(status_code=503, detail="Chat service not available")
