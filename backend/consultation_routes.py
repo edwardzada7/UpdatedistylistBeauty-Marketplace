@@ -357,6 +357,8 @@ def register_consultation_routes(api_router: APIRouter, supabase: Any) -> None:
         for row in rows:
             messages = _request("GET", "chats", params={"conversation_id": f"eq.{row['id']}", "select": "*", "order": "created_at.desc", "limit": "1"})
             row["last_message"] = _normalize_chat_message(messages[0]) if messages else None
+            unread = _request("GET", "chats", params={"conversation_id": f"eq.{row['id']}", "receiver_auth_id": f"eq.{auth_id}", "read": "eq.false", "select": "id"})
+            row["unread_count"] = len(unread)
         return rows
 
     @api_router.post("/consultations")
