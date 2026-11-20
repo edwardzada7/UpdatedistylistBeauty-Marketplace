@@ -4849,16 +4849,17 @@ async def get_providers_with_services(
         
         providers_with_services = []
         
+        # Fetch all services once (avoids one query per stylist)
+        services_by_stylist = {}
+        all_services = supabase.table("services").select("*").execute().data or []
+        for svc in all_services:
+            services_by_stylist.setdefault(svc.get("stylist_id"), []).append(svc)
+        
         for stylist in stylists_response.data:
             provider_id = stylist["user_id"]
             
-            # Get active services for this provider
-            services_response = supabase.table("services").select("*").eq(
-                "stylist_id", provider_id
-            ).execute()
-            
             active_services = []
-            for svc in services_response.data:
+            for svc in services_by_stylist.get(provider_id, []):
                 parsed = parse_service_record(svc)
                 if parsed["is_active"]:
                     # Apply filters
