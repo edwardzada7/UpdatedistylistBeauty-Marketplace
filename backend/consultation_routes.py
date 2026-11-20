@@ -130,6 +130,25 @@ def _request(method: str, table: str, **kwargs: Any) -> List[dict]:
     return response.json() if response.content else []
 
 
+def _assert_not_blocked(sender_auth_id: str, receiver_auth_id: str) -> None:
+    """Reject a message if either side has blocked the other (user_blocks table).
+
+    Fails open: if the table is missing or unreachable, messaging keeps working.
+    """
+    try:
+        for a, b in ((sender_auth_id, receiver_auth_id), (receiver_auth_id, sender_auth_id)):
+            response = requests.request(
+                "GET", f"{os.environ['SUPABASE_URL']}/rest/v1/user_blocks", headers=_headers(), timeout=10,
+                params={"blocker_auth_id": f"eq.{a}", "blocked_auth_id": f"eq.{b}", "select": "id", "limit": "1"},
+            )
+            if response.status_code == 200 and response.json():
+                raise HTTPException(status_code=403, detail="This message could not be delivered.")
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("block check skipped: %s", exc)
+
+
 def _current_auth_id(authorization: Optional[str]) -> str:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing bearer token")
@@ -224,6 +243,7 @@ def send_shared_chat_message(conversation_id: int, auth_id: str, message: str, m
     if conversation.get("conversation_type") == "consultation" and not _request("GET", "consultations", params={"conversation_id": f"eq.{conversation_id}", "status": "eq.active", "select": "id", "limit": "1"}):
         raise HTTPException(status_code=403, detail="Consultation payment is required before chatting")
     receiver = conversation["provider_auth_id"] if auth_id == conversation["customer_auth_id"] else conversation["customer_auth_id"]
+    _assert_not_blocked(auth_id, receiver)
     content = message.strip()
     if message_type == "provider_recommendation":
         recommendation = recommendation_data or {}
@@ -379,6 +399,7 @@ def register_consultation_routes(api_router: APIRouter, supabase: Any) -> None:
         if conversation.get("conversation_type") == "consultation" and not _request("GET", "consultations", params={"conversation_id": f"eq.{conversation_id}", "status": "eq.active", "select": "id", "limit": "1"}):
             raise HTTPException(status_code=403, detail="Consultation payment is required before chatting")
         receiver = conversation["provider_auth_id"] if auth_id == conversation["customer_auth_id"] else conversation["customer_auth_id"]
+        _assert_not_blocked(auth_id, receiver)
         message = payload.message.strip()
         if message_type == "provider_recommendation":
             recommendation = payload.recommendation_data or {}
