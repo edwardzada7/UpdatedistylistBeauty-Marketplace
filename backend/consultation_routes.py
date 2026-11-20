@@ -126,7 +126,12 @@ def _request(method: str, table: str, **kwargs: Any) -> List[dict]:
         raise HTTPException(status_code=502, detail=f"Could not access {table}") from exc
     if response.status_code not in (200, 201, 204):
         logger.warning("Supabase %s %s failed: %s", method, table, response.text[:300])
-        raise HTTPException(status_code=502, detail=f"Could not access {table}")
+        reason = ""
+        try:
+            reason = str(response.json().get("message") or "")[:160]
+        except Exception:  # noqa: BLE001
+            pass
+        raise HTTPException(status_code=502, detail=f"Could not access {table}" + (f": {reason}" if reason else ""))
     return response.json() if response.content else []
 
 
