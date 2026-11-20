@@ -9150,6 +9150,11 @@ async def admin_moderate_account(
         kyc_res = supabase.table("kyc_submissions").update(kyc_update).eq("user_auth_id", canonical_auth_id).execute()
         if not kyc_res.data:
             raise HTTPException(status_code=404, detail="KYC submission not found")
+        # Keep the public provider flag (used by cards, search and feed) in step with KYC.
+        try:
+            supabase.table("stylists").update({"is_verified": action == "approve"}).eq("auth_id", canonical_auth_id).execute()
+        except Exception as e:
+            logging.warning(f"[kyc] could not sync stylists.is_verified for {canonical_auth_id}: {e}")
         _admin_log(account_type, canonical_auth_id, "provider_approved" if action == "approve" else "provider_verification_rejected", body.reason)
         return kyc_res.data[0]
     canonical_auth_id = existing.data[0].get("auth_id")
