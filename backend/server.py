@@ -108,6 +108,13 @@ class UserResponse(BaseModel):
     gender: Optional[str] = None
     # Phase 5 - Account type
     account_type: Optional[str] = "individual"
+    # Saved location / photo. Without these the response model dropped them, so a provider
+    # never saw the customer's location on a booking.
+    location_address: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    profile_image_url: Optional[str] = None
+    is_verified: Optional[bool] = None
 
 # Stylist Models
 class StylistCreate(BaseModel):

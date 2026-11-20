@@ -475,7 +475,15 @@ def register_consultation_routes(api_router: APIRouter, supabase: Any) -> None:
                 if not products or (products[0].get("stock") is not None and products[0]["stock"] < item.quantity):
                     raise HTTPException(status_code=400, detail="Product is unavailable or not sold by this provider")
         invoice = _request("POST", "invoices", json={"conversation_id": payload.conversation_id, "customer_auth_id": payload.customer_auth_id, "provider_auth_id": provider, "invoice_type": invoice_type, "payment_provider": payment_provider, "amount": payload.amount, "status": "pending", "service_date": payload.service_date, "service_time": payload.service_time, "location": payload.location, "service_type": payload.service_type, "note": payload.note})[0]
-        items = _request("POST", "invoice_items", json=[{"invoice_id": invoice["id"], "service_id": item.service_id, "product_id": item.product_id, "quantity": item.quantity} for item in payload.items])
+        try:
+            items = _request("POST", "invoice_items", json=[{"invoice_id": invoice["id"], "service_id": item.service_id, "product_id": item.product_id, "quantity": item.quantity} for item in payload.items])
+        except HTTPException:
+            # Don't leave an invoice with no items behind.
+            try:
+                _request("DELETE", "invoices", params={"id": f"eq.{invoice['id']}"})
+            except Exception:  # noqa: BLE001
+                pass
+            raise
         return {**invoice, "items": items}
 
     @api_router.get("/invoices/{invoice_id}")
