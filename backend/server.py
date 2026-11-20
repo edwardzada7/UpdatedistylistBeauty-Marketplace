@@ -8545,6 +8545,37 @@ async def delete_shop_product_review(
         raise HTTPException(status_code=500, detail=f"Failed to delete review: {e}")
 
 
+async def _notify_shop_order(order_id: int, event: str, status_value: Optional[str] = None) -> None:
+    """Tell the buyer and the seller(s) about a shop order. Never raises."""
+    try:
+        order_rows = supabase.table("shop_orders").select("id, customer_auth_id, total_amount").eq("id", order_id).limit(1).execute().data or []
+        if not order_rows:
+            return
+        order = order_rows[0]
+        items = supabase.table("shop_order_items").select("product_id").eq("order_id", order_id).execute().data or []
+        product_ids = sorted({i["product_id"] for i in items if i.get("product_id") is not None})
+        seller_ids: set = set()
+        if product_ids:
+            products = supabase.table("products").select("id, stylist_auth_id").in_("id", product_ids).execute().data or []
+            seller_ids = {p["stylist_auth_id"] for p in products if p.get("stylist_auth_id")}
+        customer = order.get("customer_auth_id")
+        seller_ids.discard(customer)
+        meta = {"order_id": order_id}
+        seller_meta = {"order_id": order_id, "route": "/(provider)/orders"}
+        if event == "placed":
+            if customer:
+                await create_notification(customer, "shop_order", "Order placed", f"Your order #{order_id} has been placed.", metadata=meta)
+        elif event == "paid":
+            if customer:
+                await create_notification(customer, "shop_order", "Payment received", f"Payment for order #{order_id} was successful.", metadata=meta)
+            for seller in seller_ids:
+                await create_notification(seller, "shop_order", "New order", f"You have a new paid order #{order_id} to fulfil.", actor_auth_id=customer, metadata=seller_meta)
+        elif event == "status" and status_value and customer:
+            await create_notification(customer, "shop_order", "Order update", f"Your order #{order_id} is now {status_value}.", metadata=meta)
+    except Exception as e:
+        logging.warning(f"[shop-order-notify] {event} for order {order_id} failed: {e}")
+
+
 @api_router.post("/shop/orders", status_code=status.HTTP_201_CREATED)
 async def create_shop_order(order: ShopOrderCreate):
     """Create a new shop order."""
@@ -8601,6 +8632,7 @@ async def create_shop_order(order: ShopOrderCreate):
                 "created_at": datetime.utcnow().isoformat(),
             }).execute()
 
+        await _notify_shop_order(created_order["id"], "placed")
         return _load_shop_order(created_order["id"])
     except Exception as e:
         logging.error(f"Failed to create shop order: {e}")
@@ -8639,6 +8671,8 @@ async def update_shop_order(order_id: int, order_update: ShopOrderUpdate):
         updated = supabase.table("shop_orders").update(update_data).eq("id", order_id).execute()
         if not updated.data:
             raise HTTPException(status_code=500, detail="Failed to update shop order")
+        if order_update.status is not None and order_update.status != existing.get("status"):
+            await _notify_shop_order(order_id, "status", order_update.status)
         return _load_shop_order(order_id)
     except Exception as e:
         logging.error(f"Failed to update shop order: {e}")
@@ -8826,14 +8860,19 @@ async def verify_paystack_shop_payment(reference: str = Query(..., description="
                 "verified_at": datetime.utcnow().isoformat(),
             }).eq("reference", reference).execute()
 
+        existing_order_status = None
         if tx_status == "success" and order_id:
             try:
                 if check_table_exists("shop_orders"):
+                    prior = supabase.table("shop_orders").select("status").eq("id", int(order_id)).limit(1).execute().data or []
+                    existing_order_status = prior[0].get("status") if prior else None
                     supabase.table("shop_orders").update({
                         "status": "confirmed",
                         "payment_reference": reference,
                         "updated_at": datetime.utcnow().isoformat(),
                     }).eq("id", int(order_id)).execute()
+                    if (existing_order_status or "") != "confirmed":
+                        await _notify_shop_order(int(order_id), "paid")
             except Exception as inner_e:
                 logging.warning(f"Failed to update shop order after payment verify: {inner_e}")
 
