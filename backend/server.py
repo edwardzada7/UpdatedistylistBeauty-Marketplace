@@ -3914,6 +3914,16 @@ async def create_notification(
             logging.warning("Notifications table does not exist")
             return False
         
+        # Fire-and-forget device push (best effort) alongside the in-app row.
+        try:
+            import asyncio as _aio
+            from push_and_public import send_push_sync as _push
+            _aio.get_event_loop().run_in_executor(
+                None, _push, recipient_auth_id, title, message,
+                {"type": notification_type, **(metadata or {})})
+        except Exception as _pe:
+            logging.warning("[push] schedule failed: %s", _pe)
+
         # Build notification data - full payload first
         notification_data = {
             "auth_id": recipient_auth_id,
@@ -10069,6 +10079,9 @@ try:
 
     register_consultation_routes(api_router, supabase)
     logging.info("[startup] certification, consultation, conversation, and invoice routes registered")
+
+    from push_and_public import register_push_and_public
+    register_push_and_public(app, api_router, supabase)
 
     app.include_router(api_router)
     logging.info("[startup] api_router included successfully (%d routes)", len(api_router.routes))
