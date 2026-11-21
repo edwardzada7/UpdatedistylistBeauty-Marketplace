@@ -177,8 +177,11 @@ def _admin_key(admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY")) -> 
 
 
 def _active_certification(row: dict) -> bool:
-    # Use verification_status as the primary field for certification approval
-    if row.get("verification_status") != "approved" or row.get("is_active") is not True:
+    # The admin approve route writes `status`; some rows also carry `verification_status`.
+    # Either one being "approved" counts (checking only verification_status left approved
+    # providers unable to switch Professional Consultation on).
+    approved = row.get("status") == "approved" or row.get("verification_status") == "approved"
+    if not approved or row.get("is_active") is False:
         return False
     expiry = row.get("expiry_date") or row.get("expires_at")
     if not expiry:
@@ -560,6 +563,13 @@ def register_consultation_routes(api_router: APIRouter, supabase: Any) -> None:
         rows = _request("PATCH", "provider_certifications", params={"id": f"eq.{certification_id}"}, json={"status": "approved", "is_active": True, "verified_at": datetime.utcnow().isoformat()})
         if not rows:
             raise HTTPException(status_code=404, detail="Certificate not found")
+        try:
+            from push_and_public import notify_user_sync
+            notify_user_sync(rows[0].get("provider_auth_id"), "certificate_approved", "Certificate approved",
+                             "Your professional certificate was approved. You can now turn on Professional Consultation in Settings.",
+                             {"certification_id": certification_id})
+        except Exception:
+            pass
         return {"certification": rows[0]}
 
     @api_router.post("/admin/certifications/{certification_id}/reject")
@@ -567,6 +577,13 @@ def register_consultation_routes(api_router: APIRouter, supabase: Any) -> None:
         rows = _request("PATCH", "provider_certifications", params={"id": f"eq.{certification_id}"}, json={"status": "rejected", "is_active": False, "rejection_reason": payload.rejection_reason.strip(), "verified_at": datetime.utcnow().isoformat()})
         if not rows:
             raise HTTPException(status_code=404, detail="Certificate not found")
+        try:
+            from push_and_public import notify_user_sync
+            notify_user_sync(rows[0].get("provider_auth_id"), "certificate_rejected", "Certificate not approved",
+                             "Your certificate was not approved: " + payload.rejection_reason.strip(),
+                             {"certification_id": certification_id})
+        except Exception:
+            pass
         return {"certification": rows[0]}
 
     @api_router.get("/admin/consultations")
