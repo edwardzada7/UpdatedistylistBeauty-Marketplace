@@ -7643,22 +7643,35 @@ class ShopServiceAdminUpdate(BaseModel):
 
 # Models
 class FeedPostCreate(BaseModel):
-    image_url: str = Field(..., min_length=1)
+    image_url: Optional[str] = None
+    image_urls: Optional[List[str]] = None
+    video_url: Optional[str] = None
+    media_type: Optional[str] = "photo"
+    video_duration_seconds: Optional[float] = None
     caption: Optional[str] = Field(None, max_length=2000)
 
-    @validator("image_url")
-    def _val_image_url(cls, v):
+    @validator("image_url", "video_url")
+    def _val_single_media(cls, v):
         if not v:
-            raise ValueError("image_url is required")
-        # Accept http(s) URLs or data URLs (base64 inline images). Reject anything else
-        # to avoid accidentally storing JS / other schemes.
+            return None
         v = v.strip()
-        if v.startswith("http://") or v.startswith("https://") or v.startswith("data:image/"):
-            # Soft size cap on data URLs to keep DB sane (~ 6 MB raw → ~8MB base64).
-            if v.startswith("data:image/") and len(v) > 9_000_000:
-                raise ValueError("image too large (data URL > ~6MB)")
+        # http(s) storage URLs (preferred). data: images are still accepted for older app versions.
+        if v.startswith("http://") or v.startswith("https://"):
             return v
-        raise ValueError("image_url must be http(s) or a data:image URL")
+        if v.startswith("data:image/") and len(v) <= 9_000_000:
+            return v
+        raise ValueError("media must be an http(s) URL")
+
+    @validator("image_urls", each_item=True)
+    def _val_urls(cls, v):
+        v = (v or "").strip()
+        if not (v.startswith("http://") or v.startswith("https://")):
+            raise ValueError("image_urls must be http(s) URLs")
+        return v
+
+    @validator("media_type")
+    def _val_media_type(cls, v):
+        return "video" if v == "video" else "photo"
 
 
 class FeedPostUpdate(BaseModel):
@@ -7818,16 +7831,39 @@ async def create_feed_post(
         raise HTTPException(status_code=403, detail="Only providers can create feed posts")
 
     try:
+        urls = (payload.image_urls or [])[:5]
+        cover = payload.image_url or (urls[0] if urls else None)
+        if payload.media_type == "video":
+            if not payload.video_url:
+                raise HTTPException(status_code=422, detail="video_url is required for video posts")
+            d = payload.video_duration_seconds
+            if d is None or d <= 0 or d > 10:
+                raise HTTPException(status_code=422, detail="Feed videos must be between 1 and 10 seconds")
+        elif not cover:
+            raise HTTPException(status_code=422, detail="Add at least one photo")
         row = {
             "provider_id": user["id"],
             "provider_auth_id": auth_id,
             "caption": (payload.caption or "").strip() or None,
-            "image_url": payload.image_url,
+            "image_url": cover or "",
             "likes_count": 0,
             "comments_count": 0,
             "is_active": True,
         }
-        res = supabase.table("provider_posts").insert(row).execute()
+        extra = {
+            "image_urls": urls or ([cover] if cover else []),
+            "video_url": payload.video_url,
+            "media_type": payload.media_type,
+            "video_duration_seconds": payload.video_duration_seconds,
+        }
+        try:
+            res = supabase.table("provider_posts").insert({**row, **extra}).execute()
+        except Exception as col_err:
+            # phase30 SQL not run yet: save the cover photo only so posting still works
+            logging.warning(f"create_feed_post: new columns unavailable ({col_err}); saving cover only")
+            if payload.media_type == "video":
+                raise HTTPException(status_code=503, detail="Video posts need the latest database update (phase30).")
+            res = supabase.table("provider_posts").insert(row).execute()
         if not res.data:
             raise HTTPException(status_code=500, detail="Failed to create post")
         return _enrich_post(res.data[0], viewer_auth_id=auth_id)
