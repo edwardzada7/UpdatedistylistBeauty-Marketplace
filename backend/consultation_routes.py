@@ -91,7 +91,9 @@ class CreateInvoiceInput(BaseModel):
 
 
 class PayServiceInvoiceInput(BaseModel):
-    payment_reference: str
+    # Service invoices are paid from the customer's wallet (like every other booking payment).
+    # These fields are kept optional so older app versions still send a valid body.
+    payment_reference: Optional[str] = None
     transaction_id: Optional[str] = None
 
 
@@ -503,20 +505,31 @@ def register_consultation_routes(api_router: APIRouter, supabase: Any) -> None:
         rows = _request("GET", "invoices", params={"id": f"eq.{invoice_id}", "invoice_type": "eq.service", "customer_auth_id": f"eq.{customer}", "status": "eq.pending", "select": "*", "limit": "1"})
         if not rows:
             raise HTTPException(status_code=404, detail="Pending service invoice not found")
-        url = os.environ.get("BACKEND_PUBLIC_URL", "https://updatedistylistbeauty-marketplace-production.up.railway.app").rstrip("/") + "/api/payments/flutterwave/verify"
-        verification = requests.get(url, params={"reference": payload.payment_reference, "transaction_id": payload.transaction_id}, timeout=20)
-        if verification.status_code != 200 or verification.json().get("status") != "success":
-            raise HTTPException(status_code=402, detail="Payment could not be verified")
+        base = os.environ.get("BACKEND_PUBLIC_URL", "https://updatedistylistbeauty-marketplace-production.up.railway.app").rstrip("/") + "/api"
         items = _request("GET", "invoice_items", params={"invoice_id": f"eq.{invoice_id}", "select": "service_id", "limit": "1"})
         provider = _request("GET", "stylists", params={"auth_id": f"eq.{rows[0]['provider_auth_id']}", "select": "id", "limit": "1"})
         if not items or not provider:
             raise HTTPException(status_code=400, detail="Invoice is missing its service or provider")
-        booking_response = requests.post(os.environ.get("BACKEND_PUBLIC_URL", "https://updatedistylistbeauty-marketplace-production.up.railway.app").rstrip("/") + "/api/bookings", headers={"Content-Type": "application/json"}, json={"provider_id": provider[0]["id"], "customer_auth_id": customer, "service_ids": [items[0]["service_id"]], "booking_date": rows[0].get("service_date"), "booking_time": rows[0].get("service_time"), "total_amount": rows[0]["amount"], "payment_method": "FLUTTERWAVE", "notes": rows[0].get("note"), "status": "pending_payment"}, timeout=20)
+        booking_response = requests.post(base + "/bookings", headers={"Content-Type": "application/json"}, json={"provider_id": provider[0]["id"], "customer_auth_id": customer, "service_ids": [items[0]["service_id"]], "booking_date": rows[0].get("service_date"), "booking_time": rows[0].get("service_time"), "total_amount": rows[0]["amount"], "payment_method": "WALLET", "notes": rows[0].get("note"), "status": "pending_payment"}, timeout=20)
         if booking_response.status_code not in (200, 201):
             raise HTTPException(status_code=502, detail="Could not create booking")
         booking = booking_response.json()
         booking_id = booking.get("id") or booking.get("booking", {}).get("id")
-        updated = _request("PATCH", "invoices", params={"id": f"eq.{invoice_id}"}, json={"status": "paid", "payment_reference": payload.payment_reference, "booking_id": booking_id})
+        if not booking_id:
+            raise HTTPException(status_code=502, detail="Could not create booking")
+        # Pay from the wallet into escrow, exactly like a normal booking.
+        pay = requests.post(base + f"/bookings/{booking_id}/pay-with-wallet", params={"auth_id": customer}, timeout=30)
+        if pay.status_code != 200:
+            try:
+                _request("PATCH", "bookings", params={"id": f"eq.{booking_id}"}, json={"status": "canceled"})
+            except Exception:
+                pass
+            try:
+                detail = pay.json().get("detail")
+            except ValueError:
+                detail = None
+            raise HTTPException(status_code=pay.status_code if pay.status_code in (400, 402, 403, 404) else 502, detail=detail or "Wallet payment failed")
+        updated = _request("PATCH", "invoices", params={"id": f"eq.{invoice_id}"}, json={"status": "paid", "payment_reference": f"wallet_booking_{booking_id}", "booking_id": booking_id})
         return {"invoice": updated[0] if updated else {**rows[0], "status": "paid"}, "booking": booking}
 
     @api_router.post("/invoices/{invoice_id}/complete-product")
