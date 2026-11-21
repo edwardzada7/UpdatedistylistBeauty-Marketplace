@@ -46,6 +46,26 @@ def send_push_sync(auth_id: str, title: str, body: str, data: Optional[dict] = N
         logging.warning("[push] send failed: %s", e)
 
 
+def notify_user_sync(auth_id: str, notif_type: str, title: str, message: str, metadata: Optional[dict] = None) -> None:
+    """Saves an in-app notification and sends a device push. Best effort: never raises."""
+    try:
+        if not _supabase or not auth_id:
+            return
+        from datetime import datetime, timezone
+        row = {"auth_id": auth_id, "type": notif_type, "title": title, "message": message,
+               "read": False, "created_at": datetime.now(timezone.utc).isoformat()}
+        if metadata is not None:
+            row["metadata"] = metadata
+        try:
+            _supabase.table("notifications").insert(row).execute()
+        except Exception:
+            row.pop("metadata", None)  # older table without the metadata column
+            _supabase.table("notifications").insert(row).execute()
+    except Exception as e:  # noqa: BLE001
+        logging.warning("[notify] in-app notification failed: %s", e)
+    send_push_sync(auth_id, title, message, {"type": notif_type, **(metadata or {})})
+
+
 def _page(title: str, body_html: str) -> HTMLResponse:
     return HTMLResponse(
         f"<!doctype html><html lang='en'><head><meta charset='utf-8'>"

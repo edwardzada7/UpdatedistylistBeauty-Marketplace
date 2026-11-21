@@ -9331,6 +9331,16 @@ def admin_moderate_account(
             supabase.table("stylists").update({"is_verified": action == "approve"}).eq("auth_id", canonical_auth_id).execute()
         except Exception as e:
             logging.warning(f"[kyc] could not sync stylists.is_verified for {canonical_auth_id}: {e}")
+        try:
+            from push_and_public import notify_user_sync
+            if action == "approve":
+                notify_user_sync(canonical_auth_id, "kyc_approved", "You're verified",
+                                 "Your identity verification was approved. Your profile now shows the verified tick.")
+            else:
+                notify_user_sync(canonical_auth_id, "kyc_rejected", "Verification not approved",
+                                 "Your identity verification was not approved: " + (body.reason or "please resubmit your documents."))
+        except Exception as _ne:
+            logging.warning(f"[kyc] notification failed: {_ne}")
         _admin_log(account_type, canonical_auth_id, "provider_approved" if action == "approve" else "provider_verification_rejected", body.reason)
         return kyc_res.data[0]
     canonical_auth_id = existing.data[0].get("auth_id")
