@@ -398,7 +398,7 @@ class AvailableSlotsResponse(BaseModel):
 # ==================== DATABASE CONNECTION TEST ====================
 
 @api_router.get("/test-connection")
-async def test_connection():
+def test_connection():
     """Test database connection to Supabase"""
     try:
         response = supabase.table("users").select("count", count="exact").limit(0).execute()
@@ -416,7 +416,7 @@ async def test_connection():
 
 
 @api_router.post("/init-provider-services-table")
-async def init_provider_services_table():
+def init_provider_services_table():
     """Initialize provider_services table if it doesn't exist"""
     import requests
     
@@ -479,7 +479,7 @@ async def init_provider_services_table():
 # ==================== USERS ENDPOINTS ====================
 
 @api_router.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def create_user(user_data: UserCreate):
+def create_user(user_data: UserCreate):
     """Create a new user"""
     try:
         # Check if user with auth_id already exists
@@ -512,7 +512,7 @@ async def create_user(user_data: UserCreate):
         )
 
 @api_router.get("/users", response_model=List[UserResponse])
-async def get_all_users():
+def get_all_users():
     """Get all users"""
     try:
         response = supabase.table("users").select("*").execute()
@@ -524,7 +524,7 @@ async def get_all_users():
         )
 
 @api_router.get("/users/{user_id}", response_model=UserResponse)
-async def get_user(user_id: int):
+def get_user(user_id: int):
     """Get a specific user by ID"""
     try:
         response = supabase.table("users").select("*").eq("id", user_id).execute()
@@ -543,7 +543,7 @@ async def get_user(user_id: int):
         )
 
 @api_router.get("/users/by-auth/{auth_id}", response_model=UserResponse)
-async def get_user_by_auth_id(auth_id: str):
+def get_user_by_auth_id(auth_id: str):
     """Get a user by auth_id"""
     logging.info("[route-entered] GET /api/users/by-auth/{auth_id} auth_id=%s", auth_id)
     try:
@@ -571,7 +571,7 @@ async def get_user_by_auth_id(auth_id: str):
         )
 
 @api_router.put("/users/{user_id}", response_model=UserResponse)
-async def update_user(user_id: int, user_update: UserUpdate):
+def update_user(user_id: int, user_update: UserUpdate):
     """Update a user"""
     try:
         existing = supabase.table("users").select("*").eq("id", user_id).execute()
@@ -609,7 +609,7 @@ async def update_user(user_id: int, user_update: UserUpdate):
         )
 
 @api_router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(user_id: int):
+def delete_user(user_id: int):
     """Delete a user"""
     try:
         existing = supabase.table("users").select("*").eq("id", user_id).execute()
@@ -713,7 +713,7 @@ async def delete_my_account_compatibility(payload: DeleteAccountRequest):
 
 
 @api_router.delete("/users/by-auth/{auth_id}")
-async def delete_user_by_auth_id(auth_id: str):
+def delete_user_by_auth_id(auth_id: str):
     """Delete the account the mobile app asks for (App Store 5.1.1(v)).
 
     Soft-deletes the users row (bookings, wallet and audit history are kept),
@@ -753,7 +753,7 @@ async def delete_user_by_auth_id(auth_id: str):
 
 
 @api_router.get("/admin/users/deleted")
-async def admin_list_deleted_users(
+def admin_list_deleted_users(
     limit: int = 100,
     offset: int = 0,
     x_admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY"),
@@ -792,7 +792,7 @@ async def admin_list_deleted_users(
 # ==================== STYLISTS ENDPOINTS ====================
 
 @api_router.post("/stylists", response_model=StylistResponse, status_code=status.HTTP_201_CREATED)
-async def create_stylist(stylist_data: StylistCreate):
+def create_stylist(stylist_data: StylistCreate):
     """Create a new stylist profile"""
     try:
         # Verify user exists
@@ -829,7 +829,7 @@ async def create_stylist(stylist_data: StylistCreate):
         )
 
 @api_router.get("/stylists", response_model=List[StylistResponse])
-async def get_all_stylists(
+def get_all_stylists(
     verified_only: bool = False,
     premium_only: bool = False,
     sort_by: str = "hourly_rate"  # hourly_rate, verified, premium
@@ -985,7 +985,7 @@ async def get_stylist_by_auth_id(auth_id: str):
     return await get_stylist(user.data[0]["id"])
 
 @api_router.put("/stylists/{user_id}", response_model=StylistResponse)
-async def update_stylist(user_id: int, stylist_update: StylistUpdate):
+def update_stylist(user_id: int, stylist_update: StylistUpdate):
     """Update a stylist profile"""
     try:
         existing = supabase.table("stylists").select("*").eq("user_id", user_id).execute()
@@ -1023,7 +1023,7 @@ async def update_stylist(user_id: int, stylist_update: StylistUpdate):
         )
 
 @api_router.delete("/stylists/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_stylist(user_id: int):
+def delete_stylist(user_id: int):
     """Delete a stylist profile"""
     try:
         existing = supabase.table("stylists").select("*").eq("user_id", user_id).execute()
@@ -1047,7 +1047,7 @@ async def delete_stylist(user_id: int):
 # ==================== WALLETS ENDPOINTS ====================
 
 @api_router.post("/wallets", response_model=WalletResponse, status_code=status.HTTP_201_CREATED)
-async def create_wallet(wallet_data: WalletCreate):
+def create_wallet(wallet_data: WalletCreate):
     """Create a new wallet"""
     try:
         # Verify user exists
@@ -1082,7 +1082,7 @@ async def create_wallet(wallet_data: WalletCreate):
         )
 
 @api_router.get("/wallets", response_model=List[WalletResponse])
-async def get_all_wallets():
+def get_all_wallets():
     """Get all wallets"""
     try:
         response = supabase.table("wallets").select("*").execute()
@@ -1094,7 +1094,7 @@ async def get_all_wallets():
         )
 
 @api_router.get("/wallets/{wallet_id}", response_model=WalletResponse)
-async def get_wallet(wallet_id: int):
+def get_wallet(wallet_id: int):
     """Get a specific wallet by ID"""
     try:
         response = supabase.table("wallets").select("*").eq("id", wallet_id).execute()
@@ -1113,7 +1113,7 @@ async def get_wallet(wallet_id: int):
         )
 
 @api_router.get("/wallets/by-auth/{auth_id}", response_model=WalletResponse)
-async def get_wallet_by_auth_id(auth_id: str):
+def get_wallet_by_auth_id(auth_id: str):
     """Get wallet by user auth_id"""
     try:
         response = supabase.table("wallets").select("*").eq("user_auth_id", auth_id).execute()
@@ -1132,7 +1132,7 @@ async def get_wallet_by_auth_id(auth_id: str):
         )
 
 @api_router.put("/wallets/{wallet_id}", response_model=WalletResponse)
-async def update_wallet(wallet_id: int, wallet_update: WalletUpdate):
+def update_wallet(wallet_id: int, wallet_update: WalletUpdate):
     """Update a wallet (e.g., top-up balance)"""
     try:
         existing = supabase.table("wallets").select("*").eq("id", wallet_id).execute()
@@ -1157,7 +1157,7 @@ async def update_wallet(wallet_id: int, wallet_update: WalletUpdate):
         )
 
 @api_router.post("/wallets/{wallet_id}/topup")
-async def topup_wallet(wallet_id: int, amount: float):
+def topup_wallet(wallet_id: int, amount: float):
     """Top-up wallet balance (simulation for Phase 1)"""
     try:
         if amount <= 0:
@@ -1192,7 +1192,7 @@ async def topup_wallet(wallet_id: int, amount: float):
         )
 
 @api_router.delete("/wallets/{wallet_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_wallet(wallet_id: int):
+def delete_wallet(wallet_id: int):
     """Delete a wallet"""
     try:
         existing = supabase.table("wallets").select("*").eq("id", wallet_id).execute()
@@ -1227,7 +1227,7 @@ def get_paystack_headers():
 
 
 @api_router.post("/payments/paystack/initialize")
-async def initialize_paystack_payment(request: PaymentInitRequest):
+def initialize_paystack_payment(request: PaymentInitRequest):
     """Initialize a Paystack transaction for wallet top-up ONLY"""
     try:
         # ONLY allow wallet_topup - bookings must use wallet payment
@@ -1877,7 +1877,7 @@ def _generate_flw_tx_ref(purpose: str) -> str:
 
 
 @api_router.post("/payments/flutterwave/initialize")
-async def initialize_flutterwave_payment(request: FlutterwaveInitRequest):
+def initialize_flutterwave_payment(request: FlutterwaveInitRequest):
     """Initialize a Flutterwave hosted-checkout transaction for wallet top-up.
 
     Returns the same shape the frontend currently expects from the legacy
@@ -2298,7 +2298,7 @@ class WalletPaymentResponse(BaseModel):
 
 
 @api_router.post("/bookings/{booking_id}/pay-with-wallet")
-async def pay_booking_with_wallet(
+def pay_booking_with_wallet(
     booking_id: int,
     auth_id: str = Query(..., description="Customer's auth_id for authentication")
 ):
@@ -2519,7 +2519,7 @@ async def pay_booking_with_wallet(
 
 
 @api_router.get("/wallet/me")
-async def get_my_wallet(auth_id: str = Query(..., description="User's auth_id")):
+def get_my_wallet(auth_id: str = Query(..., description="User's auth_id")):
     """Get current user's wallet with balances"""
     try:
         wallet_response = supabase.table("wallets").select("*").eq("user_auth_id", auth_id).execute()
@@ -2545,7 +2545,7 @@ async def get_my_wallet(auth_id: str = Query(..., description="User's auth_id"))
 
 
 @api_router.get("/wallet/transactions")
-async def get_wallet_transactions(
+def get_wallet_transactions(
     auth_id: str = Query(..., description="User's auth_id (UUID) - the wallet owner"),
     limit: int = Query(50, ge=1, le=100),
     category: Optional[str] = Query(None, description="Optional filter by category: TOPUP, ESCROW_HOLD, ESCROW_RELEASE, REFUND, WITHDRAWAL, PAYOUT")
@@ -2603,7 +2603,7 @@ async def get_wallet_transactions(
 
 
 @api_router.get("/wallet/me/computed")
-async def get_my_wallet_computed(auth_id: str = Query(..., description="User's auth_id (UUID)")):
+def get_my_wallet_computed(auth_id: str = Query(..., description="User's auth_id (UUID)")):
     """
     Diagnostic endpoint: returns wallet balance computed from wallet_transactions.
     Does NOT modify any stored balance.
@@ -2675,7 +2675,7 @@ async def get_my_wallet_computed(auth_id: str = Query(..., description="User's a
 
 
 @api_router.post("/admin/wallet/recalculate")
-async def admin_recalculate_wallet(
+def admin_recalculate_wallet(
     auth_id: str = Query(..., description="User's auth_id (UUID) to recalc"),
     apply: bool = Query(False, description="Set true to apply changes; false = dry-run"),
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY")
@@ -2807,7 +2807,7 @@ async def admin_recalculate_wallet(
 
 
 @api_router.post("/wallet/transactions/backfill")
-async def backfill_transaction_auth_ids():
+def backfill_transaction_auth_ids():
     """
     Safe backfill: Set auth_id for transactions where it's NULL.
     Does NOT change any balances - only fills missing auth_id for history display.
@@ -3027,7 +3027,7 @@ def _referral_attribution(earning: dict):
 
 
 @api_router.get("/admin/referrals/settings")
-async def admin_get_referral_settings(
+def admin_get_referral_settings(
     x_admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY"),
 ):
     _require_admin_key(x_admin_key)
@@ -3043,7 +3043,7 @@ async def admin_get_referral_settings(
 
 
 @api_router.put("/admin/referrals/settings/{referral_type}")
-async def admin_update_referral_setting(
+def admin_update_referral_setting(
     referral_type: str,
     payload: PlatformReferralSettingUpdate,
     x_admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY"),
@@ -3071,7 +3071,7 @@ async def admin_update_referral_setting(
 
 
 @api_router.get("/admin/referrals/earnings")
-async def admin_list_referral_earnings(
+def admin_list_referral_earnings(
     referral_type: Optional[str] = Query(None),
     recipient_type: Optional[str] = Query(None),
     status_filter: Optional[str] = Query(None),
@@ -3114,7 +3114,7 @@ async def admin_list_referral_earnings(
 
 
 @api_router.get("/admin/referrals/earnings/{earning_id}")
-async def admin_get_referral_earning(
+def admin_get_referral_earning(
     earning_id: int,
     x_admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY"),
 ):
@@ -3132,7 +3132,7 @@ async def admin_get_referral_earning(
 
 
 @api_router.get("/settings/withdrawal-fee")
-async def get_withdrawal_fee_public():
+def get_withdrawal_fee_public():
     """
     Public, read-only fee config for the provider withdrawal screen so it
     can render a live fee preview. Returns only display-safe fields.
@@ -3149,7 +3149,7 @@ async def get_withdrawal_fee_public():
 
 
 @api_router.get("/admin/settings/financial")
-async def admin_get_financial_settings(
+def admin_get_financial_settings(
     x_admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY"),
 ):
     """Admin view of financial settings (currently: withdrawal fee config)."""
@@ -3161,7 +3161,7 @@ async def admin_get_financial_settings(
 
 
 @api_router.put("/admin/settings/financial")
-async def admin_update_financial_settings(
+def admin_update_financial_settings(
     payload: FinancialSettingsUpdate,
     x_admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY"),
 ):
@@ -3438,7 +3438,7 @@ async def request_withdrawal(
 
 
 @api_router.get("/withdrawals/me")
-async def get_my_withdrawal_requests(
+def get_my_withdrawal_requests(
     auth_id: str = Query(..., description="Provider's auth_id (UUID)"),
     limit: int = Query(50, ge=1, le=100)
 ):
@@ -3462,7 +3462,7 @@ async def get_my_withdrawal_requests(
 
 
 @api_router.get("/admin/withdrawals")
-async def admin_list_withdrawals(
+def admin_list_withdrawals(
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
     status_filter: Optional[str] = Query(None, alias="status", description="Filter by status: pending, approved, rejected"),
     limit: int = Query(50, ge=1, le=200),
@@ -3734,7 +3734,7 @@ async def admin_process_withdrawal(
 # ==================== PROVIDER DASHBOARD METRICS ENDPOINT ====================
 
 @api_router.get("/providers/dashboard-metrics")
-async def get_provider_dashboard_metrics(
+def get_provider_dashboard_metrics(
     auth_id: str = Query(..., description="Provider's auth_id (UUID)")
 ):
     """
@@ -4001,7 +4001,7 @@ async def create_notification(
 
 
 @api_router.get("/notifications/me")
-async def get_my_notifications(
+def get_my_notifications(
     auth_id: str = Query(..., description="User's auth_id (UUID)"),
     unread_only: bool = Query(False, description="Filter to unread only"),
     limit: int = Query(50, ge=1, le=100),
@@ -4049,7 +4049,7 @@ async def get_my_notifications(
 
 
 @api_router.get("/notifications/unread-count")
-async def get_unread_count(
+def get_unread_count(
     auth_id: str = Query(..., description="User's auth_id (UUID)")
 ):
     """
@@ -4081,7 +4081,7 @@ class MarkReadRequest(BaseModel):
 
 
 @api_router.post("/notifications/mark-read")
-async def mark_notifications_read(request: MarkReadRequest):
+def mark_notifications_read(request: MarkReadRequest):
     """
     Mark notifications as read.
     Either provide specific IDs or set mark_all=true.
@@ -4127,7 +4127,7 @@ async def mark_notifications_read(request: MarkReadRequest):
 
 
 @api_router.post("/notifications/register-token", status_code=status.HTTP_201_CREATED)
-async def register_notification_token(request: NotificationTokenCreate):
+def register_notification_token(request: NotificationTokenCreate):
     """Register or refresh a mobile push token for a Supabase auth UUID."""
     user = supabase.table("users").select("auth_id").eq("auth_id", request.auth_id).limit(1).execute()
     if not user.data:
@@ -4171,7 +4171,7 @@ def is_chat_participant(booking: dict, auth_id: str) -> bool:
 
 
 @api_router.get("/bookings/{booking_id}/chat")
-async def get_booking_chat(
+def get_booking_chat(
     booking_id: int,
     auth_id: str = Query(..., description="User's auth_id (UUID)"),
     limit: int = Query(50, ge=1, le=200),
@@ -4344,7 +4344,7 @@ class MarkChatReadRequest(BaseModel):
 
 
 @api_router.post("/bookings/{booking_id}/chat/mark-read")
-async def mark_chat_read(
+def mark_chat_read(
     booking_id: int,
     request: MarkChatReadRequest
 ):
@@ -4413,7 +4413,7 @@ async def mark_chat_read(
 
 
 @api_router.get("/chat/unread-count")
-async def get_chat_unread_count(
+def get_chat_unread_count(
     auth_id: str = Query(..., description="User's auth_id (UUID)")
 ):
     """
@@ -4586,7 +4586,7 @@ def build_service_name(sub_service_name, description, in_store, home_service, tr
     return name
 
 @api_router.post("/provider-services", response_model=ProviderServiceResponse, status_code=status.HTTP_201_CREATED)
-async def create_provider_service(service_data: ProviderServiceCreate):
+def create_provider_service(service_data: ProviderServiceCreate):
     """Create or update a provider service"""
     try:
         category_field = build_category_field(
@@ -4639,7 +4639,7 @@ async def create_provider_service(service_data: ProviderServiceCreate):
         )
 
 @api_router.get("/provider-services/{provider_id}")
-async def get_provider_services(provider_id: int, active_only: bool = False):
+def get_provider_services(provider_id: int, active_only: bool = False):
     """Get all services for a provider"""
     try:
         response = supabase.table("services").select("*").eq("stylist_id", provider_id).execute()
@@ -4709,7 +4709,7 @@ async def patch_provider_service(service_id: int, service_update: ProviderServic
     return await update_provider_service(service_id, service_update)
 
 @api_router.post("/provider-services/toggle/{provider_id}")
-async def toggle_provider_services(provider_id: int, request: BulkServiceToggleRequest):
+def toggle_provider_services(provider_id: int, request: BulkServiceToggleRequest):
     """Bulk toggle services for a provider - upsert behavior"""
     try:
         results = []
@@ -4763,7 +4763,7 @@ async def toggle_provider_services(provider_id: int, request: BulkServiceToggleR
         )
 
 @api_router.delete("/provider-services/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_provider_service(service_id: int):
+def delete_provider_service(service_id: int):
     """Delete a provider service"""
     try:
         existing = supabase.table("services").select("*").eq("id", service_id).execute()
@@ -4798,7 +4798,7 @@ async def get_categories_compatibility():
     return await get_service_categories()
 
 @api_router.get("/catalog/categories/{category_id}")
-async def get_category(category_id: str):
+def get_category(category_id: str):
     """Get a specific category with its services"""
     from service_catalog import get_category
     category = get_category(category_id)
@@ -4810,13 +4810,13 @@ async def get_category(category_id: str):
     return category
 
 @api_router.get("/catalog/services")
-async def get_all_services():
+def get_all_services():
     """Get all services (parent-level)"""
     from service_catalog import get_all_services
     return get_all_services()
 
 @api_router.get("/catalog/services/{service_id}")
-async def get_service(service_id: str):
+def get_service(service_id: str):
     """Get a specific service with its sub-services"""
     from service_catalog import get_service
     service = get_service(service_id)
@@ -4828,13 +4828,13 @@ async def get_service(service_id: str):
     return service
 
 @api_router.get("/catalog/sub-services")
-async def get_all_sub_services():
+def get_all_sub_services():
     """Get all sub-services (flat list)"""
     from service_catalog import get_all_sub_services
     return get_all_sub_services()
 
 @api_router.get("/catalog/sub-services/{service_id}")
-async def get_sub_services_by_service(service_id: str):
+def get_sub_services_by_service(service_id: str):
     """Get all sub-services for a specific service"""
     from service_catalog import get_sub_services_by_service
     return get_sub_services_by_service(service_id)
@@ -4843,7 +4843,7 @@ async def get_sub_services_by_service(service_id: str):
 # ==================== PROVIDER LISTING ENDPOINTS (Phase 1.4) ====================
 
 @api_router.get("/providers/with-services")
-async def get_providers_with_services(
+def get_providers_with_services(
     category_id: Optional[str] = None,
     service_id: Optional[str] = None,
     city: Optional[str] = None,
@@ -4858,6 +4858,17 @@ async def get_providers_with_services(
         ).execute()
         
         providers_with_services = []
+        
+        # Ratings for every provider in one query (the app used to call /reviews once per provider)
+        rating_sum, rating_cnt = {}, {}
+        try:
+            for r in supabase.table("reviews").select("provider_auth_id, rating").execute().data or []:
+                k = r.get("provider_auth_id")
+                if k and r.get("rating") is not None:
+                    rating_sum[k] = rating_sum.get(k, 0) + float(r["rating"])
+                    rating_cnt[k] = rating_cnt.get(k, 0) + 1
+        except Exception:
+            pass
         
         # Fetch all services once (avoids one query per stylist)
         services_by_stylist = {}
@@ -4905,7 +4916,10 @@ async def get_providers_with_services(
                     # Phase 1.9 - Provider type info
                     "provider_type": stylist.get("provider_type", "individual"),
                     "business_name": stylist.get("business_name"),
-                    "rating": stylist.get("rating", 0),
+                    "rating": round(rating_sum[stylist["auth_id"]] / rating_cnt[stylist["auth_id"]], 1) if rating_cnt.get(stylist.get("auth_id")) else stylist.get("rating", 0),
+                    "review_count": rating_cnt.get(stylist.get("auth_id"), 0),
+                    "provider_auth_id": stylist.get("auth_id"),
+                    "profile_image_url": stylist.get("profile_image_url"),
                     "is_verified": stylist.get("is_verified", False),
                     "is_premium": stylist.get("is_premium", False),
                     "starting_price": min_service_price,
@@ -4928,8 +4942,59 @@ async def get_providers_with_services(
             detail=f"Failed to fetch providers: {str(e)}"
         )
 
+@api_router.get("/conversations/summary")
+def conversations_summary(auth_id: str = Query(..., description="User's auth_id (UUID)")):
+    """One call for the Messages screen: every booking chat of this user with its last
+    message, unread count and the other person's name/photo (replaces one request per booking)."""
+    try:
+        res = supabase.table("bookings").select(
+            "id, customer_auth_id, provider_id, stylist_auth_id, status"
+        ).or_(f"customer_auth_id.eq.{auth_id},provider_id.eq.{auth_id},stylist_auth_id.eq.{auth_id}").execute()
+        bookings = [b for b in (res.data or []) if b.get("status") not in ("canceled", "declined")]
+        if not bookings or not check_table_exists("chats"):
+            return []
+        ids = [b["id"] for b in bookings]
+        msgs = supabase.table("chats").select("*").in_("booking_id", ids).order("created_at", desc=True).limit(2000).execute().data or []
+        last, unread = {}, {}
+        for m in msgs:  # newest first
+            bid = m.get("booking_id")
+            last.setdefault(bid, m)
+            if m.get("receiver_auth_id") == auth_id and not m.get("read"):
+                unread[bid] = unread.get(bid, 0) + 1
+        convs, counterparts = [], set()
+        for b in bookings:
+            if b["id"] not in last:
+                continue
+            provider_uuid = b.get("provider_id") if b.get("provider_id") and not str(b.get("provider_id")).isdigit() else b.get("stylist_auth_id")
+            other = provider_uuid if auth_id == b.get("customer_auth_id") else b.get("customer_auth_id")
+            if not other:
+                continue
+            counterparts.add(other)
+            convs.append({"booking_id": b["id"], "counterpart_auth_id": other,
+                          "last_message": last[b["id"]], "unread_count": unread.get(b["id"], 0)})
+        people = {}
+        if counterparts:
+            ids_list = list(counterparts)
+            for u in supabase.table("users").select("*").in_("auth_id", ids_list).execute().data or []:
+                people[u.get("auth_id")] = {"name": u.get("name"), "avatar": u.get("profile_image_url") or u.get("avatar_url") or u.get("photo_url")}
+            try:
+                for st in supabase.table("stylists").select("auth_id, business_name, profile_image_url").in_("auth_id", ids_list).execute().data or []:
+                    cur = people.setdefault(st.get("auth_id"), {})
+                    cur["name"] = st.get("business_name") or cur.get("name")
+                    cur["avatar"] = st.get("profile_image_url") or cur.get("avatar")
+                    cur["verified"] = bool(st.get("is_verified"))
+            except Exception as ex:
+                logging.warning(f"[conversations] stylist lookup failed: {ex}")
+        for c in convs:
+            c["counterpart"] = people.get(c["counterpart_auth_id"], {})
+        return convs
+    except Exception as e:
+        logging.error(f"conversations_summary failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load conversations: {e}")
+
+
 @api_router.get("/providers/{provider_id}/full-profile")
-async def get_provider_full_profile(provider_id: int):
+def get_provider_full_profile(provider_id: int):
     """Get full provider profile with all services for booking"""
     try:
         # Get stylist data with user info (only request columns that exist)
@@ -5013,7 +5078,7 @@ async def get_provider_full_profile(provider_id: int):
 # ==================== AUTO PROVIDER REGISTRATION ====================
 
 @api_router.post("/providers/register")
-async def register_provider(user_id: int, hourly_rate: float = 0.0, bio: str = None, location: str = None):
+def register_provider(user_id: int, hourly_rate: float = 0.0, bio: str = None, location: str = None):
     """Register a user as a provider (creates stylist profile and updates user role)"""
     try:
         # Check if user exists
@@ -5080,10 +5145,16 @@ def minutes_to_time(minutes: int) -> str:
     m = minutes % 60
     return f"{h:02d}:{m:02d}"
 
+_TABLE_EXISTS_CACHE: set = set()
+
 def check_table_exists(table_name: str) -> bool:
-    """Check if a Supabase table exists by attempting a query"""
+    """Check if a Supabase table exists by attempting a query (positive results cached:
+    this ran a real database query on every request, several times per request)."""
+    if table_name in _TABLE_EXISTS_CACHE:
+        return True
     try:
         supabase.table(table_name).select("*").limit(1).execute()
+        _TABLE_EXISTS_CACHE.add(table_name)
         return True
     except Exception as e:
         es = str(e).lower()
@@ -5843,7 +5914,7 @@ async def create_booking(booking: BookingCreate):
 # ==================== PROVIDER METRICS ENDPOINT ====================
 
 @api_router.get("/providers/metrics")
-async def get_provider_metrics(auth_id: str = Query(..., description="Provider's auth_id (UUID)")):
+def get_provider_metrics(auth_id: str = Query(..., description="Provider's auth_id (UUID)")):
     """Get booking metrics for a provider dashboard"""
     try:
         if not check_table_exists("bookings"):
@@ -6679,7 +6750,7 @@ async def dispute_no_show(booking_id: int, body: NoShowResponseBody):
 
 
 @api_router.get("/admin/no-show/cases")
-async def admin_list_no_show_cases(
+def admin_list_no_show_cases(
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
     include_resolved: bool = Query(False, description="Include user_no_show / provider_no_show too"),
 ):
@@ -6767,7 +6838,7 @@ def _get_provider_uuid_from_booking(booking: dict) -> Optional[str]:
 
 
 @api_router.post("/reviews", status_code=status.HTTP_201_CREATED)
-async def create_review(
+def create_review(
     review: ReviewCreate,
     auth_id: str = Query(..., description="Reviewer's auth_id (UUID)")
 ):
@@ -6878,7 +6949,7 @@ async def create_review(
 
 
 @api_router.get("/providers/{provider_auth_id}/reviews")
-async def get_provider_reviews(
+def get_provider_reviews(
     provider_auth_id: str,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0)
@@ -6937,7 +7008,7 @@ async def get_provider_reviews(
 
 
 @api_router.get("/reviews/me")
-async def get_my_reviews(
+def get_my_reviews(
     auth_id: str = Query(..., description="User's auth_id (UUID)"),
     role: str = Query(..., description="Role: 'customer' or 'provider'"),
     limit: int = Query(50, ge=1, le=100),
@@ -6998,7 +7069,7 @@ async def get_my_reviews(
 
 
 @api_router.get("/reviews/by-booking/{booking_id}")
-async def get_review_by_booking(
+def get_review_by_booking(
     booking_id: int,
     auth_id: str = Query(..., description="User's auth_id to verify access")
 ):
@@ -7054,7 +7125,7 @@ async def get_review_by_booking(
 
 
 @api_router.post("/reviews/{review_id}/reply")
-async def reply_to_review(
+def reply_to_review(
     review_id: int,
     reply: ReviewReply,
     auth_id: str = Query(..., description="Provider's auth_id (UUID)")
@@ -7138,7 +7209,7 @@ async def reply_to_review(
 # ==================== ROOT ENDPOINT ====================
 
 @api_router.get("/")
-async def root():
+def root():
     return {
         "message": "Beauty Stylist Marketplace API",
         "version": "1.0.0",
@@ -7153,7 +7224,7 @@ async def root():
 
 
 @api_router.post("/migrate/backfill-customer-auth-ids")
-async def backfill_customer_auth_ids():
+def backfill_customer_auth_ids():
     """Backfill customer_auth_id for existing bookings that only have customer_id (integer)"""
     try:
         if not check_table_exists("bookings"):
@@ -7297,7 +7368,7 @@ def _get_staff_weekly(staff_id: int) -> List[dict]:
 
 
 @api_router.post("/staff", status_code=status.HTTP_201_CREATED)
-async def create_staff(payload: StaffCreate, auth_id: str = Query(..., description="Business owner's auth_id (UUID)")):
+def create_staff(payload: StaffCreate, auth_id: str = Query(..., description="Business owner's auth_id (UUID)")):
     """Create a staff member under the requester's business account."""
     _require_staff_table()
     try:
@@ -7335,7 +7406,7 @@ async def create_staff(payload: StaffCreate, auth_id: str = Query(..., descripti
 
 
 @api_router.get("/staff/me")
-async def list_my_staff(
+def list_my_staff(
     auth_id: str = Query(..., description="Business owner's auth_id (UUID)"),
     include_inactive: bool = Query(True)
 ):
@@ -7360,7 +7431,7 @@ async def list_my_staff(
 
 
 @api_router.get("/staff/{staff_id}")
-async def get_staff_detail(staff_id: int):
+def get_staff_detail(staff_id: int):
     """Get full detail for a single staff member (public-safe fields)."""
     row = _load_staff_or_404(staff_id)
     row["service_ids"] = _get_staff_service_ids(staff_id)
@@ -7369,7 +7440,7 @@ async def get_staff_detail(staff_id: int):
 
 
 @api_router.put("/staff/{staff_id}")
-async def update_staff(
+def update_staff(
     staff_id: int,
     payload: StaffUpdate,
     auth_id: str = Query(..., description="Business owner's auth_id (UUID)")
@@ -7396,7 +7467,7 @@ async def update_staff(
 
 
 @api_router.delete("/staff/{staff_id}", status_code=status.HTTP_200_OK)
-async def delete_staff(
+def delete_staff(
     staff_id: int,
     auth_id: str = Query(..., description="Business owner's auth_id (UUID)"),
     hard: bool = Query(False, description="If true, hard-delete (will fail if bookings reference this staff)")
@@ -7416,7 +7487,7 @@ async def delete_staff(
 
 
 @api_router.put("/staff/{staff_id}/services")
-async def set_staff_services(
+def set_staff_services(
     staff_id: int,
     payload: StaffServicesUpdate,
     auth_id: str = Query(..., description="Business owner's auth_id (UUID)")
@@ -7441,7 +7512,7 @@ async def set_staff_services(
 
 
 @api_router.put("/staff/{staff_id}/availability")
-async def set_staff_availability(
+def set_staff_availability(
     staff_id: int,
     payload: StaffAvailabilityUpdate,
     auth_id: str = Query(..., description="Business owner's auth_id (UUID)")
@@ -7675,6 +7746,64 @@ def _enrich_post(post: dict, viewer_auth_id: Optional[str] = None) -> dict:
     return enriched
 
 
+def _enrich_posts(posts: list, viewer_auth_id: Optional[str] = None) -> list:
+    """Batch version of _enrich_post: 3 queries total instead of 2-3 per post."""
+    if not posts:
+        return []
+    auth_ids = list({p.get("provider_auth_id") for p in posts if p.get("provider_auth_id")})
+    users_by_auth, users_by_id = {}, {}
+    try:
+        if auth_ids:
+            for u in supabase.table("users").select("id, name, city, country, auth_id").in_("auth_id", auth_ids).execute().data or []:
+                users_by_auth[u.get("auth_id")] = u
+                users_by_id[u.get("id")] = u
+    except Exception as ex:
+        logging.warning(f"_enrich_posts users lookup failed: {ex}")
+    provider_ids = set()
+    for p in posts:
+        pid = p.get("provider_id") or (users_by_auth.get(p.get("provider_auth_id")) or {}).get("id")
+        if pid:
+            provider_ids.add(pid)
+    stylists = {}
+    try:
+        if provider_ids:
+            for st in supabase.table("stylists").select("user_id, business_name, provider_type, photo_url").in_("user_id", list(provider_ids)).execute().data or []:
+                stylists[st.get("user_id")] = st
+    except Exception as ex:
+        logging.warning(f"_enrich_posts stylists lookup failed: {ex}")
+    liked = set()
+    if viewer_auth_id:
+        try:
+            ids = [p["id"] for p in posts if p.get("id") is not None]
+            if ids:
+                for r in supabase.table("provider_post_likes").select("post_id").in_("post_id", ids).eq("user_auth_id", viewer_auth_id).execute().data or []:
+                    liked.add(r.get("post_id"))
+        except Exception:
+            pass
+    out = []
+    for post in posts:
+        enriched = dict(post)
+        provider_auth_id = post.get("provider_auth_id")
+        user = users_by_auth.get(provider_auth_id) or {}
+        provider_id = post.get("provider_id") or user.get("id")
+        st = stylists.get(provider_id) or {}
+        business = st.get("business_name")
+        display = business if (st.get("provider_type") == "business" and business) else user.get("name")
+        enriched["provider"] = {
+            "id": provider_id,
+            "auth_id": provider_auth_id,
+            "name": user.get("name"),
+            "business_name": business,
+            "provider_type": st.get("provider_type"),
+            "photo_url": st.get("photo_url"),
+            "city": user.get("city"),
+            "display_name": display or "Provider",
+        }
+        enriched["liked_by_me"] = post.get("id") in liked
+        out.append(enriched)
+    return out
+
+
 @api_router.post("/feed/posts", status_code=status.HTTP_201_CREATED)
 async def create_feed_post(
     payload: FeedPostCreate,
@@ -7710,7 +7839,7 @@ async def create_feed_post(
 
 
 @api_router.get("/feed/posts")
-async def list_feed_posts(
+def list_feed_posts(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     auth_id: Optional[str] = Query(None, description="Viewer auth_id (used to compute liked_by_me)"),
@@ -7726,7 +7855,7 @@ async def list_feed_posts(
         q = q.order("created_at", desc=True).range(offset, offset + limit - 1)
         res = q.execute()
         posts = res.data or []
-        enriched = [_enrich_post(p, viewer_auth_id=auth_id) for p in posts]
+        enriched = _enrich_posts(posts, viewer_auth_id=auth_id)
         return {
             "posts": enriched,
             "total": res.count if res.count is not None else len(enriched),
@@ -7741,7 +7870,7 @@ async def list_feed_posts(
 
 
 @api_router.get("/feed/posts/by-provider/{provider_id}")
-async def list_feed_posts_by_provider(
+def list_feed_posts_by_provider(
     provider_id: int,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -7756,7 +7885,7 @@ async def list_feed_posts_by_provider(
             offset, offset + limit - 1
         ).execute()
         posts = res.data or []
-        enriched = [_enrich_post(p, viewer_auth_id=auth_id) for p in posts]
+        enriched = _enrich_posts(posts, viewer_auth_id=auth_id)
         return {
             "posts": enriched,
             "total": res.count if res.count is not None else len(enriched),
@@ -7769,7 +7898,7 @@ async def list_feed_posts_by_provider(
 
 
 @api_router.get("/feed/posts/{post_id}")
-async def get_feed_post(
+def get_feed_post(
     post_id: int,
     auth_id: Optional[str] = Query(None)
 ):
@@ -7798,7 +7927,7 @@ def _get_active_feed_post(post_id: int) -> dict:
 
 
 @api_router.get("/feed/posts/{post_id}/comments")
-async def list_feed_post_comments(
+def list_feed_post_comments(
     post_id: int,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -7870,7 +7999,7 @@ async def create_feed_post_comment(
 
 
 @api_router.put("/feed/posts/{post_id}")
-async def update_feed_post(
+def update_feed_post(
     post_id: int,
     payload: FeedPostUpdate,
     auth_id: str = Query(..., description="Owner auth_id (UUID)")
@@ -7899,7 +8028,7 @@ async def update_feed_post(
 
 
 @api_router.delete("/feed/posts/{post_id}")
-async def delete_feed_post(
+def delete_feed_post(
     post_id: int,
     auth_id: str = Query(..., description="Owner auth_id (UUID)"),
     hard: bool = Query(False)
@@ -7929,7 +8058,7 @@ async def delete_feed_post(
 
 
 @api_router.post("/feed/posts/{post_id}/like")
-async def like_feed_post(
+def like_feed_post(
     post_id: int,
     auth_id: str = Query(..., description="Liker auth_id (UUID)")
 ):
@@ -7992,7 +8121,7 @@ async def like_feed_post(
 
 
 @api_router.delete("/feed/posts/{post_id}/like")
-async def unlike_feed_post(
+def unlike_feed_post(
     post_id: int,
     auth_id: str = Query(..., description="Liker auth_id (UUID)")
 ):
@@ -8153,7 +8282,7 @@ def _safe_sum_amount(table: str, column: str, filters: Optional[List[tuple]] = N
 
 
 @api_router.get("/admin/stats")
-async def admin_stats(
+def admin_stats(
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY")
 ):
     """High-level platform stats for the admin dashboard."""
@@ -8214,7 +8343,7 @@ async def admin_stats(
 
 
 @api_router.get("/admin/recent-bookings")
-async def admin_recent_bookings(
+def admin_recent_bookings(
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
     limit: int = Query(20, ge=1, le=100),
     status_filter: Optional[str] = Query(None, alias="status"),
@@ -8256,7 +8385,7 @@ async def admin_recent_bookings(
 
 
 @api_router.get("/admin/recent-payments")
-async def admin_recent_payments(
+def admin_recent_payments(
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
     limit: int = Query(20, ge=1, le=100),
 ):
@@ -8275,7 +8404,7 @@ async def admin_recent_payments(
 
 
 @api_router.get("/admin/feed-posts")
-async def admin_list_feed_posts(
+def admin_list_feed_posts(
     status_filter: Optional[str] = Query("all", alias="status_filter", description="Filter by active/inactive/all"),
     limit: int = Query(100, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -8302,7 +8431,7 @@ async def admin_list_feed_posts(
 
 
 @api_router.put("/admin/feed-posts/{post_id}")
-async def admin_update_feed_post(
+def admin_update_feed_post(
     post_id: int,
     body: FeedPostUpdate,
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
@@ -8327,7 +8456,7 @@ async def admin_update_feed_post(
 
 
 @api_router.get("/admin/shop-services")
-async def admin_list_shop_services(
+def admin_list_shop_services(
     status_filter: Optional[str] = Query("all", alias="status_filter", description="Filter by active/inactive/all"),
     limit: int = Query(100, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -8371,7 +8500,7 @@ async def admin_list_shop_services(
 
 
 @api_router.put("/admin/shop-services/{service_id}")
-async def admin_update_shop_service(
+def admin_update_shop_service(
     service_id: int,
     body: ShopServiceAdminUpdate,
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
@@ -8424,7 +8553,7 @@ async def admin_update_shop_service(
 
 
 @api_router.get("/shop/products/{product_id}/reviews")
-async def get_shop_product_reviews(product_id: int):
+def get_shop_product_reviews(product_id: int):
     """Get product reviews for a shop product."""
     _require_products_table()
     _require_shop_review_table()
@@ -8461,7 +8590,7 @@ async def get_shop_product_reviews(product_id: int):
 
 
 @api_router.post("/shop/products/{product_id}/reviews", status_code=status.HTTP_201_CREATED)
-async def create_shop_product_review(
+def create_shop_product_review(
     product_id: int,
     review: ShopReviewCreate,
     auth_id: str = Query(..., description="Reviewer's auth_id (UUID)")
@@ -8494,7 +8623,7 @@ async def create_shop_product_review(
 
 
 @api_router.patch("/shop/products/{product_id}/reviews/{review_id}")
-async def update_shop_product_review(
+def update_shop_product_review(
     product_id: int,
     review_id: int,
     review_update: ShopReviewUpdate,
@@ -8536,7 +8665,7 @@ async def update_shop_product_review(
 
 
 @api_router.delete("/shop/products/{product_id}/reviews/{review_id}")
-async def delete_shop_product_review(
+def delete_shop_product_review(
     product_id: int,
     review_id: int,
     auth_id: str = Query(..., description="Reviewer's auth_id (UUID)")
@@ -8766,7 +8895,7 @@ async def create_chat_message(
 
 
 @api_router.post("/payments/paystack/shop/initialize")
-async def initialize_paystack_shop_payment(request: ShopPaystackInitRequest):
+def initialize_paystack_shop_payment(request: ShopPaystackInitRequest):
     """Initialize a Paystack transaction for a shop order."""
     headers = get_paystack_headers()
     if not headers:
@@ -8914,7 +9043,7 @@ async def verify_paystack_shop_payment(reference: str = Query(..., description="
 
 
 @api_router.get("/status")
-async def get_system_status():
+def get_system_status():
     """Get backend status information."""
     connected = check_table_exists("users") and check_table_exists("payments")
     return {
@@ -8927,7 +9056,7 @@ async def get_system_status():
 
 
 @api_router.post("/status")
-async def post_system_status(payload: StatusCreateRequest):
+def post_system_status(payload: StatusCreateRequest):
     """Accept a status update from a client."""
     logging.info(f"Status update received: status={payload.status} message={payload.message}")
     return {
@@ -8942,7 +9071,7 @@ async def post_system_status(payload: StatusCreateRequest):
 
 
 @api_router.get("/admin/reported-no-shows")
-async def admin_reported_no_shows(
+def admin_reported_no_shows(
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
     limit: int = Query(20, ge=1, le=100),
 ):
@@ -8987,7 +9116,7 @@ async def admin_reported_no_shows(
 
 
 @api_router.get("/admin/providers")
-async def admin_list_providers(
+def admin_list_providers(
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -9062,7 +9191,7 @@ async def admin_list_providers(
 
 
 @api_router.get("/admin/users")
-async def admin_list_users(
+def admin_list_users(
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -9085,7 +9214,7 @@ async def admin_list_users(
 
 
 @api_router.get("/admin/users/{auth_id}")
-async def admin_user_detail(auth_id: str, x_admin_key: str = Header(None, alias="X-ADMIN-KEY")):
+def admin_user_detail(auth_id: str, x_admin_key: str = Header(None, alias="X-ADMIN-KEY")):
     _require_admin_key(x_admin_key)
     user_res = supabase.table("users").select("*").eq("auth_id", auth_id).limit(1).execute()
     if not user_res.data:
@@ -9129,7 +9258,7 @@ async def admin_user_detail(auth_id: str, x_admin_key: str = Header(None, alias=
 
 
 @api_router.post("/admin/{account_type}/{auth_id}/moderation")
-async def admin_moderate_account(
+def admin_moderate_account(
     account_type: str,
     auth_id: str,
     body: AdminModerationAction,
@@ -9220,7 +9349,7 @@ SUPPORT_CATEGORIES = {
 # ----- Legal pages (public) ----------------------------------------------
 
 @api_router.get("/legal/{slug}")
-async def get_legal_page(slug: str):
+def get_legal_page(slug: str):
     """Public: fetch a legal page by slug. Guests can read."""
     try:
         res = supabase.table("legal_pages").select("*").eq("slug", slug).limit(1).execute()
@@ -9239,7 +9368,7 @@ async def get_legal_page(slug: str):
 
 
 @api_router.get("/legal")
-async def list_legal_pages():
+def list_legal_pages():
     """Public: list available legal page slugs + titles."""
     try:
         res = supabase.table("legal_pages").select("slug,title,updated_at").order("slug").execute()
@@ -9254,7 +9383,7 @@ async def list_legal_pages():
 # ----- Reports -----------------------------------------------------------
 
 @api_router.post("/reports", status_code=status.HTTP_201_CREATED)
-async def create_report(body: ReportCreate):
+def create_report(body: ReportCreate):
     """Authenticated users submit a report on a provider/customer/post/review/chat."""
     if body.target_type not in REPORT_TARGET_TYPES:
         raise HTTPException(status_code=400, detail=f"target_type must be one of {sorted(REPORT_TARGET_TYPES)}")
@@ -9288,7 +9417,7 @@ async def create_report(body: ReportCreate):
 
 
 @api_router.get("/admin/reports")
-async def admin_list_reports(
+def admin_list_reports(
     status_filter: Optional[str] = None,
     target_type: Optional[str] = None,
     limit: int = 100,
@@ -9326,7 +9455,7 @@ async def admin_list_reports(
 
 
 @api_router.put("/admin/reports/{report_id}")
-async def admin_update_report(
+def admin_update_report(
     report_id: int,
     body: ReportAdminUpdate,
     x_admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY"),
@@ -9361,7 +9490,7 @@ async def admin_update_report(
 # ----- Support tickets ---------------------------------------------------
 
 @api_router.post("/support/tickets", status_code=status.HTTP_201_CREATED)
-async def create_support_ticket(body: SupportTicketCreate):
+def create_support_ticket(body: SupportTicketCreate):
     """Submit a support ticket. user_auth_id is optional (guests allowed)."""
     if body.category not in SUPPORT_CATEGORIES:
         raise HTTPException(status_code=400, detail=f"category must be one of {sorted(SUPPORT_CATEGORIES)}")
@@ -9564,7 +9693,7 @@ async def admin_resolve_no_show_dispute(
 # ==================== TASK 2: PLATFORM EARNINGS DASHBOARD ====================
 
 @api_router.get("/admin/platform-earnings")
-async def admin_platform_earnings(
+def admin_platform_earnings(
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
 ):
     """
@@ -9667,7 +9796,7 @@ async def admin_platform_earnings(
 # ==================== TASK 3: ADMIN SUPPORT DASHBOARD ====================
 
 @api_router.get("/admin/support/tickets")
-async def admin_list_support_tickets(
+def admin_list_support_tickets(
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
     status: Optional[str] = Query(None, description="Filter by status: open, pending, resolved, closed"),
 ):
@@ -9699,7 +9828,7 @@ async def admin_list_support_tickets(
 
 
 @api_router.put("/admin/support/tickets/{ticket_id}")
-async def admin_update_support_ticket(
+def admin_update_support_ticket(
     ticket_id: int,
     body: SupportTicketUpdate,
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
@@ -9776,7 +9905,7 @@ async def admin_update_support_ticket(
 # ==================== TASK 4: COPYRIGHT COMPLAINT SYSTEM ====================
 
 @api_router.post("/copyright/report")
-async def submit_copyright_complaint(
+def submit_copyright_complaint(
     body: CopyrightComplaintCreate,
     auth_id: Optional[str] = Query(None, description="Optional auth_id if logged in"),
 ):
@@ -9842,7 +9971,7 @@ async def submit_copyright_complaint(
 
 
 @api_router.get("/admin/copyright/complaints")
-async def admin_list_copyright_complaints(
+def admin_list_copyright_complaints(
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
     status: Optional[str] = Query(None, description="Filter by status"),
 ):
@@ -9874,7 +10003,7 @@ async def admin_list_copyright_complaints(
 
 
 @api_router.put("/admin/copyright/complaints/{complaint_id}")
-async def admin_update_copyright_complaint(
+def admin_update_copyright_complaint(
     complaint_id: int,
     body: CopyrightComplaintUpdate,
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
@@ -9948,7 +10077,7 @@ async def admin_update_copyright_complaint(
 # ==================== TASK 5: ADMIN LEGAL PAGE EDITOR ====================
 
 @api_router.put("/admin/legal/{slug}")
-async def admin_update_legal_page(
+def admin_update_legal_page(
     slug: str,
     body: LegalPageUpdate,
     x_admin_key: str = Header(None, alias="X-ADMIN-KEY"),
