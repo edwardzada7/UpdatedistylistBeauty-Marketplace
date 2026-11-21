@@ -46,7 +46,7 @@ We do not sell your data. We share data with:
 You may request access, correction, or deletion of your data at any time via Profile → Danger Zone → Delete My Account, or by contacting support.
 
 ## Contact
-Email: privacy@istylist.app
+Email: privacy@istylist.online
 $$),
 ('terms', 'Terms of Service',
 $$# Terms of Service
@@ -76,7 +76,7 @@ The platform is provided "as is". We are not liable for the conduct of third-par
 These Terms are governed by the laws of the Federal Republic of Nigeria.
 
 ## Contact
-Email: legal@istylist.app
+Email: legal@istylist.online
 $$),
 ('community-guidelines', 'Community Guidelines',
 $$# Community Guidelines
@@ -126,7 +126,7 @@ Platform withdrawal fees are non-refundable once a payout has been approved and 
 ## How to Request a Refund
 1. Open the booking or transaction in your wallet
 2. Tap "Report Issue" or "Dispute"
-3. Or email refunds@istylist.app with the transaction reference
+3. Or email refunds@istylist.online with the transaction reference
 
 ## Chargebacks
 Fraudulent chargebacks will result in account suspension and potential legal action.

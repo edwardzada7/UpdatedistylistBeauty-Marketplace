@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
-SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "support@istylist.app")
+SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "support@istylist.online")
 _supabase = None
 
 
@@ -105,7 +105,9 @@ def register_push_and_public(app, api_router: APIRouter, supabase) -> None:
     async def public_support():
         e = html.escape(SUPPORT_EMAIL)
         return _page("Support", f"<p>Need help? Email <a href='mailto:{e}'>{e}</a>. "
-                                "To report abuse, use the Report option inside the app or email us.</p>")
+                                "To report abuse, use the Report option inside the app or email us.</p>"
+                                "<p>iStylist is also available on the web at "
+                                "<a href='https://app.istylist.online'>app.istylist.online</a>.</p>")
 
     @app.get("/delete-account", response_class=HTMLResponse)
     async def public_delete():
