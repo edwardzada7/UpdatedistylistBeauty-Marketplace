@@ -16,6 +16,8 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
 import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation";
 import ReportButton from "@/components/ReportButton";
+import PersonAvatar, { PersonVerified } from "@/components/PersonAvatar";
+import { avatarOf, locationOf } from "@/utils/profile";
 
 const ProviderProfileScreen = () => {
   const navigate = useNavigate();
@@ -819,11 +821,24 @@ const ProviderProfileScreen = () => {
             <CardContent className="p-6">
               {/* Avatar & Basic Info */}
               <div className="flex gap-4 mb-6">
-                <div className="w-24 h-24 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white text-3xl font-bold flex-shrink-0">
-                  {(provider.display_name || provider.name)?.charAt(0) || "P"}
-                </div>
+                <PersonAvatar
+                  id={provider.user_id}
+                  authId={provider.auth_id}
+                  src={avatarOf(provider)}
+                  name={provider.display_name || provider.name}
+                  size={96}
+                />
                 <div className="flex-1">
-                  <h2 className="text-2xl font-bold mb-2">{provider.display_name || provider.name || "Provider"}</h2>
+                  <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
+                    <span>{provider.display_name || provider.name || "Provider"}</span>
+                    <PersonVerified id={provider.user_id} authId={provider.auth_id} verified={provider.is_verified || provider.kyc_status === "verified"} size={22} />
+                  </h2>
+                  {locationOf(provider) && (
+                    <p className="text-sm text-gray-600 mb-2 flex items-center gap-1" data-testid="provider-location">
+                      <MapPin className="h-3.5 w-3.5" />
+                      {locationOf(provider)}
+                    </p>
+                  )}
                   {provider.provider_type === "business" && (
                     <Badge variant="outline" className="mb-2 bg-blue-50 text-blue-700 border-blue-200">
                       Business

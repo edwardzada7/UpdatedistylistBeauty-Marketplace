@@ -23,6 +23,8 @@ import ReportButton from "@/components/ReportButton";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import PostComposerModal from "@/components/PostComposerModal";
 import { timeAgoShort } from "@/utils/timeAgo";
+import PersonAvatar, { PersonVerified } from "@/components/PersonAvatar";
+import { avatarOf } from "@/utils/profile";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -296,13 +298,17 @@ export function PostCard({
           className="flex items-center gap-3 text-left hover:opacity-90"
           data-testid={`post-open-provider-${post.id}`}
         >
-          <Avatar className="h-10 w-10">
-            <AvatarImage src={post.provider?.photo_url || undefined} alt={display} />
-            <AvatarFallback>{(display || "P").slice(0, 1).toUpperCase()}</AvatarFallback>
-          </Avatar>
+          <PersonAvatar
+            authId={post.provider?.auth_id || post.provider_auth_id}
+            id={post.provider?.id}
+            src={avatarOf(post.provider)}
+            name={display}
+            size={40}
+          />
           <div>
-            <p className="font-semibold text-sm text-gray-900 leading-tight">
+            <p className="font-semibold text-sm text-gray-900 leading-tight flex items-center gap-1">
               {display}
+              <PersonVerified authId={post.provider?.auth_id || post.provider_auth_id} id={post.provider?.id} verified={post.provider?.is_verified} size={15} />
             </p>
             {subtitle && (
               <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
@@ -345,12 +351,31 @@ export function PostCard({
 
       {/* Image */}
       <div className="bg-gray-100">
-        <img
-          src={post.image_url}
-          alt={post.caption || "Post"}
-          className={`w-full object-cover ${compact ? "max-h-64" : "max-h-[520px]"}`}
-          loading="lazy"
-        />
+        {post.video_url ? (
+          <video
+            src={post.video_url}
+            controls
+            playsInline
+            preload="metadata"
+            className={`w-full bg-black ${compact ? "max-h-64" : "max-h-[520px]"}`}
+          />
+        ) : (
+          (() => {
+            const images = Array.isArray(post.image_urls) && post.image_urls.length ? post.image_urls : post.image_url ? [post.image_url] : [];
+            if (images.length <= 1) {
+              return images[0] ? (
+                <img src={images[0]} alt={post.caption || "Post"} className={`w-full object-cover ${compact ? "max-h-64" : "max-h-[520px]"}`} loading="lazy" />
+              ) : null;
+            }
+            return (
+              <div className="flex overflow-x-auto snap-x snap-mandatory" data-testid={`post-gallery-${post.id}`}>
+                {images.map((src, i) => (
+                  <img key={src + i} src={src} alt={`${post.caption || "Post"} ${i + 1} of ${images.length}`} className={`w-full flex-shrink-0 snap-center object-cover ${compact ? "max-h-64" : "max-h-[520px]"}`} loading="lazy" />
+                ))}
+              </div>
+            );
+          })()
+        )}
       </div>
 
       {/* Footer */}

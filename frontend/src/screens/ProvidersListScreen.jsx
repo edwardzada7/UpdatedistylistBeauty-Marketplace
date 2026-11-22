@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Search, Star, CheckCircle2, MapPin, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { providersAPI, stylistsAPI } from "@/services/api";
+import PersonAvatar, { PersonVerified } from "@/components/PersonAvatar";
+import { avatarOf, locationOf } from "@/utils/profile";
 import { CURRENCY, FILTER_OPTIONS, SORT_OPTIONS, SERVICE_CATALOG } from "@/utils/constants";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
@@ -241,29 +243,27 @@ const ProvidersListScreen = () => {
                 <CardContent className="p-4">
                   <div className="flex gap-4">
                     {/* Avatar */}
-                    <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
-                      {(provider.display_name || provider.name)?.charAt(0) || "P"}
-                    </div>
+                    <PersonAvatar
+                      id={provider.provider_id ?? provider.user_id}
+                      src={avatarOf(provider)}
+                      name={provider.display_name || provider.name}
+                      size={64}
+                    />
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
                           {/* Phase 1.9 - Use display_name */}
-                          <h3 className="font-semibold text-lg truncate">
-                            {provider.display_name || provider.name || "Provider"}
+                          <h3 className="font-semibold text-lg flex items-center gap-1 min-w-0">
+                            <span className="truncate">{provider.display_name || provider.name || "Provider"}</span>
+                            <PersonVerified id={provider.provider_id ?? provider.user_id} verified={provider.is_verified} size={18} />
                           </h3>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
                             {/* Phase 1.9 - Show business badge */}
                             {provider.provider_type === "business" && (
                               <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
                                 Business
-                              </Badge>
-                            )}
-                            {provider.is_verified && (
-                              <Badge variant="secondary" className="bg-green-50 text-green-700 border-green-200">
-                                <CheckCircle2 className="h-3 w-3 mr-1" />
-                                Verified
                               </Badge>
                             )}
                             {provider.is_premium && (
@@ -296,10 +296,10 @@ const ProvidersListScreen = () => {
                       )}
 
                       {/* Phase 1.9 - Show only city portion of location (no full address) */}
-                      {provider.location && (
+                      {locationOf(provider) && (
                         <p className="text-sm text-gray-600 mt-2 flex items-center gap-1">
                           <MapPin className="h-3 w-3" />
-                          {provider.location.split(',')[0]}
+                          {locationOf(provider).split(',')[0]}
                         </p>
                       )}
 

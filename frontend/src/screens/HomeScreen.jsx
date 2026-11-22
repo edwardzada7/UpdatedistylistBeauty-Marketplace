@@ -12,6 +12,8 @@ import Footer from "@/components/Footer";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import NotificationBell from "@/components/NotificationBell";
 import { timeAgoShort } from "@/utils/timeAgo";
+import PersonAvatar, { PersonVerified } from "@/components/PersonAvatar";
+import { avatarOf, locationOf } from "@/utils/profile";
 
 const HomeScreen = () => {
   const navigate = useNavigate();
@@ -265,15 +267,19 @@ const HomeScreen = () => {
                   onClick={() => navigate(`/providers/${provider.user_id}`)}
                 >
                   <CardContent className="p-6">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <h4 className="font-semibold text-lg mb-1">
-                          {provider.user_name || "Provider"}
+                    <div className="flex items-center gap-3 mb-3">
+                      <PersonAvatar
+                        id={provider.user_id}
+                        src={avatarOf(provider)}
+                        name={provider.user_name || provider.business_name}
+                        size={52}
+                      />
+                      <div className="min-w-0">
+                        <h4 className="font-semibold text-lg mb-1 flex items-center gap-1 min-w-0">
+                          <span className="truncate">{provider.user_name || "Provider"}</span>
+                          <PersonVerified id={provider.user_id} verified={provider.is_verified} size={18} />
                         </h4>
                         <div className="flex items-center gap-1">
-                          {provider.is_verified && (
-                            <CheckCircle2 className="h-3 w-3 text-green-600" />
-                          )}
                           {provider.is_premium && (
                             <Star className="h-3 w-3 text-amber-500 fill-amber-500" />
                           )}
@@ -284,9 +290,9 @@ const HomeScreen = () => {
                       {CURRENCY}{provider.hourly_rate?.toLocaleString() || "0"}
                       <span className="text-sm text-gray-600">/session</span>
                     </p>
-                    {provider.location && (
+                    {locationOf(provider) && (
                       <p className="text-xs text-gray-500 mt-2">
-                        📍 {provider.location}
+                        📍 {locationOf(provider)}
                       </p>
                     )}
                   </CardContent>
