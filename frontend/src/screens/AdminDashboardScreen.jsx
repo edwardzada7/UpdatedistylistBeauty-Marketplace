@@ -404,6 +404,13 @@ export default function AdminDashboardScreen() {
             Feed Moderation →
           </button>
           <button
+            onClick={() => navigate("/admin/official")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 text-sm font-medium"
+            data-testid="admin-official-link"
+          >
+            iStylist Official →
+          </button>
+          <button
             onClick={() => navigate("/admin/shop-moderation")}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 text-white hover:bg-slate-800 text-sm font-medium"
             data-testid="admin-shop-moderation-link"

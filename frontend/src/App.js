@@ -61,6 +61,7 @@ const AdminFinancialSettingsScreen = lazy(() => import("@/screens/AdminFinancial
 const AdminReportsScreen = lazy(() => import("@/screens/AdminReportsScreen"));
 const AdminFeedModerationScreen = lazy(() => import("@/screens/AdminFeedModerationScreen"));
 const AdminShopModerationScreen = lazy(() => import("@/screens/AdminShopModerationScreen"));
+const AdminOfficialScreen = lazy(() => import("@/screens/AdminOfficialScreen"));
 const AdminPlatformEarningsScreen = lazy(() => import("@/screens/AdminPlatformEarningsScreen"));
 const AdminSupportDashboardScreen = lazy(() => import("@/screens/AdminSupportDashboardScreen"));
 const AdminCopyrightScreen = lazy(() => import("@/screens/AdminCopyrightScreen"));
@@ -361,6 +362,7 @@ function AppRoutes() {
       <Route path="/admin/reports" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminReportsScreen /></Suspense>} />
       <Route path="/admin/feed-moderation" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminFeedModerationScreen /></Suspense>} />
       <Route path="/admin/shop-moderation" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminShopModerationScreen /></Suspense>} />
+      <Route path="/admin/official" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminOfficialScreen /></Suspense>} />
       {/* Phase 7 - Admin financial settings */}
       <Route path="/admin/settings" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminFinancialSettingsScreen /></Suspense>} />
       {/* Phase 9 - Pre-Launch Admin Features */}
