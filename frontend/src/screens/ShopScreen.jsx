@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import SponsoredStrip from "@/components/SponsoredStrip";
 import { useNavigate } from "react-router-dom";
 import { Search, ImageOff, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
@@ -103,6 +104,7 @@ export default function ShopScreen() {
       </ShopHeader>
 
       <div className="container mx-auto px-4 py-6 pb-24 md:pb-8">
+        <div className="-mx-4"><SponsoredStrip types="product" title="Sponsored products" /></div>
         {loading ? (
           <LoadingSpinner message="Loading products..." />
         ) : error ? (
