@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Scissors, Wallet, User, Star, CheckCircle2, TrendingUp, Grid3X3, Sparkles, Heart } from "lucide-react";
+import { Scissors, Wallet, User, Star, CheckCircle2, TrendingUp, Grid3X3, Sparkles, Heart, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 import { stylistsAPI, feedAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -114,7 +114,7 @@ const HomeScreen = () => {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid sm:grid-cols-3 gap-4 max-w-3xl mx-auto mb-8">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-5xl mx-auto mb-8">
           <Card
             className="cursor-pointer hover:shadow-lg transition-all hover:scale-105"
             onClick={() => navigate("/services")}
@@ -141,6 +141,22 @@ const HomeScreen = () => {
               <div>
                 <h3 className="font-semibold text-lg">Providers</h3>
                 <p className="text-sm text-gray-600">Find services</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card
+            className="cursor-pointer hover:shadow-lg transition-all hover:scale-105"
+            onClick={() => navigate("/shop")}
+            data-testid="home-shop-card"
+          >
+            <CardContent className="flex items-center gap-4 p-6">
+              <div className="p-3 bg-orange-100 rounded-full">
+                <ShoppingBag className="h-6 w-6 text-orange-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg">Shop</h3>
+                <p className="text-sm text-gray-600">Beauty products</p>
               </div>
             </CardContent>
           </Card>

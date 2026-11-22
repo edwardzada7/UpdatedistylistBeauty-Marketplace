@@ -3,6 +3,7 @@ import { lazy, Suspense } from "react";
 import "@/App.css";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { CartProvider } from "@/contexts/CartContext";
 
 // Auth Screens
 import SignUpScreen from "@/screens/SignUpScreen";
@@ -24,6 +25,13 @@ import ProviderServicesScreen from "@/screens/ProviderServicesScreen";
 import ProviderAvailabilityScreen from "@/screens/ProviderAvailabilityScreen";
 import ProviderBookingsScreen from "@/screens/ProviderBookingsScreen";
 import ProviderStaffScreen from "@/screens/ProviderStaffScreen";
+
+// Shop (customer)
+import ShopScreen from "@/screens/ShopScreen";
+import ProductDetailScreen from "@/screens/ProductDetailScreen";
+import CartScreen from "@/screens/CartScreen";
+import ShopOrderCompleteScreen from "@/screens/ShopOrderCompleteScreen";
+import ShopOrdersScreen from "@/screens/ShopOrdersScreen";
 
 // Shared Screens
 import BookingDetailsScreen from "@/screens/BookingDetailsScreen";
@@ -145,6 +153,15 @@ function AppRoutes() {
           </PublicRoute>
         }
       />
+
+      {/* Shop - browsing is public; checkout needs login (handled in the cart screen) */}
+      <Route path="/shop" element={<ShopScreen />} />
+      <Route path="/user/shop" element={<ShopScreen />} />
+      <Route path="/shop/cart" element={<CartScreen />} />
+      <Route path="/shop/order-complete" element={<ProtectedRoute><ShopOrderCompleteScreen /></ProtectedRoute>} />
+      <Route path="/shop/orders" element={<ProtectedRoute><ShopOrdersScreen /></ProtectedRoute>} />
+      <Route path="/user/orders" element={<ProtectedRoute><ShopOrdersScreen /></ProtectedRoute>} />
+      <Route path="/shop/:id" element={<ProductDetailScreen />} />
 
       {/* Root redirect based on role */}
       <Route path="/" element={<RoleBasedRedirect />} />
@@ -364,8 +381,10 @@ function App() {
     <div className="App min-h-screen bg-gray-50">
       <BrowserRouter>
         <AuthProvider>
-          <Toaster position="top-center" />
-          <AppRoutes />
+          <CartProvider>
+            <Toaster position="top-center" />
+            <AppRoutes />
+          </CartProvider>
         </AuthProvider>
       </BrowserRouter>
     </div>
