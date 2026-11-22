@@ -384,6 +384,12 @@ export const feedAPI = {
 
   unlike: (postId, authId) =>
     api.delete(`/feed/posts/${postId}/like?auth_id=${authId}`),
+
+  comments: (postId, limit = 50, offset = 0) =>
+    api.get(`/feed/posts/${postId}/comments?limit=${limit}&offset=${offset}`),
+
+  addComment: (postId, authId, content) =>
+    api.post(`/feed/posts/${postId}/comments?auth_id=${authId}`, { content }),
 };
 
 // ==================== ADMIN API (Phase 4 - Admin Dashboard) ====================

@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Heart,
+  MessageCircle,
+  Bookmark,
   Plus,
   RefreshCcw,
   ArrowLeft,
@@ -25,6 +27,9 @@ import PostComposerModal from "@/components/PostComposerModal";
 import { timeAgoShort } from "@/utils/timeAgo";
 import PersonAvatar, { PersonVerified } from "@/components/PersonAvatar";
 import { avatarOf } from "@/utils/profile";
+import { usePerson } from "@/services/peopleApi";
+import PostComments from "@/components/PostComments";
+import { getSavedPostIds, toggleSavedPost } from "@/utils/savedPosts";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,6 +58,8 @@ export default function FeedScreen() {
   const [composerOpen, setComposerOpen] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [savedOnly, setSavedOnly] = useState(false);
+  const [savedIds, setSavedIds] = useState(getSavedPostIds);
 
   const load = useCallback(async (opts = {}) => {
     const { append = false } = opts;
@@ -88,6 +95,14 @@ export default function FeedScreen() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authId]);
+
+  const handleSaveToggle = (post) => {
+    const nowSaved = toggleSavedPost(post.id);
+    setSavedIds(getSavedPostIds());
+    toast.success(nowSaved ? "Saved to your device" : "Removed from saved");
+  };
+
+  const visiblePosts = savedOnly ? posts.filter((p) => savedIds.includes(String(p.id))) : posts;
 
   const handleCreated = (post) => {
     if (!post) return;
@@ -169,6 +184,15 @@ export default function FeedScreen() {
             </h1>
           </div>
           <Button
+            variant={savedOnly ? "default" : "ghost"}
+            size="icon"
+            onClick={() => setSavedOnly((v) => !v)}
+            aria-label={savedOnly ? "Show all posts" : "Show saved posts"}
+            data-testid="feed-saved-filter"
+          >
+            <Bookmark className={`h-5 w-5 ${savedOnly ? "fill-current" : ""}`} />
+          </Button>
+          <Button
             variant="ghost"
             size="icon"
             onClick={() => load()}
@@ -183,15 +207,19 @@ export default function FeedScreen() {
       <div className="container mx-auto px-4 py-4 max-w-2xl">
         {loading ? (
           <LoadingSpinner message="Loading feed..." />
+        ) : savedOnly && visiblePosts.length === 0 ? (
+          <p className="text-center text-gray-500 py-16">You haven't saved any posts yet. Tap the bookmark on a post to keep it.</p>
         ) : posts.length === 0 ? (
           <EmptyFeed isProvider={isProvider} onCreate={() => setComposerOpen(true)} />
         ) : (
           <div className="space-y-4">
-            {posts.map((post) => (
+            {visiblePosts.map((post) => (
               <PostCard
                 key={post.id}
                 post={post}
                 viewerAuthId={authId}
+                saved={savedIds.includes(String(post.id))}
+                onSaveToggle={() => handleSaveToggle(post)}
                 onLikeToggle={() => handleLikeToggle(post)}
                 onDelete={() => handleDelete(post)}
                 onOpenProvider={() => {
@@ -278,9 +306,16 @@ export function PostCard({
   onDelete,
   onOpenProvider,
   compact = false,
+  saved = false,
+  onSaveToggle,
 }) {
   const isOwner = viewerAuthId && post.provider_auth_id === viewerAuthId;
-  const display = post.provider?.display_name || post.provider?.name || "Provider";
+  const person = usePerson(post.provider?.auth_id || post.provider_auth_id, post.provider?.id);
+  const apiName = post.provider?.display_name;
+  const display =
+    (apiName && apiName !== "Provider" ? apiName : null) || post.provider?.name || person?.name || "Provider";
+  const [showComments, setShowComments] = useState(false);
+  const [commentCount, setCommentCount] = useState(post.comments_count || 0);
   const subtitle = [
     post.provider?.city,
     post.provider?.provider_type === "business" ? "Salon" : null,
@@ -395,6 +430,27 @@ export function PostCard({
             />
             <span className="text-sm font-medium">{post.likes_count || 0}</span>
           </button>
+          <button
+            type="button"
+            onClick={() => setShowComments((v) => !v)}
+            className={`flex items-center gap-1.5 transition ${showComments ? "text-purple-600" : "text-gray-600 hover:text-purple-600"}`}
+            data-testid={`post-comment-btn-${post.id}`}
+            aria-label="Comments"
+          >
+            <MessageCircle className="h-5 w-5" />
+            <span className="text-sm font-medium">{commentCount}</span>
+          </button>
+          {onSaveToggle && (
+            <button
+              type="button"
+              onClick={onSaveToggle}
+              className={`transition ${saved ? "text-purple-600" : "text-gray-600 hover:text-purple-600"}`}
+              data-testid={`post-save-${post.id}`}
+              aria-label={saved ? "Remove from saved" : "Save post"}
+            >
+              <Bookmark className={`h-5 w-5 ${saved ? "fill-purple-600" : ""}`} />
+            </button>
+          )}
           {/* Phase 8 - report this post */}
           {!isOwner && (
             <div className="ml-auto">
@@ -402,6 +458,7 @@ export function PostCard({
             </div>
           )}
         </div>
+        {showComments && <PostComments postId={post.id} authId={viewerAuthId} onCountChange={setCommentCount} />}
         {post.caption && (
           <p className="text-sm text-gray-800 whitespace-pre-wrap">
             <span className="font-semibold mr-1">{display}</span>

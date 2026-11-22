@@ -33,6 +33,7 @@ const BottomNavigation = () => {
     { path: "/provider/dashboard", icon: LayoutDashboard, label: "Dashboard", legacyPaths: ["/dashboard"] },
     { path: "/provider/services", icon: Grid3X3, label: "Services", legacyPaths: ["/my-services"] },
     { path: "/provider/bookings", icon: CalendarClock, label: "Bookings", legacyPaths: [] },
+    { path: "/provider/shop", icon: ShoppingBag, label: "Shop", legacyPaths: [] },
     { path: "/profile", icon: Settings, label: "Settings", legacyPaths: [] },
   ];
 
@@ -64,14 +65,14 @@ const BottomNavigation = () => {
               key={item.path}
               onClick={() => navigate(item.path)}
               data-testid={`nav-${item.label.toLowerCase()}`}
-              className={`flex flex-col items-center justify-center gap-1 py-2 px-3 rounded-lg transition-colors ${
+              className={`flex flex-col items-center justify-center gap-1 py-2 px-1 flex-1 min-w-0 rounded-lg transition-colors ${
                 active
                   ? "text-purple-600"
                   : "text-gray-600 hover:text-purple-500"
               }`}
             >
               <Icon className={`h-5 w-5 ${active ? "stroke-[2.5px]" : ""}`} />
-              <span className={`text-xs ${active ? "font-semibold" : "font-medium"}`}>
+              <span className={`text-[11px] sm:text-xs truncate max-w-full ${active ? "font-semibold" : "font-medium"}`}>
                 {item.label}
               </span>
             </button>

@@ -301,23 +301,23 @@ const ProfileScreen = () => {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 min-w-0">
                   <PersonAvatar
                     authId={userData?.auth_id}
                     src={avatarOf(providerData) || avatarOf(userData)}
                     name={displayName}
                     size={80}
                   />
-                  <div>
-                    <CardTitle className="text-2xl flex items-center gap-2">
+                  <div className="min-w-0">
+                    <CardTitle className="text-xl sm:text-2xl flex items-center gap-2 flex-wrap">
                       {displayName}
                       <PersonVerified authId={userData?.auth_id} verified={isVerifiedProfile(providerData) || isVerifiedProfile(userData) || kycStatus === "verified"} size={22} />
                     </CardTitle>
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
                       <Badge variant="outline" className="capitalize">
                         {role === "stylist" || role === "provider" ? "Provider" : "Customer"}
                       </Badge>
-                      {isProvider && providerData?.is_verified && (
+                      {isProvider && providerData?.is_verified && kycStatus !== "verified" && (
                         <Badge className="bg-green-50 text-green-700 border-green-200">
                           <Shield className="h-3 w-3 mr-1" />
                           Verified

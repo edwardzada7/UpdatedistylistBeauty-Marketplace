@@ -62,6 +62,8 @@ const AdminReportsScreen = lazy(() => import("@/screens/AdminReportsScreen"));
 const AdminFeedModerationScreen = lazy(() => import("@/screens/AdminFeedModerationScreen"));
 const AdminShopModerationScreen = lazy(() => import("@/screens/AdminShopModerationScreen"));
 const AdminOfficialScreen = lazy(() => import("@/screens/AdminOfficialScreen"));
+const ProviderShopScreen = lazy(() => import("@/screens/ProviderShopScreen"));
+const ProviderPurchaseCompleteScreen = lazy(() => import("@/screens/ProviderPurchaseCompleteScreen"));
 const AdminNoShowsScreen = lazy(() => import("@/screens/AdminNoShowsScreen"));
 const AdminBroadcastScreen = lazy(() => import("@/screens/AdminBroadcastScreen"));
 const AdminPlatformEarningsScreen = lazy(() => import("@/screens/AdminPlatformEarningsScreen"));
@@ -214,6 +216,14 @@ function AppRoutes() {
             <StylistDashboard />
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/provider/shop"
+        element={<ProtectedRoute><Suspense fallback={<LoadingSpinner fullScreen />}><ProviderShopScreen /></Suspense></ProtectedRoute>}
+      />
+      <Route
+        path="/provider/shop/purchase-complete"
+        element={<ProtectedRoute><Suspense fallback={<LoadingSpinner fullScreen />}><ProviderPurchaseCompleteScreen /></Suspense></ProtectedRoute>}
       />
       <Route
         path="/provider/services"
