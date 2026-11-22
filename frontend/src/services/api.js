@@ -400,7 +400,22 @@ const withAdminKey = (adminKey) => ({
   headers: { "X-ADMIN-KEY": adminKey },
 });
 
+// Boosts and Pro subscription (purchases happen on the web only)
+export const promoAPI = {
+  plans: () => api.get("/promo/plans"),
+  sponsored: (params = {}) => api.get("/promo/sponsored", { params }),
+  me: () => api.get("/promo/me"),
+  targets: () => api.get("/promo/my-targets"),
+  checkout: (payload) => api.post("/promo/checkout", payload),
+  verify: (reference) => api.get("/promo/verify", { params: { reference } }),
+};
+
 export const adminAPI = {
+  promo: {
+    overview: (adminKey) => api.get("/admin/promo/overview", withAdminKey(adminKey)),
+    updatePlan: (adminKey, id, payload) => api.put(`/admin/promo/plans/${id}`, payload, withAdminKey(adminKey)),
+    cancel: (adminKey, id) => api.post(`/admin/promo/promotions/${id}/cancel`, {}, withAdminKey(adminKey)),
+  },
   stats: (adminKey) => api.get("/admin/stats", withAdminKey(adminKey)),
   recentBookings: (adminKey, limit = 20, statusFilter = null) => {
     const qs = new URLSearchParams({ limit: String(limit) });

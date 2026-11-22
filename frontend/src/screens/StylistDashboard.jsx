@@ -35,7 +35,8 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   Loader2,
-  Store
+  Store,
+  Megaphone
 } from "lucide-react";
 
 const StylistDashboard = () => {
@@ -617,6 +618,28 @@ const StylistDashboard = () => {
                 </div>
               </div>
               <ChevronRight className="h-5 w-5 text-gray-400" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Promote and Pro plan */}
+        <Card
+          className="cursor-pointer hover:shadow-md transition-all border-amber-200 bg-amber-50/50"
+          onClick={() => navigate("/provider/promote")}
+          data-testid="provider-promote-card"
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-12 h-12 shrink-0 bg-amber-100 rounded-full flex items-center justify-center">
+                  <Megaphone className="h-6 w-6 text-amber-600" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-gray-900">Promote &amp; Plan</h3>
+                  <p className="text-sm text-gray-500">Boost your profile, services or products. Go Pro for discounts</p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-gray-400 shrink-0" />
             </div>
           </CardContent>
         </Card>

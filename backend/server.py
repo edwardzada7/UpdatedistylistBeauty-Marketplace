@@ -10291,6 +10291,13 @@ try:
     logging.info("[startup] certification, consultation, conversation, and invoice routes registered")
 
     try:
+        from monetization_routes import register_monetization_routes
+        register_monetization_routes(api_router, supabase)
+        logging.info("[startup] promotion routes registered")
+    except Exception as _me:
+        logging.warning("[startup] promotion routes NOT registered: %s", _me)
+
+    try:
         from broadcast_routes import register_broadcast_routes
         register_broadcast_routes(api_router, supabase)
         logging.info("[startup] broadcast routes registered")

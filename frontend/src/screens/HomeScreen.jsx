@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import SponsoredStrip from "@/components/SponsoredStrip";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -178,6 +179,8 @@ const HomeScreen = () => {
             </CardContent>
           </Card>
         </div>
+
+        <div className="max-w-4xl mx-auto -mx-4"><SponsoredStrip types="profile,service" title="Sponsored" /></div>
 
         {/* Service Categories Preview */}
         <div className="max-w-4xl mx-auto mb-8">

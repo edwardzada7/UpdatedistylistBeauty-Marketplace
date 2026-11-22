@@ -64,6 +64,9 @@ const AdminShopModerationScreen = lazy(() => import("@/screens/AdminShopModerati
 const AdminOfficialScreen = lazy(() => import("@/screens/AdminOfficialScreen"));
 const ProviderShopScreen = lazy(() => import("@/screens/ProviderShopScreen"));
 const ProviderPurchaseCompleteScreen = lazy(() => import("@/screens/ProviderPurchaseCompleteScreen"));
+const ProviderPromoteScreen = lazy(() => import("@/screens/ProviderPromoteScreen"));
+const PromoCompleteScreen = lazy(() => import("@/screens/PromoCompleteScreen"));
+const AdminPromotionsScreen = lazy(() => import("@/screens/AdminPromotionsScreen"));
 const AdminNoShowsScreen = lazy(() => import("@/screens/AdminNoShowsScreen"));
 const AdminBroadcastScreen = lazy(() => import("@/screens/AdminBroadcastScreen"));
 const AdminPlatformEarningsScreen = lazy(() => import("@/screens/AdminPlatformEarningsScreen"));
@@ -216,6 +219,14 @@ function AppRoutes() {
             <StylistDashboard />
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/provider/promote"
+        element={<ProtectedRoute><Suspense fallback={<LoadingSpinner fullScreen />}><ProviderPromoteScreen /></Suspense></ProtectedRoute>}
+      />
+      <Route
+        path="/provider/promote/complete"
+        element={<ProtectedRoute><Suspense fallback={<LoadingSpinner fullScreen />}><PromoCompleteScreen /></Suspense></ProtectedRoute>}
       />
       <Route
         path="/provider/shop"
@@ -375,6 +386,7 @@ function AppRoutes() {
       <Route path="/admin/feed-moderation" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminFeedModerationScreen /></Suspense>} />
       <Route path="/admin/shop-moderation" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminShopModerationScreen /></Suspense>} />
       <Route path="/admin/official" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminOfficialScreen /></Suspense>} />
+      <Route path="/admin/promotions" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminPromotionsScreen /></Suspense>} />
       <Route path="/admin/no-shows" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminNoShowsScreen /></Suspense>} />
       <Route path="/admin/broadcast" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminBroadcastScreen /></Suspense>} />
       {/* Phase 7 - Admin financial settings */}
