@@ -9671,30 +9671,24 @@ async def admin_resolve_no_show_dispute(
             detail=f"Cannot resolve booking with status '{booking.get('status')}'"
         )
 
-    # Determine new status and escrow action
+    # Determine new status and escrow action.
+    # favor_customer = the provider was the no-show -> customer is refunded.
+    # favor_provider = the customer was the no-show -> provider is paid.
     resolution = body.resolution
-    new_status = None
-    escrow_action = None
-    
     if resolution == "favor_customer":
-        new_status = STATUS_USER_NO_SHOW  # Provider no-showed
-        escrow_action = "refund"
+        new_status, escrow_action = STATUS_PROVIDER_NO_SHOW, "refund"
     elif resolution == "favor_provider":
-        new_status = STATUS_PROVIDER_NO_SHOW  # Customer no-showed
-        escrow_action = "release"
-    elif resolution == "split":
-        # Split: refund half to customer, release half to provider
-        # For now, we'll release to provider (can be enhanced later)
-        new_status = "resolved_split"
-        escrow_action = "split"
+        new_status, escrow_action = STATUS_USER_NO_SHOW, "release"
     elif resolution == "dismiss":
-        # Dismiss dispute, restore to confirmed
-        new_status = "confirmed"
-        escrow_action = None
+        new_status, escrow_action = "confirmed", None  # dispute dropped, booking goes ahead
+    elif resolution == "split":
+        raise HTTPException(status_code=400, detail="Split resolution is not supported yet")
     else:
         raise HTTPException(status_code=400, detail="Invalid resolution type")
 
-    # Update booking
+    customer_auth_id = booking.get("customer_auth_id")
+    provider_auth_id = booking.get("provider_auth_id")
+
     try:
         update_data = {
             "status": new_status,
@@ -9703,45 +9697,33 @@ async def admin_resolve_no_show_dispute(
         }
         if body.admin_notes:
             update_data["admin_notes"] = body.admin_notes[:1000]
-
         supabase.table("bookings").update(update_data).eq("id", body.booking_id).execute()
     except Exception as e:
         logging.error(f"[admin] dispute resolution update failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to update booking")
 
-    # Handle escrow
-    if escrow_action == "refund":
-        # Refund to customer
-        try:
-            await _refund_escrow_to_customer(booking)
-        except Exception as e:
-            logging.error(f"[admin] refund failed: {e}")
-    elif escrow_action == "release":
-        # Release to provider
-        try:
-            await _release_escrow_to_provider(booking)
-        except Exception as e:
-            logging.error(f"[admin] release failed: {e}")
-    elif escrow_action == "split":
-        # TODO: Implement split logic (50/50)
-        logging.info(f"[admin] split resolution for booking {body.booking_id} - not implemented yet")
-
-    # Create notifications
+    # Move the escrowed money (both helpers are idempotent).
     try:
-        create_notification(
-            user_auth_id=booking.get("customer_auth_id"),
-            notification_type="dispute_resolved",
-            title="Dispute Resolved",
-            message=f"Admin has resolved the dispute for booking #{body.booking_id}. Resolution: {resolution}.",
-            metadata={"booking_id": body.booking_id, "resolution": resolution}
-        )
-        create_notification(
-            user_auth_id=booking.get("provider_id"),
-            notification_type="dispute_resolved",
-            title="Dispute Resolved",
-            message=f"Admin has resolved the dispute for booking #{body.booking_id}. Resolution: {resolution}.",
-            metadata={"booking_id": body.booking_id, "resolution": resolution}
-        )
+        if escrow_action == "refund" and customer_auth_id:
+            await _refund_escrow_to_customer(body.booking_id, customer_auth_id)
+        elif escrow_action == "release" and provider_auth_id and customer_auth_id:
+            await _release_escrow_to_provider(body.booking_id, provider_auth_id, customer_auth_id)
+    except Exception as e:
+        logging.error(f"[admin] escrow action failed for booking {body.booking_id}: {e}")
+
+    # Tell both sides (in-app + push).
+    messages = {
+        "favor_customer": ("Dispute resolved in your favour. Your payment has been refunded.", "Dispute resolved. The provider was found to be a no-show and the customer was refunded."),
+        "favor_provider": ("Dispute resolved. The no-show was confirmed and the booking is closed.", "Dispute resolved in your favour. Your payment has been released."),
+        "dismiss": ("The dispute was dismissed and your booking stays confirmed.", "The dispute was dismissed and the booking stays confirmed."),
+    }[resolution]
+    try:
+        from push_and_public import notify_user_sync
+        meta = {"booking_id": body.booking_id, "resolution": resolution}
+        if customer_auth_id:
+            notify_user_sync(customer_auth_id, "dispute_resolved", "Dispute resolved", messages[0], meta)
+        if provider_auth_id:
+            notify_user_sync(provider_auth_id, "dispute_resolved", "Dispute resolved", messages[1], meta)
     except Exception as e:
         logging.warning(f"[admin] notification failed: {e}")
 
@@ -10271,6 +10253,13 @@ try:
 
     register_consultation_routes(api_router, supabase)
     logging.info("[startup] certification, consultation, conversation, and invoice routes registered")
+
+    try:
+        from broadcast_routes import register_broadcast_routes
+        register_broadcast_routes(api_router, supabase)
+        logging.info("[startup] broadcast routes registered")
+    except Exception as _be:
+        logging.warning("[startup] broadcast routes NOT registered: %s", _be)
 
     try:
         from official_shop_routes import register_official_routes

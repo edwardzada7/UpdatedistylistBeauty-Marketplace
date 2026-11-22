@@ -427,6 +427,12 @@ export const adminAPI = {
     update: (adminKey, postId, payload) =>
       api.put(`/admin/feed-posts/${postId}`, payload, withAdminKey(adminKey)),
   },
+  // Announcements (in-app notification + push) to all users, customers or providers
+  broadcast: {
+    preview: (adminKey, audience) => api.get(`/admin/broadcast/preview?audience=${audience}`, withAdminKey(adminKey)),
+    send: (adminKey, payload) => api.post("/admin/broadcast", payload, withAdminKey(adminKey)),
+    history: (adminKey) => api.get("/admin/broadcasts", withAdminKey(adminKey)),
+  },
   // iStylist Official: admin-created feed posts and platform-owned shop products
   official: {
     upload: (adminKey, payload) => api.post("/admin/official/upload", payload, withAdminKey(adminKey)),
