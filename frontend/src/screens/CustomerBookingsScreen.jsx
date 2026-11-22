@@ -6,6 +6,7 @@ import { CURRENCY } from "@/utils/constants";
 import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
+import PersonAvatar, { PersonVerified } from "@/components/PersonAvatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -77,10 +78,11 @@ const BookingCard = ({ booking, onPayNow, isPaying, navigate }) => {
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <User className="h-4 w-4 text-purple-600" />
+              <PersonAvatar id={booking.provider_id} name={booking.provider_display_name} size={32} />
               <span className="font-semibold text-gray-900">
                 {booking.provider_display_name || "Provider"}
               </span>
+              <PersonVerified id={booking.provider_id} size={16} />
             </div>
             
             <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">

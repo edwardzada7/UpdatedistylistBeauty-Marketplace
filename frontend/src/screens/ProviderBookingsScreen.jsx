@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import PersonAvatar, { PersonVerified } from "@/components/PersonAvatar";
 import {
   ArrowLeft,
   Calendar,
@@ -121,10 +122,11 @@ const ProviderBookingsScreen = () => {
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
-                <User className="h-4 w-4 text-purple-600" />
+                <PersonAvatar id={booking.customer_id} authId={booking.customer_auth_id} name={booking.customer_display_name} size={32} />
                 <span className="font-semibold text-gray-900">
                   {booking.customer_display_name || "Customer"}
                 </span>
+                <PersonVerified id={booking.customer_id} authId={booking.customer_auth_id} size={16} />
               </div>
               
               <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">

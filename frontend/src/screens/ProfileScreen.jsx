@@ -18,6 +18,8 @@ import BottomNavigation from "@/components/BottomNavigation";
 import KYCStatusBadge from "@/components/KYCStatusBadge";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
+import PersonAvatar, { PersonVerified } from "@/components/PersonAvatar";
+import { avatarOf, isVerifiedProfile } from "@/utils/profile";
 import NotificationBell from "@/components/NotificationBell";
 
 const DELETE_CONFIRMATION_PHRASE = "DELETE MY ACCOUNT";
@@ -300,11 +302,17 @@ const ProfileScreen = () => {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white text-3xl font-bold">
-                    {displayName.charAt(0).toUpperCase()}
-                  </div>
+                  <PersonAvatar
+                    authId={userData?.auth_id}
+                    src={avatarOf(providerData) || avatarOf(userData)}
+                    name={displayName}
+                    size={80}
+                  />
                   <div>
-                    <CardTitle className="text-2xl">{displayName}</CardTitle>
+                    <CardTitle className="text-2xl flex items-center gap-2">
+                      {displayName}
+                      <PersonVerified authId={userData?.auth_id} verified={isVerifiedProfile(providerData) || isVerifiedProfile(userData) || kycStatus === "verified"} size={22} />
+                    </CardTitle>
                     <div className="flex items-center gap-2 mt-2">
                       <Badge variant="outline" className="capitalize">
                         {role === "stylist" || role === "provider" ? "Provider" : "Customer"}
