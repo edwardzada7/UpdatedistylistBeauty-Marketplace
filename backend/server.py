@@ -4952,8 +4952,8 @@ def get_providers_with_services(
                 area = area_by_id.get(u.get("area_id"))
                 if area_id and u.get("area_id") != area_id:
                     continue
-                p_lat = u.get("latitude") if u.get("latitude") is not None else (area or {}).get("latitude")
-                p_lng = u.get("longitude") if u.get("longitude") is not None else (area or {}).get("longitude")
+                p_lat = u.get("latitude") if u.get("latitude") is not None else (stylist.get("latitude") if stylist.get("latitude") is not None else (area or {}).get("latitude"))
+                p_lng = u.get("longitude") if u.get("longitude") is not None else (stylist.get("longitude") if stylist.get("longitude") is not None else (area or {}).get("longitude"))
                 distance_km = None
                 if lat is not None and lng is not None and p_lat is not None and p_lng is not None:
                     from locations_routes import haversine_km
