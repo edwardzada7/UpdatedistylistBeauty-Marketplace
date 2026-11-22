@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Home, Grid3X3, Users, Wallet, User as UserIcon, LayoutDashboard, Settings, CalendarClock } from "lucide-react";
+import { Home, Grid3X3, Users, Wallet, User as UserIcon, LayoutDashboard, Settings, CalendarClock, ShoppingBag } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 // Navigation height constant (h-16 = 64px, plus safe area)
@@ -23,8 +23,8 @@ const BottomNavigation = () => {
   // Different nav items for providers vs users - using new /user/* and /provider/* paths
   const userNavItems = [
     { path: "/user/home", icon: Home, label: "Home", legacyPaths: ["/home"] },
-    { path: "/user/services", icon: Grid3X3, label: "Services", legacyPaths: ["/services"] },
     { path: "/user/providers", icon: Users, label: "Providers", legacyPaths: ["/providers", "/stylists"] },
+    { path: "/shop", icon: ShoppingBag, label: "Shop", legacyPaths: ["/user/shop"] },
     { path: "/bookings", icon: CalendarClock, label: "Bookings", legacyPaths: [] },
     { path: "/profile", icon: UserIcon, label: "Profile", legacyPaths: [] },
   ];
