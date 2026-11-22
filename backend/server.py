@@ -7702,6 +7702,17 @@ async def _get_user_by_auth_id(auth_id: str) -> Optional[dict]:
 def _enrich_post(post: dict, viewer_auth_id: Optional[str] = None) -> dict:
     """Attach provider info + viewer-specific liked flag to a post row."""
     enriched = dict(post)
+    if post.get("is_official"):
+        from official_shop_routes import official_provider_payload
+        enriched["provider"] = official_provider_payload()
+        enriched["liked_by_me"] = False
+        if viewer_auth_id and check_table_exists("provider_post_likes"):
+            try:
+                like_res = supabase.table("provider_post_likes").select("id").eq("post_id", post["id"]).eq("user_auth_id", viewer_auth_id).limit(1).execute()
+                enriched["liked_by_me"] = bool(like_res.data)
+            except Exception:
+                pass
+        return enriched
     provider_id = post.get("provider_id")
     provider_auth_id = post.get("provider_auth_id")
 
@@ -7796,6 +7807,12 @@ def _enrich_posts(posts: list, viewer_auth_id: Optional[str] = None) -> list:
     out = []
     for post in posts:
         enriched = dict(post)
+        if post.get("is_official"):
+            from official_shop_routes import official_provider_payload
+            enriched["provider"] = official_provider_payload()
+            enriched["liked_by_me"] = post.get("id") in liked
+            out.append(enriched)
+            continue
         provider_auth_id = post.get("provider_auth_id")
         user = users_by_auth.get(provider_auth_id) or {}
         provider_id = post.get("provider_id") or user.get("id")
@@ -10254,6 +10271,13 @@ try:
 
     register_consultation_routes(api_router, supabase)
     logging.info("[startup] certification, consultation, conversation, and invoice routes registered")
+
+    try:
+        from official_shop_routes import register_official_routes
+        register_official_routes(api_router, supabase)
+        logging.info("[startup] official shop / provider inventory routes registered")
+    except Exception as _oe:
+        logging.warning("[startup] official shop routes NOT registered: %s", _oe)
 
     from push_and_public import register_push_and_public
     register_push_and_public(app, api_router, supabase)

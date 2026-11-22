@@ -427,6 +427,15 @@ export const adminAPI = {
     update: (adminKey, postId, payload) =>
       api.put(`/admin/feed-posts/${postId}`, payload, withAdminKey(adminKey)),
   },
+  // iStylist Official: admin-created feed posts and platform-owned shop products
+  official: {
+    upload: (adminKey, payload) => api.post("/admin/official/upload", payload, withAdminKey(adminKey)),
+    createPost: (adminKey, payload) => api.post("/admin/official/feed-posts", payload, withAdminKey(adminKey)),
+    products: (adminKey) => api.get("/admin/official/products", withAdminKey(adminKey)),
+    createProduct: (adminKey, payload) => api.post("/admin/official/products", payload, withAdminKey(adminKey)),
+    updateListing: (adminKey, listingId, payload) =>
+      api.put(`/admin/official/listings/${listingId}`, payload, withAdminKey(adminKey)),
+  },
   shopServices: {
     list: (adminKey, statusFilter = "all", limit = 100, offset = 0) => {
       const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
