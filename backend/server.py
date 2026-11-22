@@ -92,6 +92,13 @@ class UserUpdate(BaseModel):
     country: Optional[str] = None
     city: Optional[str] = None
     gender: Optional[str] = None
+    # Structured location (phase34)
+    country_code: Optional[str] = None
+    region: Optional[str] = None
+    area_id: Optional[int] = None
+    location_address: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 class UserResponse(BaseModel):
     id: int
@@ -115,6 +122,10 @@ class UserResponse(BaseModel):
     longitude: Optional[float] = None
     profile_image_url: Optional[str] = None
     is_verified: Optional[bool] = None
+    country_code: Optional[str] = None
+    region: Optional[str] = None
+    area_id: Optional[int] = None
+    currency: Optional[str] = None
 
 # Stylist Models
 class StylistCreate(BaseModel):
@@ -137,6 +148,9 @@ class StylistUpdate(BaseModel):
     # Phase 1.9 - Provider Type
     provider_type: Optional[str] = None
     business_name: Optional[str] = None
+    # Home-service range (phase34)
+    travel_radius_km: Optional[float] = None
+    travel_fee_per_km: Optional[float] = None
 
 class StylistResponse(BaseModel):
     user_id: int  # Primary key
@@ -155,6 +169,8 @@ class StylistResponse(BaseModel):
     # Phase 6 - exposed for KYC-based "Verified Individual / Business" badge
     auth_id: Optional[str] = None
     account_type: Optional[str] = None
+    travel_radius_km: Optional[float] = None
+    travel_fee_per_km: Optional[float] = None
     kyc_status: Optional[str] = None
 
 # Wallet Models
@@ -4864,14 +4880,29 @@ def get_providers_with_services(
     service_id: Optional[str] = None,
     city: Optional[str] = None,
     min_price: Optional[float] = None,
-    max_price: Optional[float] = None
+    max_price: Optional[float] = None,
+    lat: Optional[float] = None,
+    lng: Optional[float] = None,
+    area_id: Optional[int] = None,
+    sort: Optional[str] = None
 ):
-    """Get providers who have at least one active service"""
+    """Get providers who have at least one active service. With lat/lng each provider gets distance_km;
+    sort=nearest orders by it; area_id limits to one area."""
     try:
-        # Get all stylists with their user data
-        stylists_response = supabase.table("stylists").select(
-            "*, users!stylists_user_id_fkey(name, email)"
-        ).execute()
+        # Get all stylists with their user data (location columns need the phase34 migration)
+        try:
+            stylists_response = supabase.table("stylists").select(
+                "*, users!stylists_user_id_fkey(name, email, latitude, longitude, area_id, city)"
+            ).execute()
+        except Exception:
+            stylists_response = supabase.table("stylists").select(
+                "*, users!stylists_user_id_fkey(name, email)"
+            ).execute()
+        area_by_id = {}
+        try:
+            area_by_id = {a["id"]: a for a in (supabase.table("service_areas").select("*").execute().data or [])}
+        except Exception:
+            pass
         
         providers_with_services = []
         
@@ -4916,6 +4947,22 @@ def get_providers_with_services(
                 if city and stylist.get("location") and city.lower() not in stylist.get("location", "").lower():
                     continue
                 
+                # Location: distance from the viewer, home-service reach
+                u = stylist.get("users") or {}
+                area = area_by_id.get(u.get("area_id"))
+                if area_id and u.get("area_id") != area_id:
+                    continue
+                p_lat = u.get("latitude") if u.get("latitude") is not None else (area or {}).get("latitude")
+                p_lng = u.get("longitude") if u.get("longitude") is not None else (area or {}).get("longitude")
+                distance_km = None
+                if lat is not None and lng is not None and p_lat is not None and p_lng is not None:
+                    from locations_routes import haversine_km
+                    distance_km = round(haversine_km(lat, lng, p_lat, p_lng), 1)
+                radius = stylist.get("travel_radius_km")
+                home_in_range = None
+                if distance_km is not None and radius:
+                    home_in_range = distance_km <= float(radius)
+
                 # Calculate min price
                 min_service_price = min(s["price"] for s in active_services) if active_services else 0
                 
@@ -4929,6 +4976,12 @@ def get_providers_with_services(
                     "display_name": stylist.get("business_name") if stylist.get("provider_type") == "business" and stylist.get("business_name") else (stylist["users"]["name"] if stylist.get("users") else "Provider"),
                     "bio": stylist.get("bio"),
                     "location": stylist.get("location"),
+                    "area_id": u.get("area_id"),
+                    "area_name": (area or {}).get("name"),
+                    "distance_km": distance_km,
+                    "travel_radius_km": radius,
+                    "travel_fee_per_km": stylist.get("travel_fee_per_km"),
+                    "home_service_in_range": home_in_range,
                     # Phase 1.9 - Provider type info
                     "provider_type": stylist.get("provider_type", "individual"),
                     "business_name": stylist.get("business_name"),
@@ -4947,9 +5000,12 @@ def get_providers_with_services(
                 })
         
         # Sort by rating, then by premium status
-        providers_with_services.sort(
-            key=lambda x: (-x["is_premium"], -x["is_verified"], -x["rating"], x["starting_price"])
-        )
+        if sort == "nearest":
+            providers_with_services.sort(key=lambda x: (x["distance_km"] is None, x["distance_km"] or 0, -x["rating"]))
+        else:
+            providers_with_services.sort(
+                key=lambda x: (-x["is_premium"], -x["is_verified"], -x["rating"], x["starting_price"])
+            )
         
         return providers_with_services
     except Exception as e:
@@ -10289,6 +10345,13 @@ try:
 
     register_consultation_routes(api_router, supabase)
     logging.info("[startup] certification, consultation, conversation, and invoice routes registered")
+
+    try:
+        from locations_routes import register_location_routes
+        register_location_routes(api_router, supabase)
+        logging.info("[startup] location routes registered")
+    except Exception as _le:
+        logging.warning("[startup] location routes NOT registered: %s", _le)
 
     try:
         from monetization_routes import register_monetization_routes

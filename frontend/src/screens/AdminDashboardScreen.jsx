@@ -404,6 +404,13 @@ export default function AdminDashboardScreen() {
             Feed Moderation →
           </button>
           <button
+            onClick={() => navigate("/admin/locations")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-700 text-sm font-medium"
+            data-testid="admin-locations-link"
+          >
+            Match Locations →
+          </button>
+          <button
             onClick={() => navigate("/admin/promotions")}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 text-sm font-medium"
             data-testid="admin-promotions-link"
