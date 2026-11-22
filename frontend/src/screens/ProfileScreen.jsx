@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import LocationPicker from "@/components/LocationPicker";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,6 +49,12 @@ const ProfileScreen = () => {
     country: "",
     city: "",
     gender: "",
+    country_code: "NG",
+    region: "",
+    area_id: null,
+    latitude: null,
+    longitude: null,
+    location_address: "",
   });
   
   // Provider form data
@@ -58,6 +65,12 @@ const ProfileScreen = () => {
     // Phase 1.9 - Provider Type
     provider_type: "individual",
     business_name: "",
+    area_id: null,
+    latitude: null,
+    longitude: null,
+    location_address: "",
+    travel_radius_km: "",
+    travel_fee_per_km: "",
   });
 
   // Initialize form data from userData or user metadata
@@ -70,6 +83,12 @@ const ProfileScreen = () => {
         country: userData.country || "",
         city: userData.city || "",
         gender: userData.gender || "",
+        country_code: userData.country_code || "NG",
+        region: userData.region || "",
+        area_id: userData.area_id || null,
+        latitude: userData.latitude ?? null,
+        longitude: userData.longitude ?? null,
+        location_address: userData.location_address || "",
       });
     } else if (user) {
       setFormData({
@@ -92,6 +111,12 @@ const ProfileScreen = () => {
         // Phase 1.9 - Provider Type
         provider_type: providerData.provider_type || "individual",
         business_name: providerData.business_name || "",
+        area_id: userData?.area_id || null,
+        latitude: userData?.latitude ?? null,
+        longitude: userData?.longitude ?? null,
+        location_address: userData?.location_address || "",
+        travel_radius_km: providerData.travel_radius_km ?? "",
+        travel_fee_per_km: providerData.travel_fee_per_km ?? "",
       });
     }
   }, [providerData]);
@@ -147,7 +172,18 @@ const ProfileScreen = () => {
 
     setLoading(true);
     try {
-      await stylistsAPI.update(userData.id, providerFormData);
+      const { area_id, latitude, longitude, location_address, travel_radius_km, travel_fee_per_km, area_name, region, city, country_code, ...stylistFields } = providerFormData;
+      const readable = [location_address, area_name, city].filter(Boolean).join(", ");
+      await stylistsAPI.update(userData.id, {
+        ...stylistFields,
+        ...(readable ? { location: readable } : {}),
+        travel_radius_km: travel_radius_km === "" ? null : Number(travel_radius_km),
+        travel_fee_per_km: travel_fee_per_km === "" ? null : Number(travel_fee_per_km),
+      });
+      // Coordinates and area live on the user record (one place for everyone)
+      if (area_id) {
+        await usersAPI.update(userData.id, { area_id, latitude, longitude, location_address, country_code: country_code || "NG", region: region || "Lagos", city: city || "Lagos", country: "Nigeria" });
+      }
       toast.success("Provider info updated successfully!", {
         description: "Your business profile has been updated."
       });
@@ -170,6 +206,12 @@ const ProfileScreen = () => {
       country: userData?.country || "",
       city: userData?.city || "",
       gender: userData?.gender || "",
+      country_code: userData?.country_code || "NG",
+      region: userData?.region || "",
+      area_id: userData?.area_id || null,
+      latitude: userData?.latitude ?? null,
+      longitude: userData?.longitude ?? null,
+      location_address: userData?.location_address || "",
     });
     setEditing(false);
   };
@@ -181,6 +223,12 @@ const ProfileScreen = () => {
       location: providerData?.location || "",
       provider_type: providerData?.provider_type || "individual",
       business_name: providerData?.business_name || "",
+      area_id: userData?.area_id || null,
+      latitude: userData?.latitude ?? null,
+      longitude: userData?.longitude ?? null,
+      location_address: userData?.location_address || "",
+      travel_radius_km: providerData?.travel_radius_km ?? "",
+      travel_fee_per_km: providerData?.travel_fee_per_km ?? "",
     });
     setEditingProvider(false);
   };
@@ -409,35 +457,11 @@ const ProfileScreen = () => {
                     </div>
                   </div>
 
-                  {/* Phase 1.9 - Location Fields */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="country">Country</Label>
-                      <div className="relative mt-2">
-                        <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <Input
-                          id="country"
-                          value={formData.country}
-                          onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                          className="pl-10"
-                          placeholder="Your country"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <Label htmlFor="city">City</Label>
-                      <div className="relative mt-2">
-                        <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <Input
-                          id="city"
-                          value={formData.city}
-                          onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                          className="pl-10"
-                          placeholder="Your city"
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  {/* Location: area list + GPS, no typing needed */}
+                  <LocationPicker
+                    value={formData}
+                    onChange={(v) => setFormData({ ...formData, ...v, country: v.country_code === "NG" ? "Nigeria" : formData.country })}
+                  />
 
                   {/* Phase 1.9 - Gender (Optional) */}
                   <div>
@@ -574,16 +598,24 @@ const ProfileScreen = () => {
                     )}
 
                     <div>
-                      <Label htmlFor="location">Service Location</Label>
-                      <div className="relative mt-2">
-                        <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <Input
-                          id="location"
-                          value={providerFormData.location}
-                          onChange={(e) => setProviderFormData({ ...providerFormData, location: e.target.value })}
-                          className="pl-10"
-                          placeholder="City, Country"
+                      <Label>Where clients find you</Label>
+                      <div className="mt-2">
+                        <LocationPicker
+                          value={providerFormData}
+                          addressLabel="Your studio or shop address (shown only after a booking is confirmed)"
+                          onChange={(v) => setProviderFormData({ ...providerFormData, ...v })}
                         />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="travel-radius">Home service range (km)</Label>
+                        <Input id="travel-radius" inputMode="decimal" className="mt-2" value={providerFormData.travel_radius_km} onChange={(e) => setProviderFormData({ ...providerFormData, travel_radius_km: e.target.value })} placeholder="e.g. 15 (blank = no home visits)" />
+                      </div>
+                      <div>
+                        <Label htmlFor="travel-fee">Travel fee per km (₦)</Label>
+                        <Input id="travel-fee" inputMode="decimal" className="mt-2" value={providerFormData.travel_fee_per_km} onChange={(e) => setProviderFormData({ ...providerFormData, travel_fee_per_km: e.target.value })} placeholder="optional" />
                       </div>
                     </div>
 

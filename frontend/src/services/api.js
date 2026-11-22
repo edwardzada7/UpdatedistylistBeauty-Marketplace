@@ -132,6 +132,10 @@ export const providersAPI = {
     if (filters.city) queryParams.append("city", filters.city);
     if (filters.minPrice) queryParams.append("min_price", filters.minPrice);
     if (filters.maxPrice) queryParams.append("max_price", filters.maxPrice);
+    if (filters.lat != null) queryParams.append("lat", filters.lat);
+    if (filters.lng != null) queryParams.append("lng", filters.lng);
+    if (filters.areaId) queryParams.append("area_id", filters.areaId);
+    if (filters.sort) queryParams.append("sort", filters.sort);
     
     return api.get(`/providers/with-services${queryParams.toString() ? `?${queryParams}` : ""}`);
   },

@@ -5,6 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/contexts/AuthContext";
+import { locationApi, getBrowserPosition } from "@/services/locationApi";
 import { ArrowLeft, Search, Star, CheckCircle2, MapPin, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { providersAPI, stylistsAPI } from "@/services/api";
@@ -28,6 +30,28 @@ const ProvidersListScreen = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterVerified, setFilterVerified] = useState(FILTER_OPTIONS.ALL);
   const [sortBy, setSortBy] = useState(SORT_OPTIONS.RECOMMENDED);
+  const { userData } = useAuth();
+  const [coords, setCoords] = useState(null); // viewer position for "Near you"
+  const [areas, setAreas] = useState([]);
+  const [areaFilter, setAreaFilter] = useState("all");
+
+  // Saved location first (no permission prompt); GPS only when the viewer asks.
+  useEffect(() => {
+    if (userData?.latitude != null && userData?.longitude != null) setCoords({ lat: userData.latitude, lng: userData.longitude });
+  }, [userData?.latitude, userData?.longitude]);
+  useEffect(() => {
+    locationApi.areas().then((r) => setAreas(r.data?.areas || [])).catch(() => undefined);
+  }, []);
+
+  const nearMe = async () => {
+    try {
+      const pos = await getBrowserPosition();
+      setCoords({ lat: pos.latitude, lng: pos.longitude });
+      setSortBy("nearest");
+    } catch (e) {
+      toast.error(e.message);
+    }
+  };
 
   const fetchProviders = useCallback(async () => {
     setLoading(true);
@@ -36,6 +60,8 @@ const ProvidersListScreen = () => {
       const filters = {};
       if (serviceFilter) filters.serviceId = serviceFilter;
       if (categoryFilter) filters.categoryId = categoryFilter;
+      if (coords) { filters.lat = coords.lat; filters.lng = coords.lng; }
+      if (areaFilter !== "all") filters.areaId = areaFilter;
       
       try {
         const response = await providersAPI.getWithServices(filters);
@@ -72,7 +98,7 @@ const ProvidersListScreen = () => {
     // applyFilters() whenever sortBy changes. Including sortBy here would
     // cause an unnecessary server round-trip on every sort change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serviceFilter, categoryFilter]);
+  }, [serviceFilter, categoryFilter, coords, areaFilter]);
 
   const applyFilters = useCallback(() => {
     let filtered = [...providers];
@@ -99,6 +125,8 @@ const ProvidersListScreen = () => {
       filtered.sort((a, b) => (a.starting_price || 0) - (b.starting_price || 0));
     } else if (sortBy === SORT_OPTIONS.PRICE_HIGH) {
       filtered.sort((a, b) => (b.starting_price || 0) - (a.starting_price || 0));
+    } else if (sortBy === "nearest") {
+      filtered.sort((a, b) => (a.distance_km ?? Infinity) - (b.distance_km ?? Infinity));
     } else if (sortBy === SORT_OPTIONS.RECOMMENDED) {
       filtered.sort((a, b) => {
         if (b.is_premium !== a.is_premium) return b.is_premium - a.is_premium;
@@ -190,10 +218,17 @@ const ProvidersListScreen = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="premium">Recommended</SelectItem>
+                <SelectItem value="nearest" disabled={!coords}>Nearest first</SelectItem>
                 <SelectItem value="price-low">Price: Low to High</SelectItem>
                 <SelectItem value="price-high">Price: High to Low</SelectItem>
               </SelectContent>
             </Select>
+
+            <select value={areaFilter} onChange={(e) => setAreaFilter(e.target.value)} className="h-10 rounded-md border border-input bg-background px-2 text-sm max-w-[160px]" data-testid="area-filter" aria-label="Filter by area">
+              <option value="all">All areas</option>
+              {areas.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+            <Button type="button" variant="outline" onClick={nearMe} data-testid="near-me"><MapPin className="h-4 w-4 mr-1" />Near me</Button>
 
             {filterServiceName && (
               <Button
@@ -299,7 +334,8 @@ const ProvidersListScreen = () => {
                       {locationOf(provider) && (
                         <p className="text-sm text-gray-600 mt-2 flex items-center gap-1">
                           <MapPin className="h-3 w-3" />
-                          {locationOf(provider).split(',')[0]}
+                          {provider.area_name || locationOf(provider).split(',')[0]}
+                          {provider.distance_km != null && <span className="text-purple-700 font-medium"> · {provider.distance_km} km</span>}
                         </p>
                       )}
 
