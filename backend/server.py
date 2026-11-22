@@ -3804,14 +3804,17 @@ def get_provider_dashboard_metrics(
                 except Exception:
                     pass
 
-                if not all_tx_rows:
-                    try:
-                        tx_response = supabase.table("wallet_transactions").select(
-                            "id, type, direction, amount, status, description, reference, booking_id, metadata, created_at"
-                        ).eq("user_auth_id", auth_id).order("created_at", desc=True).execute()
-                        all_tx_rows = tx_response.data or []
-                    except Exception:
-                        pass
+                # Older rows were written with user_auth_id instead of auth_id:
+                # merge both so earnings and balances are never under-counted.
+                try:
+                    tx_response = supabase.table("wallet_transactions").select(
+                        "id, type, direction, amount, status, description, reference, booking_id, metadata, created_at"
+                    ).eq("user_auth_id", auth_id).order("created_at", desc=True).execute()
+                    seen_ids = {r.get("id") for r in all_tx_rows}
+                    all_tx_rows = all_tx_rows + [r for r in (tx_response.data or []) if r.get("id") not in seen_ids]
+                    all_tx_rows.sort(key=lambda r: r.get("created_at") or "", reverse=True)
+                except Exception:
+                    pass
 
                 # Recent transactions: top 10, normalized for UI
                 result["recent_transactions"] = [
@@ -3830,8 +3833,20 @@ def get_provider_dashboard_metrics(
                 total = 0.0
                 last_7 = 0.0
                 last_30 = 0.0
+                other_credits = 0.0
 
                 for tx in all_tx_rows:
+                    # Credits that are NOT earnings (top-ups, refunds, adjustments)
+                    # are tracked so the dashboard can explain the balance.
+                    try:
+                        if (
+                            (tx.get("status") or "completed").lower() == "completed"
+                            and (tx.get("direction") or "").lower() == "credit"
+                            and categorize_transaction(tx) in (CATEGORY_TOPUP, CATEGORY_REFUND, "ADJUSTMENT")
+                        ):
+                            other_credits += float(tx.get("amount") or 0)
+                    except (TypeError, ValueError):
+                        pass
                     # Only count completed escrow release credits
                     if (tx.get("status") or "completed").lower() != "completed":
                         continue
@@ -3866,6 +3881,7 @@ def get_provider_dashboard_metrics(
                 result["total_earnings"] = round(total, 2)
                 result["last_7_days_earnings"] = round(last_7, 2)
                 result["last_30_days_earnings"] = round(last_30, 2)
+                result["other_credits_total"] = round(other_credits, 2)
 
             except Exception as e:
                 logging.warning(f"Failed to fetch transactions for {auth_id}: {e}")
@@ -7733,6 +7749,12 @@ def _enrich_post(post: dict, viewer_auth_id: Optional[str] = None) -> dict:
                 # capture int id for stylists lookup if we don't have it
                 if not provider_id:
                     provider_id = u_res.data[0].get("id")
+        if provider_id and not provider_name:
+            u2 = supabase.table("users").select("name, city, auth_id").eq("id", provider_id).limit(1).execute()
+            if u2.data:
+                provider_name = u2.data[0].get("name")
+                provider_city = provider_city or u2.data[0].get("city")
+                provider_auth_id = provider_auth_id or u2.data[0].get("auth_id")
         if provider_id:
             s_res = supabase.table("stylists").select(
                 "user_id, business_name, provider_type, photo_url"
@@ -7744,7 +7766,7 @@ def _enrich_post(post: dict, viewer_auth_id: Optional[str] = None) -> dict:
     except Exception as ex:
         logging.warning(f"_enrich_post lookup failed for post {post.get('id')}: {ex}")
 
-    display_name = provider_business_name if (provider_type == "business" and provider_business_name) else provider_name
+    display_name = provider_business_name if (provider_type == "business" and provider_business_name) else (provider_name or provider_business_name)
     enriched["provider"] = {
         "id": provider_id,
         "auth_id": provider_auth_id,
@@ -7783,6 +7805,19 @@ def _enrich_posts(posts: list, viewer_auth_id: Optional[str] = None) -> list:
                 users_by_id[u.get("id")] = u
     except Exception as ex:
         logging.warning(f"_enrich_posts users lookup failed: {ex}")
+    # Posts saved with only a numeric provider_id (no auth id) still need the author's name.
+    missing_user_ids = list({
+        p.get("provider_id") for p in posts
+        if p.get("provider_id") and not p.get("is_official") and p.get("provider_id") not in users_by_id
+    })
+    if missing_user_ids:
+        try:
+            for u in supabase.table("users").select("id, name, city, country, auth_id").in_("id", missing_user_ids).execute().data or []:
+                users_by_id[u.get("id")] = u
+                if u.get("auth_id"):
+                    users_by_auth.setdefault(u.get("auth_id"), u)
+        except Exception as ex:
+            logging.warning(f"_enrich_posts users-by-id lookup failed: {ex}")
     provider_ids = set()
     for p in posts:
         pid = p.get("provider_id") or (users_by_auth.get(p.get("provider_auth_id")) or {}).get("id")
@@ -7814,11 +7849,12 @@ def _enrich_posts(posts: list, viewer_auth_id: Optional[str] = None) -> list:
             out.append(enriched)
             continue
         provider_auth_id = post.get("provider_auth_id")
-        user = users_by_auth.get(provider_auth_id) or {}
+        user = users_by_auth.get(provider_auth_id) or users_by_id.get(post.get("provider_id")) or {}
         provider_id = post.get("provider_id") or user.get("id")
+        provider_auth_id = provider_auth_id or user.get("auth_id")
         st = stylists.get(provider_id) or {}
         business = st.get("business_name")
-        display = business if (st.get("provider_type") == "business" and business) else user.get("name")
+        display = business if (st.get("provider_type") == "business" and business) else (user.get("name") or business)
         enriched["provider"] = {
             "id": provider_id,
             "auth_id": provider_auth_id,
