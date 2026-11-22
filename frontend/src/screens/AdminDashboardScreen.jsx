@@ -285,7 +285,7 @@ export default function AdminDashboardScreen() {
       <div className="min-h-screen overflow-y-auto">
         {/* Header */}
         <header className="bg-white border-b sticky top-0 z-10">
-          <div className="container mx-auto px-4 py-3 flex items-center justify-between max-w-6xl">
+          <div className="container mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-2 max-w-6xl">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
               <Shield className="h-5 w-5 text-purple-600" />
@@ -295,7 +295,7 @@ export default function AdminDashboardScreen() {
               <p className="text-xs text-gray-500">Operational overview</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -372,7 +372,7 @@ export default function AdminDashboardScreen() {
         </div>
 
         {/* Phase 5 - quick admin action: KYC review */}
-        <div className="mb-6 flex flex-wrap gap-2">
+        <div className="mb-6 grid grid-cols-1 min-[420px]:grid-cols-2 sm:flex sm:flex-wrap gap-2 [&>button]:justify-between [&>button]:text-left">
           <button
             onClick={() => navigate("/admin/kyc")}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 text-sm font-medium"
@@ -490,7 +490,7 @@ export default function AdminDashboardScreen() {
         </div>
 
         <Tabs defaultValue="bookings" className="w-full" onValueChange={(v) => { if (v === "deleted") loadDeletedUsers(); }}>
-          <TabsList className="grid grid-cols-6 w-full max-w-4xl">
+          <TabsList className="flex w-full max-w-4xl justify-start overflow-x-auto overflow-y-hidden [&>button]:shrink-0">
             <TabsTrigger value="bookings" data-testid="tab-bookings">
               Recent Bookings
             </TabsTrigger>

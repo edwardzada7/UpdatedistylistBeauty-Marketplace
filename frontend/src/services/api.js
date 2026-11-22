@@ -1,3 +1,4 @@
+import { supabase } from "@/lib/supabaseClient";
 import axios from "axios";
 import { API_BASE } from "@/utils/constants";
 
@@ -10,12 +11,17 @@ const api = axios.create({
 
 // Add request interceptor for auth (Phase 2)
 api.interceptors.request.use(
-  (config) => {
-    // In Phase 2, add auth token here
-    // const token = localStorage.getItem('authToken');
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
+  async (config) => {
+    // Send the signed-in user's Supabase access token so protected endpoints can identify them.
+    try {
+      if (!config.headers?.Authorization) {
+        const { data } = await supabase.auth.getSession();
+        const token = data?.session?.access_token;
+        if (token) config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (e) {
+      // Not signed in (public pages, admin): continue without a token.
+    }
     return config;
   },
   (error) => {

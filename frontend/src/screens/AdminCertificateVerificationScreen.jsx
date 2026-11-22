@@ -27,8 +27,12 @@ const value = (record, names, fallback = "-") => {
   return fallback;
 };
 
-const providerName = (record) => value(record, ["provider_name", "full_name", "name", "provider?.name"]);
-const providerEmail = (record) => value(record, ["provider_email", "email"]);
+// The server nests the person's details under `provider` (users + stylists merged).
+const providerField = (record, names) => value(record?.provider || {}, names, value(record, names.map((n) => `provider_${n}`)));
+const providerName = (record) => providerField(record, ["business_name", "name", "full_name"]);
+const providerEmail = (record) => providerField(record, ["email"]);
+const providerPhone = (record) => providerField(record, ["phone", "phone_number"]);
+const providerLocation = (record) => providerField(record, ["location", "city", "address"]);
 const providerSpecialty = (record) => value(record, ["specialty", "provider_specialty", "category"]);
 const certificationName = (record) => value(record, ["certification_name", "name", "title"]);
 const statusOf = (record) => String(value(record, ["verification_status", "status"], "-")).toLowerCase();
@@ -149,9 +153,9 @@ export default function AdminCertificateVerificationScreen() {
               {statuses.map((status) => (
                 <TabsContent key={status} value={status} className="mt-4">
                   {loading ? <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-teal-600" /></div> : visible.length === 0 ? <p className="text-center text-gray-500 py-12">No {status} certificates.</p> : (
-                    <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Provider</TableHead><TableHead>Email</TableHead><TableHead>Specialty</TableHead><TableHead>Certification</TableHead><TableHead>Status</TableHead><TableHead>Expiry</TableHead><TableHead>Submitted / Updated</TableHead><TableHead>Document</TableHead><TableHead /></TableRow></TableHeader><TableBody>
+                    <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Provider</TableHead><TableHead>Email</TableHead><TableHead>Phone</TableHead><TableHead>Specialty</TableHead><TableHead>Certification</TableHead><TableHead>Status</TableHead><TableHead>Expiry</TableHead><TableHead>Submitted / Updated</TableHead><TableHead>Document</TableHead><TableHead /></TableRow></TableHeader><TableBody>
                       {visible.map((record) => <TableRow key={value(record, ["id", "certification_id"])}>
-                        <TableCell className="font-medium">{providerName(record)}</TableCell><TableCell className="text-xs">{providerEmail(record)}</TableCell><TableCell>{providerSpecialty(record)}</TableCell><TableCell>{certificationName(record)}</TableCell><TableCell><StatusBadge status={statusOf(record)} /></TableCell><TableCell>{dateValue(record, ["expiry_date", "expires_at", "certification_expiry"])}</TableCell><TableCell className="text-xs">{dateValue(record, ["updated_at", "submitted_at", "created_at"])}</TableCell><TableCell>{value(record, ["certificate_url", "document_url", "certificate_document_url"], "-") !== "-" ? "Available" : "-"}</TableCell><TableCell><Button size="sm" variant="outline" onClick={() => openDetail(record)}><Eye className="h-4 w-4 mr-1" />View</Button></TableCell>
+                        <TableCell className="font-medium whitespace-nowrap">{providerName(record)}</TableCell><TableCell className="text-xs">{providerEmail(record)}</TableCell><TableCell className="text-xs whitespace-nowrap">{providerPhone(record)}</TableCell><TableCell>{providerSpecialty(record)}</TableCell><TableCell>{certificationName(record)}</TableCell><TableCell><StatusBadge status={statusOf(record)} /></TableCell><TableCell>{dateValue(record, ["expiry_date", "expires_at", "certification_expiry"])}</TableCell><TableCell className="text-xs">{dateValue(record, ["updated_at", "submitted_at", "created_at"])}</TableCell><TableCell>{value(record, ["certificate_url", "document_url", "certificate_document_url"], "-") !== "-" ? <a className="text-blue-600 hover:underline" href={value(record, ["certificate_url", "document_url", "certificate_document_url"])} target="_blank" rel="noopener noreferrer">Open</a> : "-"}</TableCell><TableCell><Button size="sm" variant="outline" onClick={() => openDetail(record)}><Eye className="h-4 w-4 mr-1" />View</Button></TableCell>
                       </TableRow>)}
                     </TableBody></Table></div>
                   )}
@@ -166,7 +170,7 @@ export default function AdminCertificateVerificationScreen() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Certificate Details</DialogTitle></DialogHeader>
           {detailLoading ? <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div> : selected && <div className="grid sm:grid-cols-2 gap-4 text-sm">
-            <div><Label>Provider</Label><p>{providerName(selected)}</p><p className="text-gray-500">{providerEmail(selected)}</p></div><div><Label>Specialty</Label><p>{providerSpecialty(selected)}</p></div>
+            <div><Label>Provider</Label><p className="font-medium">{providerName(selected)}</p></div><div><Label>Email</Label><p className="break-all">{providerEmail(selected)}</p></div><div><Label>Phone</Label><p>{providerPhone(selected)}</p></div><div><Label>Location</Label><p>{providerLocation(selected)}</p></div><div><Label>Specialty</Label><p>{providerSpecialty(selected)}</p></div>
             <div><Label>Certification</Label><p>{certificationName(selected)}</p></div><div><Label>Status</Label><p><StatusBadge status={statusOf(selected)} /></p></div>
             <div><Label>Expiry date</Label><p>{dateValue(selected, ["expiry_date", "expires_at", "certification_expiry"])}</p></div><div><Label>Submitted</Label><p>{dateValue(selected, ["submitted_at", "created_at"])}</p></div>
             <div><Label>Updated</Label><p>{dateValue(selected, ["updated_at", "reviewed_at"])}</p></div><div><Label>Rejection reason</Label><p>{value(selected, ["rejection_reason", "rejectionReason"])}</p></div>
