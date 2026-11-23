@@ -119,7 +119,7 @@ const ProfileScreen = () => {
         travel_fee_per_km: providerData.travel_fee_per_km ?? "",
       });
     }
-  }, [providerData]);
+  }, [providerData, userData]);
 
   // Phase 5 - load KYC status
   useEffect(() => {
