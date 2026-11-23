@@ -405,6 +405,13 @@ export default function AdminDashboardScreen() {
             Feed Moderation →
           </button>
           <button
+            onClick={() => navigate("/admin/earnings")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-700 text-white hover:bg-green-800 text-sm font-medium"
+            data-testid="admin-earnings-link"
+          >
+            Earnings Ledger →
+          </button>
+          <button
             onClick={() => navigate("/admin/locations")}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-700 text-sm font-medium"
             data-testid="admin-locations-link"

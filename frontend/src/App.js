@@ -68,6 +68,7 @@ const ProviderPromoteScreen = lazy(() => import("@/screens/ProviderPromoteScreen
 const PromoCompleteScreen = lazy(() => import("@/screens/PromoCompleteScreen"));
 const AdminPromotionsScreen = lazy(() => import("@/screens/AdminPromotionsScreen"));
 const AdminLocationsScreen = lazy(() => import("@/screens/AdminLocationsScreen"));
+const AdminEarningsScreen = lazy(() => import("@/screens/AdminEarningsScreen"));
 const AdminNoShowsScreen = lazy(() => import("@/screens/AdminNoShowsScreen"));
 const AdminBroadcastScreen = lazy(() => import("@/screens/AdminBroadcastScreen"));
 const AdminPlatformEarningsScreen = lazy(() => import("@/screens/AdminPlatformEarningsScreen"));
@@ -388,6 +389,7 @@ function AppRoutes() {
       <Route path="/admin/shop-moderation" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminShopModerationScreen /></Suspense>} />
       <Route path="/admin/official" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminOfficialScreen /></Suspense>} />
       <Route path="/admin/promotions" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminPromotionsScreen /></Suspense>} />
+      <Route path="/admin/earnings" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminEarningsScreen /></Suspense>} />
       <Route path="/admin/locations" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminLocationsScreen /></Suspense>} />
       <Route path="/admin/no-shows" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminNoShowsScreen /></Suspense>} />
       <Route path="/admin/broadcast" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminBroadcastScreen /></Suspense>} />
