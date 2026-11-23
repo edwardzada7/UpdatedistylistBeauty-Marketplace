@@ -22,6 +22,7 @@ import EmptyState from "@/components/EmptyState";
 import PersonAvatar, { PersonVerified } from "@/components/PersonAvatar";
 import { avatarOf, isVerifiedProfile } from "@/utils/profile";
 import NotificationBell from "@/components/NotificationBell";
+import { formatMoney, currencySymbol } from "@/utils/money";
 
 const DELETE_CONFIRMATION_PHRASE = "DELETE MY ACCOUNT";
 
@@ -614,7 +615,7 @@ const ProfileScreen = () => {
                         <Input id="travel-radius" inputMode="decimal" className="mt-2" value={providerFormData.travel_radius_km} onChange={(e) => setProviderFormData({ ...providerFormData, travel_radius_km: e.target.value })} placeholder="e.g. 15 (blank = no home visits)" />
                       </div>
                       <div>
-                        <Label htmlFor="travel-fee">Travel fee per km (₦)</Label>
+                        <Label htmlFor="travel-fee">Travel fee per km ({currencySymbol()})</Label>
                         <Input id="travel-fee" inputMode="decimal" className="mt-2" value={providerFormData.travel_fee_per_km} onChange={(e) => setProviderFormData({ ...providerFormData, travel_fee_per_km: e.target.value })} placeholder="optional" />
                       </div>
                     </div>

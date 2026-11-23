@@ -27,9 +27,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
+import { currencySymbol } from "@/utils/money";
 
 const API_BASE = process.env.REACT_APP_BACKEND_URL || "";
-const CURRENCY = "₦";
+const CURRENCY = currencySymbol();
 
 export default function AdminWithdrawalsScreen() {
   const navigate = useNavigate();

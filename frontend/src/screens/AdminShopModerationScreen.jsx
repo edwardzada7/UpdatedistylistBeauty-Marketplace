@@ -12,6 +12,7 @@ import { ArrowLeft, RefreshCcw, Eye, CheckCircle, XCircle, Loader2 } from "lucid
 import { toast } from "sonner";
 import { adminAPI } from "@/services/api";
 import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
+import { formatMoney, currencySymbol } from "@/utils/money";
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All products" },
@@ -225,7 +226,7 @@ export default function AdminShopModerationScreen() {
                           ) : null}
                           <div className="truncate">{service.name}</div>
                         </TableCell>
-                        <TableCell className="text-right font-medium">₦{Number(service.price || 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-medium">{formatMoney(service.price || 0)}</TableCell>
                         <TableCell className="text-right">{service.stock ?? 0}</TableCell>
                         <TableCell>{service.is_approved ? <Badge className="bg-blue-100 text-blue-800">Approved</Badge> : <Badge className="bg-yellow-100 text-yellow-800">Unapproved</Badge>}</TableCell>
                         <TableCell>{statusBadge(service.is_active)}</TableCell>

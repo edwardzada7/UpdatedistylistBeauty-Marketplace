@@ -17,6 +17,7 @@ import { CURRENCY, QUICK_TOPUP_AMOUNTS } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
+import { formatMoney, currencySymbol } from "@/utils/money";
 
 // ====================================================================
 // Transaction display helpers (Phase: Wallet & Earnings Fix)
@@ -231,7 +232,7 @@ export default function WalletScreen() {
     }
 
     if (amount < 100) {
-      toast.error("Minimum top-up amount is ₦100");
+      toast.error(`Minimum top-up amount is ${formatMoney(100)}`);
       return;
     }
 

@@ -38,6 +38,7 @@ import {
   Store,
   Megaphone
 } from "lucide-react";
+import LocationChip from "@/components/LocationChip";
 
 const StylistDashboard = () => {
   const navigate = useNavigate();
@@ -232,6 +233,7 @@ const StylistDashboard = () => {
             <ProfileAvatar src={avatarOf(providerData) || avatarOf(userData)} name={displayName} size={80} className="ring-2 ring-white/40" />
             <div className="flex-1">
               <h2 className="text-2xl font-bold">{displayName}</h2>
+              <div className="mt-1"><LocationChip areaId={userData?.area_id} tone="light" /></div>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
                 {providerData?.is_verified && (
                   <Badge className="bg-green-500/20 text-green-100 border-green-300/30">
