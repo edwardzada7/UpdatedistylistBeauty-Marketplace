@@ -17,6 +17,7 @@ import EmptyState from "@/components/EmptyState";
 import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation";
 import ReportButton from "@/components/ReportButton";
 import PersonAvatar, { PersonVerified } from "@/components/PersonAvatar";
+import HomeVisitCard from "@/components/HomeVisitCard";
 import { avatarOf, locationOf } from "@/utils/profile";
 
 const ProviderProfileScreen = () => {
@@ -40,6 +41,7 @@ const ProviderProfileScreen = () => {
   const [bookingNotes, setBookingNotes] = useState('');
   const [submittingBooking, setSubmittingBooking] = useState(false);
   const [pendingBookingId, setPendingBookingId] = useState(null);
+  const [visit, setVisit] = useState({ mode: "in_store", address: "", latitude: null, longitude: null, quote: null });
   const [processingWalletPayment, setProcessingWalletPayment] = useState(false);
 
   // Phase 4 - Multi-staff state (only relevant when provider has staff)
@@ -161,6 +163,13 @@ const ProviderProfileScreen = () => {
   const totalPrice = selectedServicesList.reduce((sum, s) => sum + (s.price || 0), 0);
   const totalDuration = selectedServicesList.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
 
+  // Home visits: the provider must set a range, and every chosen service must be offered at home
+  const homeAllowed = Number(provider?.travel_radius_km) > 0 && selectedServicesList.length > 0 && selectedServicesList.every((s) => s.home_service);
+  const isHome = homeAllowed && visit.mode === "home";
+  const travelFee = isHome && visit.quote?.available ? Number(visit.quote.travel_fee || 0) : 0;
+  const payableTotal = totalPrice + travelFee;
+  const homeBlocked = isHome && !(visit.quote?.available && visit.address.trim());
+
   // Fetch available slots when date changes (Phase 4: staff-scoped if a staff is picked)
   const fetchAvailableSlots = async (date) => {
     if (!date || totalDuration <= 0) return;
@@ -241,6 +250,10 @@ const ProviderProfileScreen = () => {
       toast.error("Please select a time slot");
       return;
     }
+    if (homeBlocked) {
+      toast.error(visit.address.trim() ? "Check that the provider can reach your location" : "Add your address for the home visit");
+      return;
+    }
     
     setSubmittingBooking(true);
     
@@ -258,6 +271,7 @@ const ProviderProfileScreen = () => {
         status: "pending_payment",
         // Phase 4 - Multi-staff: include if user picked a specific staff member
         ...(selectedStaffId ? { staff_id: selectedStaffId } : {}),
+        ...(isHome ? { service_mode: "home", customer_address: visit.address.trim(), customer_latitude: visit.latitude, customer_longitude: visit.longitude } : {}),
       };
       
       const bookingResponse = await bookingsAPI.create(bookingData);
@@ -531,11 +545,15 @@ const ProviderProfileScreen = () => {
                 <div className="mt-3 pt-3 border-t border-purple-200 flex justify-between">
                   <span className="font-semibold">Total</span>
                   <span className="font-bold text-purple-600">
-                    {CURRENCY}{totalPrice.toLocaleString()} • {totalDuration} min
+                    {CURRENCY}{payableTotal.toLocaleString()} • {totalDuration} min
                   </span>
                 </div>
               </CardContent>
             </Card>
+
+            {homeAllowed && (
+              <HomeVisitCard providerId={userId} radiusKm={provider.travel_radius_km} feePerKm={provider.travel_fee_per_km} value={visit} onChange={setVisit} />
+            )}
 
             {/* Date Selection */}
             <Card>
@@ -631,13 +649,14 @@ const ProviderProfileScreen = () => {
                   : "Select date & time"}
               </p>
               <p className="text-xl font-bold text-purple-600">
-                {CURRENCY}{totalPrice.toLocaleString()}
+                {CURRENCY}{payableTotal.toLocaleString()}
               </p>
+              {travelFee > 0 && <p className="text-xs text-gray-500">includes {CURRENCY}{travelFee.toLocaleString()} travel</p>}
             </div>
             <Button
               size="lg"
               onClick={handleConfirmBooking}
-              disabled={!selectedSlot || submittingBooking}
+              disabled={!selectedSlot || submittingBooking || homeBlocked}
               className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50"
               data-testid="confirm-booking-btn"
             >
@@ -663,8 +682,8 @@ const ProviderProfileScreen = () => {
 
   // Payment step - wallet-based payment
   if (bookingStep === 'payment') {
-    const insufficientFunds = walletBalance < totalPrice;
-    const shortfall = totalPrice - walletBalance;
+    const insufficientFunds = walletBalance < payableTotal;
+    const shortfall = payableTotal - walletBalance;
     
     return (
       <div className="min-h-screen bg-gray-50">
@@ -710,10 +729,16 @@ const ProviderProfileScreen = () => {
                     </div>
                   ))}
                 </div>
+                {travelFee > 0 && (
+                  <div className="flex justify-between text-sm mt-2">
+                    <span>Travel fee ({visit.quote?.distance_km} km)</span>
+                    <span className="font-medium">{CURRENCY}{travelFee.toLocaleString()}</span>
+                  </div>
+                )}
                 <div className="mt-3 pt-3 border-t border-purple-200 flex justify-between">
                   <span className="font-semibold">Total Amount</span>
                   <span className="font-bold text-purple-600 text-lg">
-                    {CURRENCY}{totalPrice.toLocaleString()}
+                    {CURRENCY}{payableTotal.toLocaleString()}
                   </span>
                 </div>
               </CardContent>
@@ -774,7 +799,7 @@ const ProviderProfileScreen = () => {
                     ) : (
                       <>
                         <CheckCircle2 className="h-4 w-4 mr-2" />
-                        Pay {CURRENCY}{totalPrice.toLocaleString()} from Wallet
+                        Pay {CURRENCY}{payableTotal.toLocaleString()} from Wallet
                       </>
                     )}
                   </Button>

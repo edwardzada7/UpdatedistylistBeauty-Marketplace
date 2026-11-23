@@ -32,7 +32,15 @@ api.interceptors.request.use(
 // Add response interceptor for error handling
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    // A bare "Network Error" (no reply at all) is usually a dropped connection or a server restart.
+    // Retry reads once so the person doesn't see a scary message for a blip.
+    const cfg = error.config;
+    if (!error.response && cfg && (cfg.method || "get").toLowerCase() === "get" && !cfg.__retried) {
+      cfg.__retried = true;
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      return api.request(cfg);
+    }
     if (error.response?.status === 401) {
       // Handle unauthorized (Phase 2)
       console.log("Unauthorized access");
@@ -178,6 +186,8 @@ export const providersAPI = {
 export const bookingsAPI = {
   // Create a booking - now accepts customer_auth_id (UUID)
   create: (data) => api.post("/bookings", data),
+  // Distance, range and travel fee for a home visit
+  homeQuote: (data) => api.post("/bookings/home-quote", data),
   
   // Get bookings with filters (enhanced for Phase 2.2)
   list: (params = {}) => {

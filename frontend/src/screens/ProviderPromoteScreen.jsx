@@ -24,17 +24,20 @@ export default function ProviderPromoteScreen() {
   const [planId, setPlanId] = useState(null);
   const [useCredit, setUseCredit] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     const [p, m, t] = await Promise.allSettled([promoAPI.plans(), promoAPI.me(), promoAPI.targets()]);
     if (p.status === "fulfilled") {
       setPlans(p.value.data);
       setPlanId((cur) => cur || p.value.data.boosts?.[1]?.id || p.value.data.boosts?.[0]?.id || null);
     } else toast.error("Could not load plans. Run the phase33 SQL if this is new.");
     if (m.status === "fulfilled") setMe(m.value.data);
-    else toast.error(err(m.reason, "Could not load your plan"));
+    else setLoadError(m.reason?.response ? err(m.reason, "Could not load your plan") : "We couldn't reach the server. Check your connection and try again.");
     if (t.status === "fulfilled") setTargets(t.value.data);
+    else if (!m.reason) setLoadError(t.reason?.response ? err(t.reason, "Could not load your items") : "We couldn't reach the server. Check your connection and try again.");
     setLoading(false);
   }, []);
 
@@ -71,7 +74,7 @@ export default function ProviderPromoteScreen() {
         return;
       }
     } catch (e) {
-      toast.error(err(e, "Could not start the payment"));
+      toast.error(e?.response ? err(e, "Could not start the payment") : "We couldn't reach the server. Check your connection and try again.");
     }
     setBusy(false);
   };
@@ -93,6 +96,12 @@ export default function ProviderPromoteScreen() {
         </div>
       </header>
       <main className="max-w-2xl mx-auto px-4 py-4 space-y-5">
+        {loadError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-center justify-between gap-3" data-testid="promo-load-error">
+            <span>{loadError}</span>
+            <Button size="sm" variant="outline" onClick={load}>Retry</Button>
+          </div>
+        )}
         {/* Pro plan */}
         <section className="bg-white rounded-xl border p-4" data-testid="pro-card">
           <div className="flex items-center gap-2 mb-1"><Crown className="h-5 w-5 text-amber-500" /><h2 className="font-semibold">iStylist Pro</h2>{me.subscription && <Badge className="bg-green-100 text-green-800">Active</Badge>}</div>
