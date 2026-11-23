@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { ArrowLeft, User, Mail, Phone, Save, Loader2, LogOut, Shield, Star, MapPin, FileText, Globe, Building2, CalendarClock, AlertTriangle, Trash2 } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, Save, Loader2, LogOut, Shield, Star, MapPin, FileText, Building2, CalendarClock, AlertTriangle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { usersAPI, stylistsAPI, kycAPI } from "@/services/api";
 import { loginWithEmail } from "@/services/authService";
@@ -119,7 +119,7 @@ const ProfileScreen = () => {
         travel_fee_per_km: providerData.travel_fee_per_km ?? "",
       });
     }
-  }, [providerData]);
+  }, [providerData, userData]);
 
   // Phase 5 - load KYC status
   useEffect(() => {

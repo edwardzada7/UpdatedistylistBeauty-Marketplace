@@ -542,6 +542,30 @@ const BookingDetailsScreen = () => {
           </CardContent>
         </Card>
 
+        {/* Home visit */}
+        {booking.service_mode === "home" && (
+          <Card data-testid="home-visit-details">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Home visit</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-1 text-sm">
+              {booking.customer_area && <p><span className="text-gray-500">Area:</span> {booking.customer_area}</p>}
+              {booking.travel_distance_km != null && <p><span className="text-gray-500">Distance:</span> {booking.travel_distance_km} km</p>}
+              {Number(booking.travel_fee) > 0 && <p><span className="text-gray-500">Travel fee:</span> {CURRENCY}{Number(booking.travel_fee).toLocaleString()}</p>}
+              {booking.customer_address ? (
+                <>
+                  <p><span className="text-gray-500">Address:</span> {booking.customer_address}</p>
+                  {booking.customer_latitude != null && booking.customer_longitude != null && (
+                    <a className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer" href={`https://www.google.com/maps/search/?api=1&query=${booking.customer_latitude},${booking.customer_longitude}`}>Open in Maps</a>
+                  )}
+                </>
+              ) : (
+                <p className="text-gray-500">{isProvider ? "The exact address is shown once you confirm this booking." : "Your address is shared with the provider once they confirm."}</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Notes Card */}
         {booking.notes && (
           <Card>

@@ -1603,7 +1603,7 @@ async def _release_escrow_to_provider(booking_id: int, provider_auth_id: str, cu
         if check_table_exists("booking_services"):
             services_response = supabase.table("booking_services").select("price").eq("booking_id", booking_id).execute()
             if services_response.data:
-                amount = sum(float(svc.get("price", 0) or 0) for svc in services_response.data)
+                amount = sum(float(svc.get("price", 0) or 0) for svc in services_response.data) + float(booking.get("travel_fee") or 0)
         
         # Fallback to booking.total_amount
         if amount == 0:
@@ -1727,7 +1727,7 @@ async def _refund_escrow_to_customer(booking_id: int, customer_auth_id: str):
         if check_table_exists("booking_services"):
             services_response = supabase.table("booking_services").select("price").eq("booking_id", booking_id).execute()
             if services_response.data:
-                amount = sum(float(svc.get("price", 0) or 0) for svc in services_response.data)
+                amount = sum(float(svc.get("price", 0) or 0) for svc in services_response.data) + float(booking.get("travel_fee") or 0)
         
         # Fallback to booking.total_amount
         if amount == 0:
@@ -2387,7 +2387,7 @@ def pay_booking_with_wallet(
         if check_table_exists("booking_services"):
             services_response = supabase.table("booking_services").select("price").eq("booking_id", booking_id).execute()
             if services_response.data:
-                total_amount = sum(float(svc.get("price", 0) or 0) for svc in services_response.data)
+                total_amount = sum(float(svc.get("price", 0) or 0) for svc in services_response.data) + float(booking.get("travel_fee") or 0)
         
         # Fallback to booking total if no services found
         if total_amount == 0:
@@ -5133,6 +5133,7 @@ def get_provider_full_profile(provider_id: int):
             "is_premium": stylist.get("is_premium", False),
             "travel_available": stylist.get("travel_available", False),
             "travel_fee_per_km": stylist.get("travel_fee_per_km", 0),
+            "travel_radius_km": stylist.get("travel_radius_km"),
             "total_services": len(active_services),
             "services": active_services,
             "services_by_category": services_by_category
@@ -5710,6 +5711,68 @@ class BookingCreate(BaseModel):
     # Phase 4 - Multi-staff: which staff member is assigned (business providers only).
     # Optional & nullable - existing single-provider bookings continue to work unchanged.
     staff_id: Optional[int] = None
+    # Home service (phase35): where the service happens
+    service_mode: Optional[str] = "in_store"  # in_store | home
+    customer_address: Optional[str] = Field(None, max_length=300)
+    customer_latitude: Optional[float] = None
+    customer_longitude: Optional[float] = None
+
+
+def _home_quote(provider_user_id: int, lat: float, lng: float) -> dict:
+    """Can this provider come to (lat, lng)? Distance, range check and travel fee."""
+    from locations_routes import haversine_km
+    st = supabase.table("stylists").select("*").eq("user_id", provider_user_id).limit(1).execute().data
+    if not st:
+        return {"available": False, "reason": "Provider not found"}
+    stylist = st[0]
+    radius = stylist.get("travel_radius_km")
+    if not radius:
+        return {"available": False, "reason": "This provider doesn't offer home visits"}
+    user = (supabase.table("users").select("latitude, longitude, area_id").eq("id", provider_user_id).limit(1).execute().data or [{}])[0]
+    p_lat, p_lng = user.get("latitude"), user.get("longitude")
+    if p_lat is None or p_lng is None:
+        p_lat, p_lng = stylist.get("latitude"), stylist.get("longitude")
+    if (p_lat is None or p_lng is None) and user.get("area_id"):
+        a = (supabase.table("service_areas").select("latitude, longitude").eq("id", user["area_id"]).limit(1).execute().data or [None])[0]
+        if a:
+            p_lat, p_lng = a["latitude"], a["longitude"]
+    if p_lat is None or p_lng is None:
+        return {"available": False, "reason": "This provider hasn't set their location yet"}
+    distance = round(haversine_km(lat, lng, float(p_lat), float(p_lng)), 1)
+    fee_per_km = float(stylist.get("travel_fee_per_km") or 0)
+    in_range = distance <= float(radius)
+    return {
+        "available": in_range,
+        "in_range": in_range,
+        "distance_km": distance,
+        "radius_km": float(radius),
+        "travel_fee": round(distance * fee_per_km, 2) if in_range else 0,
+        "reason": None if in_range else f"You're {distance} km away. This provider travels up to {float(radius):g} km.",
+    }
+
+
+class HomeQuoteInput(BaseModel):
+    provider_id: int
+    latitude: float = Field(..., ge=-90, le=90)
+    longitude: float = Field(..., ge=-180, le=180)
+
+
+@api_router.post("/bookings/home-quote")
+def home_service_quote(payload: HomeQuoteInput):
+    """Distance, range and travel fee for a home visit, shown before the customer books."""
+    return _home_quote(payload.provider_id, payload.latitude, payload.longitude)
+
+
+_PRIVATE_UNTIL_CONFIRMED = ("pending_payment", "pending", "declined", "canceled")
+
+
+def _hide_home_address_until_confirmed(enriched: dict) -> dict:
+    """The customer's exact address and pin are revealed to the provider only once the booking is confirmed."""
+    if enriched.get("status") in _PRIVATE_UNTIL_CONFIRMED:
+        for key in ("customer_address", "customer_latitude", "customer_longitude"):
+            enriched.pop(key, None)
+    return enriched
+
 
 @api_router.post("/bookings", status_code=status.HTTP_201_CREATED)
 async def create_booking(booking: BookingCreate):
@@ -5834,6 +5897,35 @@ async def create_booking(booking: BookingCreate):
         if booking.staff_id is not None:
             booking_data["staff_id"] = booking.staff_id
         
+        # Home service: customer's pin must be inside the provider's range; the fee is worked out here, not trusted from the client
+        if (booking.service_mode or "in_store") == "home":
+            if booking.customer_latitude is None or booking.customer_longitude is None or not (booking.customer_address or "").strip():
+                raise HTTPException(status_code=400, detail="Add your address and share your location for a home visit")
+            if booking.service_ids:
+                svc_rows = supabase.table("services").select("*").in_("id", booking.service_ids).execute().data or []
+                if any(not parse_service_record(r)["home_service"] for r in svc_rows):
+                    raise HTTPException(status_code=400, detail="One of the selected services isn't offered as a home visit")
+            quote = _home_quote(booking.provider_id, booking.customer_latitude, booking.customer_longitude)
+            if not quote.get("available"):
+                raise HTTPException(status_code=400, detail=quote.get("reason") or "This provider can't visit that location")
+            area_name = None
+            try:
+                from locations_routes import haversine_km
+                areas = supabase.table("service_areas").select("name, latitude, longitude").eq("active", True).execute().data or []
+                if areas:
+                    area_name = min(areas, key=lambda a: haversine_km(booking.customer_latitude, booking.customer_longitude, a["latitude"], a["longitude"]))["name"]
+            except Exception:
+                pass
+            booking_data.update({
+                "service_mode": "home",
+                "customer_address": booking.customer_address.strip(),
+                "customer_latitude": booking.customer_latitude,
+                "customer_longitude": booking.customer_longitude,
+                "customer_area": area_name,
+                "travel_distance_km": quote["distance_km"],
+                "travel_fee": quote["travel_fee"],
+            })
+
         # Insert booking
         result = supabase.table("bookings").insert(booking_data).execute()
         
@@ -6150,7 +6242,8 @@ async def get_bookings(
                 total_duration += duration
             
             enriched["services"] = services
-            enriched["total_amount"] = total_amount
+            enriched["total_amount"] = total_amount + float(booking.get("travel_fee") or 0)
+            _hide_home_address_until_confirmed(enriched)
             enriched["total_duration"] = total_duration
             enriched["provider_display_name"] = provider_names_map.get(booking.get("provider_id"), "Provider")
             enriched["customer_display_name"] = customer_names_map.get(booking.get("customer_id"), "Customer")
@@ -6210,7 +6303,8 @@ async def _enrich_booking(booking: dict, role: Optional[str] = None) -> dict:
             logging.warning(f"Could not fetch booking_services: {e}")
     
     enriched["services"] = services
-    enriched["total_amount"] = total_amount
+    enriched["total_amount"] = total_amount + float(booking.get("travel_fee") or 0)
+    _hide_home_address_until_confirmed(enriched)
     enriched["total_duration"] = total_duration
     
     # Get provider display name (hide email for customers)
@@ -10425,13 +10519,18 @@ async def diag_global_exception_handler(request: _DiagRequest, exc: Exception):
         "[unhandled_exception] path=%s method=%s type=%s msg=%s\n%s",
         request.url.path, request.method, type(exc).__name__, str(exc), tb_str,
     )
+    # Unhandled errors bypass CORSMiddleware, and a response without CORS headers shows up in the
+    # browser as a bare "Network Error". Add the header so the real message reaches the app.
+    origin = request.headers.get("origin")
+    headers = {"Access-Control-Allow-Origin": origin, "Vary": "Origin", "Access-Control-Allow-Credentials": "true"} if origin else {}
     return _DiagJSONResponse(
         status_code=500,
         content={
-            "detail": "Internal server error",
+            "detail": f"Server error: {type(exc).__name__}: {str(exc)[:200]}",
             "exception_type": type(exc).__name__,
             "exception_message": str(exc),
         },
+        headers=headers,
     )
 
 # Startup port + env diagnostic - prints once at boot so Railway logs show

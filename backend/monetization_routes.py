@@ -63,6 +63,15 @@ def _paystack_headers() -> Optional[Dict[str, str]]:
     return {"Authorization": f"Bearer {key}", "Content-Type": "application/json"} if key else None
 
 
+def _clean_service_name(raw: Any) -> Optional[str]:
+    """services.name stores 'Name||description||modes:...'; show only the name."""
+    return str(raw or "").split("||")[0].replace(" (disabled)", "").strip() or None
+
+
+def _is_disabled(raw: Any) -> bool:
+    return "(disabled)" in str(raw or "")
+
+
 def _notify(auth_id: str, kind: str, title: str, message: str, metadata: Optional[dict] = None) -> None:
     try:
         from push_and_public import notify_user_sync
@@ -259,9 +268,9 @@ def register_monetization_routes(api_router: APIRouter, supabase: Any) -> None:
                     item.update({"title": st.get("business_name") or owner.get("name"), "image": st.get("profile_image_url") or st.get("photo_url")})
                 elif r["target_type"] == "service":
                     sv = first(supabase.table("services").select("id, name, price").eq("id", r["target_id"])) or {}
-                    if not sv:
+                    if not sv or _is_disabled(sv.get("name")):
                         continue
-                    item.update({"title": sv.get("name"), "price": sv.get("price")})
+                    item.update({"title": _clean_service_name(sv.get("name")), "price": sv.get("price")})
                 elif r["target_type"] == "product":
                     pr = first(supabase.table("products").select("*").eq("id", r["target_id"])) or {}
                     if not pr or pr.get("approved") is False:
@@ -309,11 +318,19 @@ def register_monetization_routes(api_router: APIRouter, supabase: Any) -> None:
         auth_id = _current_auth_id(authorization)
         user = require_provider(auth_id)
         services = supabase.table("services").select("id, name, price").eq("stylist_id", user["id"]).limit(100).execute().data or []
-        products = supabase.table("products").select("id, name, price, approved").eq("stylist_auth_id", auth_id).limit(100).execute().data or []
-        posts = supabase.table("provider_posts").select("id, caption").eq("provider_auth_id", auth_id).order("created_at", desc=True).limit(30).execute().data or []
+        try:
+            products = supabase.table("products").select("*").eq("stylist_auth_id", auth_id).limit(100).execute().data or []
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("promo targets: products unavailable: %s", exc)
+            products = []
+        try:
+            posts = supabase.table("provider_posts").select("*").eq("provider_auth_id", auth_id).order("created_at", desc=True).limit(30).execute().data or []
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("promo targets: posts unavailable: %s", exc)
+            posts = []
         return {
             "profile": {"id": str(user["id"]), "name": user.get("name")},
-            "services": [{"id": str(s["id"]), "name": s.get("name"), "price": s.get("price")} for s in services],
+            "services": [{"id": str(s["id"]), "name": _clean_service_name(s.get("name")) or "Service", "price": s.get("price")} for s in services if not _is_disabled(s.get("name"))],
             "products": [{"id": str(p["id"]), "name": p.get("name"), "approved": p.get("approved")} for p in products],
             "posts": [{"id": str(p["id"]), "name": (p.get("caption") or "Post")[:50]} for p in posts],
         }
