@@ -10465,6 +10465,13 @@ try:
         logging.warning("[startup] promotion routes NOT registered: %s", _me)
 
     try:
+        from reschedule_routes import register_reschedule_routes
+        register_reschedule_routes(api_router, supabase, _get_available_slots_internal)
+        logging.info("[startup] reschedule routes registered")
+    except Exception as _re:
+        logging.warning("[startup] reschedule routes NOT registered: %s", _re)
+
+    try:
         from broadcast_routes import register_broadcast_routes
         register_broadcast_routes(api_router, supabase)
         logging.info("[startup] broadcast routes registered")
