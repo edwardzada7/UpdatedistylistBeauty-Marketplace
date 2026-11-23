@@ -12,7 +12,7 @@ import { ArrowLeft, RefreshCcw, Eye, CheckCircle, XCircle, Loader2 } from "lucid
 import { toast } from "sonner";
 import { adminAPI } from "@/services/api";
 import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
-import { formatMoney, currencySymbol } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All products" },

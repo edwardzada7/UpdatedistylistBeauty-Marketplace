@@ -17,7 +17,7 @@ import { CURRENCY, QUICK_TOPUP_AMOUNTS } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
-import { formatMoney, currencySymbol } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 
 // ====================================================================
 // Transaction display helpers (Phase: Wallet & Earnings Fix)

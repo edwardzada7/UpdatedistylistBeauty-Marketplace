@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { adminAPI } from "@/services/api";
 import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
 import { formatNaira } from "@/screens/ShopScreen";
-import { formatMoney, currencySymbol } from "@/utils/money";
+import { currencySymbol } from "@/utils/money";
 
 function PlanRow({ plan, onSave }) {
   const [price, setPrice] = useState(String(plan.price));

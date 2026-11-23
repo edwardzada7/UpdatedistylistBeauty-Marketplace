@@ -22,7 +22,7 @@ import EmptyState from "@/components/EmptyState";
 import PersonAvatar, { PersonVerified } from "@/components/PersonAvatar";
 import { avatarOf, isVerifiedProfile } from "@/utils/profile";
 import NotificationBell from "@/components/NotificationBell";
-import { formatMoney, currencySymbol } from "@/utils/money";
+import { currencySymbol } from "@/utils/money";
 
 const DELETE_CONFIRMATION_PHRASE = "DELETE MY ACCOUNT";
 

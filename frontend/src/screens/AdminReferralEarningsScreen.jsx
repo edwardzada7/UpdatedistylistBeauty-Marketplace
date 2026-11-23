@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { referralAPI } from "@/services/api";
 import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
-import { formatMoney, currencySymbol } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 
 const money = (value, currency = "NGN") => formatMoney(value, currency);
 const date = (value) => value ? new Date(value).toLocaleDateString() : "-";

@@ -13,7 +13,7 @@ import { providerShopApi } from "@/services/providerShopApi";
 import { formatNaira } from "@/screens/ShopScreen";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation";
-import { formatMoney, currencySymbol } from "@/utils/money";
+import { currencySymbol } from "@/utils/money";
 
 const TABS = [
   ["shop", "My Shop"],

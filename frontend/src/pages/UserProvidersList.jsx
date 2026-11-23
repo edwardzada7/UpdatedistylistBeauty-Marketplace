@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import LoadingSpinner from "../components/LoadingSpinner";
-import { formatMoney, currencySymbol } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 
 export default function UserProvidersList() {
   const [providers, setProviders] = useState([]);
