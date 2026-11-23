@@ -309,6 +309,15 @@ def register_monetization_routes(api_router: APIRouter, supabase: Any) -> None:
             except Exception:  # noqa: BLE001
                 viewer_city = ""
         owner_area = {u["auth_id"]: u.get("area_id") for u in users.values()}
+        try:
+            pro_ids = {
+                r["provider_auth_id"]
+                for r in supabase.table("provider_subscriptions").select("provider_auth_id").eq("status", "active").gt("ends_at", now).in_("provider_auth_id", auth_ids or ["-"]).execute().data or []
+            }
+        except Exception:  # noqa: BLE001
+            pro_ids = set()
+        for it in items:
+            it["is_pro"] = it["provider_auth_id"] in pro_ids
 
         def nearness(i: dict) -> int:
             if area_id and owner_area.get(i["provider_auth_id"]) == area_id:
