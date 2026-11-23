@@ -204,6 +204,11 @@ async def scan_and_create_reminders(
                 prov_title = "Upcoming appointment"
                 cust_msg = f"Reminder: Your appointment starts {label} ({time_str})."
                 prov_msg = f"Reminder: A booking with you starts {label} ({time_str})."
+                # The 2h reminder carries a Reschedule button (changes close 30 minutes before the appointment).
+                can_reschedule = mins_before >= 60
+                if can_reschedule:
+                    cust_msg += " Can't make it? Reschedule up to 30 minutes before."
+                    prov_msg += " Need another time? Reschedule up to 30 minutes before."
 
                 # Build canonical metadata
                 meta_base = {
@@ -212,6 +217,7 @@ async def scan_and_create_reminders(
                     "minutes_before": mins_before,
                     "appointment_date": date_str,
                     "appointment_time": time_str,
+                    **({"action": "reschedule"} if can_reschedule else {}),
                 }
 
                 # Customer

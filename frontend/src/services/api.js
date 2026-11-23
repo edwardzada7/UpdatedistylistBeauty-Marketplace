@@ -186,6 +186,12 @@ export const providersAPI = {
 export const bookingsAPI = {
   // Create a booking - now accepts customer_auth_id (UUID)
   create: (data) => api.post("/bookings", data),
+  // Reschedule: state, open slots, propose, answer
+  rescheduleState: (id) => api.get(`/bookings/${id}/reschedule`),
+  rescheduleSlots: (id, date) => api.get(`/bookings/${id}/reschedule/slots`, { params: { date } }),
+  reschedulePropose: (id, data) => api.post(`/bookings/${id}/reschedule`, data),
+  rescheduleRespond: (id, action) => api.post(`/bookings/${id}/reschedule/respond`, { action }),
+
   // Distance, range and travel fee for a home visit
   homeQuote: (data) => api.post("/bookings/home-quote", data),
   

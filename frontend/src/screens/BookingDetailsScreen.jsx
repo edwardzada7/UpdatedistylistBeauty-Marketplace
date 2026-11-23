@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import RescheduleCard from "@/components/RescheduleCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { bookingsAPI, paymentsAPI, reviewsAPI } from "@/services/api";
 import { CURRENCY } from "@/utils/constants";
@@ -49,6 +50,7 @@ const STATUS_CONFIG = {
 const BookingDetailsScreen = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { userData, isProvider } = useAuth();
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -541,6 +543,10 @@ const BookingDetailsScreen = () => {
             )}
           </CardContent>
         </Card>
+
+        {["pending", "confirmed"].includes(booking.status) && (
+          <RescheduleCard booking={booking} autoOpen={searchParams.get("reschedule") === "1"} onChanged={fetchBooking} />
+        )}
 
         {/* Home visit */}
         {booking.service_mode === "home" && (
