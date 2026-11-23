@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { adminAPI } from "@/services/api";
 import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
 import VerifiedBadge from "@/components/VerifiedBadge";
+import { formatMoney, currencySymbol } from "@/utils/money";
 
 const toBase64 = (file) =>
   new Promise((resolve, reject) => {
@@ -177,7 +178,7 @@ function ShopTab({ adminKey }) {
         <div><Label htmlFor="op-name">Name</Label><Input id="op-name" value={form.name} onChange={set("name")} /></div>
         <div><Label htmlFor="op-desc">Description</Label><Textarea id="op-desc" rows={3} value={form.description} onChange={set("description")} /></div>
         <div className="grid grid-cols-2 gap-3">
-          <div><Label htmlFor="op-price">Customer price (₦)</Label><Input id="op-price" type="number" min="0" value={form.price} onChange={set("price")} /></div>
+          <div><Label htmlFor="op-price">Customer price ({currencySymbol()})</Label><Input id="op-price" type="number" min="0" value={form.price} onChange={set("price")} /></div>
           <div><Label htmlFor="op-stock">Stock</Label><Input id="op-stock" type="number" min="0" value={form.stock} onChange={set("stock")} /></div>
         </div>
         <div><Label htmlFor="op-cat">Category (optional)</Label><Input id="op-cat" value={form.main_category} onChange={set("main_category")} placeholder="e.g. Beauty" /></div>
@@ -186,7 +187,7 @@ function ShopTab({ adminKey }) {
           Providers can buy this for their shop ("Buy for My Shop")
         </label>
         {form.forProviders && (
-          <div><Label htmlFor="op-pprice">Price providers pay per item (₦)</Label><Input id="op-pprice" type="number" min="0" value={form.providerPrice} onChange={set("providerPrice")} /></div>
+          <div><Label htmlFor="op-pprice">Price providers pay per item ({currencySymbol()})</Label><Input id="op-pprice" type="number" min="0" value={form.providerPrice} onChange={set("providerPrice")} /></div>
         )}
         <Button onClick={create} disabled={busy} className="bg-pink-600 hover:bg-pink-700" data-testid="official-create-product">
           {busy ? "Creating..." : "Create product"}
@@ -207,11 +208,11 @@ function ShopTab({ adminKey }) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{product?.name || `Product #${listing.product_id}`}</p>
-                <p className="text-xs text-gray-500">₦{Number(listing.price).toLocaleString()} · {listing.stock} in stock</p>
+                <p className="text-xs text-gray-500">{formatMoney(listing.price)} · {listing.stock} in stock</p>
                 <div className="flex flex-wrap gap-1 mt-1">
                   <Badge className={product?.approved ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>{product?.approved ? "Approved" : "Not approved"}</Badge>
                   <Badge className={String(listing.status).toLowerCase() === "active" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-700"}>{listing.status || "active"}</Badge>
-                  {listing.provider_purchase_enabled && <Badge className="bg-indigo-100 text-indigo-800">Providers pay ₦{Number(listing.provider_purchase_price).toLocaleString()}</Badge>}
+                  {listing.provider_purchase_enabled && <Badge className="bg-indigo-100 text-indigo-800">Providers pay {formatMoney(listing.provider_purchase_price)}</Badge>}
                 </div>
                 <div className="flex gap-2 mt-2">
                   <Button size="sm" variant="outline" onClick={() => updateListing(listing, { status: String(listing.status).toLowerCase() === "active" ? "inactive" : "active" }, "Listing updated")}>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import LoadingSpinner from "../components/LoadingSpinner";
+import { formatMoney } from "@/utils/money";
 
 export default function UserProvidersList() {
   const [providers, setProviders] = useState([]);
@@ -92,7 +93,7 @@ export default function UserProvidersList() {
             <div className="provider-header">
               <h3>{provider.full_name}</h3>
               <p>{provider.location_city}</p>
-              <p>Starting from ₦{startingPrice}</p>
+              <p>Starting from {formatMoney(startingPrice)}</p>
 
               <button
                 onClick={() =>
@@ -126,7 +127,7 @@ export default function UserProvidersList() {
                         <strong>{s.services.subcategory}</strong>
                         <p>{s.description}</p>
                         <span>
-                          ₦{s.price} • {s.duration} mins
+                          {formatMoney(s.price)} • {s.duration} mins
                         </span>
                       </div>
                     </label>
@@ -135,7 +136,7 @@ export default function UserProvidersList() {
 
                 <div className="booking-summary">
                   <p>
-                    Total: ₦{calculateTotal(provider.id)}
+                    Total: {formatMoney(calculateTotal(provider.id))}
                   </p>
                   <button
                     disabled={!selectedServices[provider.id]?.length}

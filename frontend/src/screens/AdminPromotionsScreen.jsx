@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { adminAPI } from "@/services/api";
 import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
 import { formatNaira } from "@/screens/ShopScreen";
+import { currencySymbol } from "@/utils/money";
 
 function PlanRow({ plan, onSave }) {
   const [price, setPrice] = useState(String(plan.price));
@@ -22,7 +23,7 @@ function PlanRow({ plan, onSave }) {
   return (
     <div className="bg-white rounded-lg border p-3 flex flex-wrap items-end gap-3">
       <div className="min-w-[10rem] flex-1"><p className="font-medium text-sm">{plan.name}</p><p className="text-xs text-gray-500">{plan.kind}</p></div>
-      <label className="text-xs">Price ₦<Input className="w-24 h-8" value={price} onChange={(e) => setPrice(e.target.value)} /></label>
+      <label className="text-xs">Price {currencySymbol()}<Input className="w-24 h-8" value={price} onChange={(e) => setPrice(e.target.value)} /></label>
       <label className="text-xs">Days<Input className="w-16 h-8" value={days} onChange={(e) => setDays(e.target.value)} /></label>
       {isSub && (<><label className="text-xs">Boost % off<Input className="w-16 h-8" value={discount} onChange={(e) => setDiscount(e.target.value)} /></label><label className="text-xs">Free boost days<Input className="w-16 h-8" value={freeDays} onChange={(e) => setFreeDays(e.target.value)} /></label></>)}
       <Button size="sm" onClick={() => save()}>Save</Button>

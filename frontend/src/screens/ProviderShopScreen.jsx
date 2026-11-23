@@ -13,6 +13,7 @@ import { providerShopApi } from "@/services/providerShopApi";
 import { formatNaira } from "@/screens/ShopScreen";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation";
+import { currencySymbol } from "@/utils/money";
 
 const TABS = [
   ["shop", "My Shop"],
@@ -242,7 +243,7 @@ function EditDialog({ product, onClose, onSaved }) {
         <DialogHeader><DialogTitle>Edit {product.name}</DialogTitle><DialogDescription>{isListing ? "Set your resale price and stock." : "Changes to a live product may need approval again."}</DialogDescription></DialogHeader>
         <div className="space-y-3">
           {!isListing && (<><div><Label>Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div><div><Label>Description</Label><Textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} /></div></>)}
-          <div className="grid grid-cols-2 gap-3"><div><Label>Price (₦)</Label><Input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} /></div><div><Label>Stock</Label><Input inputMode="numeric" value={stock} onChange={(e) => setStock(e.target.value)} /></div></div>
+          <div className="grid grid-cols-2 gap-3"><div><Label>Price ({currencySymbol()})</Label><Input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} /></div><div><Label>Stock</Label><Input inputMode="numeric" value={stock} onChange={(e) => setStock(e.target.value)} /></div></div>
         </div>
         <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save} disabled={busy}>{busy ? "Saving..." : "Save"}</Button></DialogFooter>
       </DialogContent>
@@ -279,7 +280,7 @@ function CreateDialog({ authId, onClose, onSaved }) {
         <div className="space-y-3">
           <div><Label>Name</Label><Input value={f.name} onChange={set("name")} maxLength={120} /></div>
           <div><Label>Description</Label><Textarea rows={3} value={f.description} onChange={set("description")} /></div>
-          <div className="grid grid-cols-2 gap-3"><div><Label>Price (₦)</Label><Input inputMode="decimal" value={f.price} onChange={set("price")} /></div><div><Label>Stock</Label><Input inputMode="numeric" value={f.stock} onChange={set("stock")} /></div></div>
+          <div className="grid grid-cols-2 gap-3"><div><Label>Price ({currencySymbol()})</Label><Input inputMode="decimal" value={f.price} onChange={set("price")} /></div><div><Label>Stock</Label><Input inputMode="numeric" value={f.stock} onChange={set("stock")} /></div></div>
           <div>
             <Label>Photos (up to 5)</Label>
             <input type="file" accept="image/*" multiple className="block w-full text-sm mt-1" onChange={(e) => setFiles(Array.from(e.target.files || []).slice(0, 5))} data-testid="provider-product-photos" />
@@ -344,7 +345,7 @@ function ListDialog({ item, onClose, onSaved }) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader><DialogTitle>List {item.products?.name || "inventory"}</DialogTitle><DialogDescription>{item.free} available to list.</DialogDescription></DialogHeader>
-        <div className="grid grid-cols-2 gap-3"><div><Label>Quantity</Label><Input inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} /></div><div><Label>Price each (₦)</Label><Input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} /></div></div>
+        <div className="grid grid-cols-2 gap-3"><div><Label>Quantity</Label><Input inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} /></div><div><Label>Price each ({currencySymbol()})</Label><Input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} /></div></div>
         <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={go} disabled={busy}>{busy ? "Listing..." : "List for sale"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>

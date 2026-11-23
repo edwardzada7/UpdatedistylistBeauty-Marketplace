@@ -1,3 +1,4 @@
+import { currencySymbol } from "./money";
 // API Configuration
 export const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API_BASE = `${BACKEND_URL}/api`;
@@ -7,7 +8,7 @@ export const APP_NAME = "iStylist";
 export const APP_TAGLINE = "Book Beauty, Fashion & Event Services";
 
 // Currency
-export const CURRENCY = "₦";
+export const CURRENCY = currencySymbol();
 export const CURRENCY_NAME = "NGN";
 
 // Wallet

@@ -8,8 +8,9 @@ import { ArrowLeft, Loader2, Save, Settings as SettingsIcon, AlertCircle } from 
 import { toast } from "sonner";
 import { settingsAPI } from "@/services/api";
 import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
+import { currencySymbol } from "@/utils/money";
 
-const CURRENCY = "₦";
+const CURRENCY = currencySymbol();
 
 export default function AdminFinancialSettingsScreen() {
   const navigate = useNavigate();

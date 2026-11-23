@@ -6,8 +6,9 @@ import { Shield, LogOut, RefreshCcw, TrendingUp, Wallet, DollarSign, Clock, Chec
 import { toast } from "sonner";
 import { earningsAPI } from "@/services/api";
 import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
+import { currencySymbol } from "@/utils/money";
 
-const CURRENCY = "₦";
+const CURRENCY = currencySymbol();
 
 /**
  * AdminPlatformEarningsScreen - Phase 9 Platform Revenue Dashboard

@@ -42,8 +42,9 @@ import { toast } from "sonner";
 import { adminAPI, noShowAPI } from "@/services/api";
 import { timeAgoShort } from "@/utils/timeAgo";
 import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
+import { currencySymbol } from "@/utils/money";
 
-const CURRENCY = "₦";
+const CURRENCY = currencySymbol();
 
 /**
  * AdminDashboardScreen - Phase 4 Admin Foundation

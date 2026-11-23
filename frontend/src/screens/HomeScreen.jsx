@@ -15,6 +15,7 @@ import NotificationBell from "@/components/NotificationBell";
 import { timeAgoShort } from "@/utils/timeAgo";
 import PersonAvatar, { PersonVerified } from "@/components/PersonAvatar";
 import { avatarOf, locationOf } from "@/utils/profile";
+import LocationChip from "@/components/LocationChip";
 
 const HomeScreen = () => {
   const navigate = useNavigate();
@@ -111,9 +112,10 @@ const HomeScreen = () => {
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-3">
             Welcome, {firstName}! 👋
           </h2>
-          <p className="text-gray-600 mb-6">
+          <p className="text-gray-600 mb-3">
             {APP_TAGLINE}
           </p>
+          <div className="mb-6"><LocationChip areaId={userData?.area_id} /></div>
         </div>
 
         {/* Quick Actions */}
