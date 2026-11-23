@@ -60,6 +60,18 @@ export default function FeedScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [savedOnly, setSavedOnly] = useState(false);
   const [savedIds, setSavedIds] = useState(getSavedPostIds);
+  const [sponsoredPosts, setSponsoredPosts] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    feedAPI
+      .sponsored(authId, 3)
+      .then((r) => !cancelled && setSponsoredPosts(r.data?.posts || []))
+      .catch(() => !cancelled && setSponsoredPosts([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [authId]);
 
   const load = useCallback(async (opts = {}) => {
     const { append = false } = opts;
@@ -116,6 +128,11 @@ export default function FeedScreen() {
     }
     // Optimistic
     const willLike = !post.liked_by_me;
+    if (post.sponsored) {
+      setSponsoredPosts((prev) =>
+        prev.map((p) => (p.id === post.id ? { ...p, liked_by_me: willLike, likes_count: Math.max(0, (p.likes_count || 0) + (willLike ? 1 : -1)) } : p))
+      );
+    }
     setPosts((prev) =>
       prev.map((p) =>
         p.id === post.id
@@ -213,9 +230,27 @@ export default function FeedScreen() {
           <EmptyFeed isProvider={isProvider} onCreate={() => setComposerOpen(true)} />
         ) : (
           <div className="space-y-4">
-            {visiblePosts.map((post) => (
+            {visiblePosts.map((post, index) => {
+              // A boosted post after the 2nd post, then after every 5th one
+              const slot = index === 1 ? 0 : index > 1 && (index - 1) % 5 === 0 ? (index - 1) / 5 : -1;
+              const ad = !savedOnly && slot >= 0 ? sponsoredPosts.find((sp, k) => k === slot && !visiblePosts.some((p) => p.id === sp.id)) : null;
+              return (
+              <div key={post.id} className="space-y-4">
+              {ad && (
+                <div data-testid="sponsored-post">
+                  <span className="inline-block mb-1 text-[10px] uppercase tracking-wide bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">Sponsored</span>
+                  <PostCard
+                    post={ad}
+                    viewerAuthId={authId}
+                    saved={savedIds.includes(String(ad.id))}
+                    onSaveToggle={() => handleSaveToggle(ad)}
+                    onLikeToggle={() => handleLikeToggle(ad)}
+                    onDelete={() => handleDelete(ad)}
+                    onOpenProvider={() => ad.provider?.id && navigate(`/user/providers/${ad.provider.id}`)}
+                  />
+                </div>
+              )}
               <PostCard
-                key={post.id}
                 post={post}
                 viewerAuthId={authId}
                 saved={savedIds.includes(String(post.id))}
@@ -228,7 +263,9 @@ export default function FeedScreen() {
                   }
                 }}
               />
-            ))}
+              </div>
+              );
+            })}
 
             {hasMore && (
               <div className="flex justify-center pt-2">
