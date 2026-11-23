@@ -23,6 +23,8 @@ export default function AdminFinancialSettingsScreen() {
   const [minWithdrawal, setMinWithdrawal] = useState("0");
   const [maxWithdrawal, setMaxWithdrawal] = useState(""); // empty = no max
   const [shopCommissionPercentage, setShopCommissionPercentage] = useState("0");
+  const [feeFlat, setFeeFlat] = useState("0");
+  const [bookingCommission, setBookingCommission] = useState("0");
 
   useEffect(() => {
     if (!adminKey) {
@@ -37,6 +39,8 @@ export default function AdminFinancialSettingsScreen() {
       const res = await settingsAPI.adminGetFinancial(adminKey);
       const wf = res.data?.withdrawal_fee || {};
       setFeePercentage(String(wf.fee_percentage ?? 0));
+      setFeeFlat(String(wf.fee_flat ?? 0));
+      setBookingCommission(String(wf.booking_commission_percentage ?? 0));
       setMinWithdrawal(String(wf.min_withdrawal ?? 0));
       setMaxWithdrawal(wf.max_withdrawal == null ? "" : String(wf.max_withdrawal));
       setShopCommissionPercentage(String(res.data?.shop?.commission_percentage ?? wf.shop_commission_percentage ?? 0));
@@ -59,6 +63,16 @@ export default function AdminFinancialSettingsScreen() {
     const minW = parseFloat(minWithdrawal);
     const maxW = maxWithdrawal === "" ? 0 : parseFloat(maxWithdrawal);
     const shopPct = parseFloat(shopCommissionPercentage);
+    const flat = parseFloat(feeFlat);
+    const bookingPct = parseFloat(bookingCommission);
+    if (isNaN(flat) || flat < 0) {
+      toast.error("Flat withdrawal fee must be 0 or greater");
+      return;
+    }
+    if (isNaN(bookingPct) || bookingPct < 0 || bookingPct > 100) {
+      toast.error("Booking commission must be between 0 and 100");
+      return;
+    }
     // Client-side validation
     if (isNaN(feePct) || feePct < 0 || feePct > 100) {
       toast.error("Fee percentage must be between 0 and 100");
@@ -85,6 +99,8 @@ export default function AdminFinancialSettingsScreen() {
     try {
       await settingsAPI.adminUpdateFinancial(adminKey, {
         fee_percentage: feePct,
+        fee_flat: flat,
+        booking_commission_percentage: bookingPct,
         min_withdrawal: minW,
         max_withdrawal: maxW,
         enabled: true,
@@ -158,6 +174,41 @@ export default function AdminFinancialSettingsScreen() {
                 </div>
 
                 <div>
+                  <Label htmlFor="fee-flat">Flat Withdrawal Fee ({CURRENCY})</Label>
+                  <Input
+                    id="fee-flat"
+                    type="number"
+                    step="10"
+                    min="0"
+                    value={feeFlat}
+                    onChange={(e) => setFeeFlat(e.target.value)}
+                    className="mt-2"
+                    data-testid="fee-flat-input"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Fixed amount charged on every withdrawal (for example 100). It is added to the percentage above; use 0% above if you only want the flat fee.
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="booking-commission">Booking Commission (%)</Label>
+                  <Input
+                    id="booking-commission"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    value={bookingCommission}
+                    onChange={(e) => setBookingCommission(e.target.value)}
+                    className="mt-2"
+                    data-testid="booking-commission-input"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Your cut of every booking when it completes: the provider is paid the rest. Applies only to bookings completed after you save. 0 = no commission.
+                  </p>
+                </div>
+
+                <div>
                   <Label htmlFor="min-w">Minimum Withdrawal Amount ({CURRENCY})</Label>
                   <Input
                     id="min-w"
@@ -205,7 +256,7 @@ export default function AdminFinancialSettingsScreen() {
                     className="mt-2"
                     data-testid="shop-commission-input"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Recorded shop commission rate for shop orders.</p>
+                  <p className="text-xs text-gray-500 mt-1">Saved rate only. It is not yet deducted from shop payouts.</p>
                 </div>
 
                 <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg text-amber-800 text-sm">

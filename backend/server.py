@@ -1630,16 +1630,30 @@ async def _release_escrow_to_provider(booking_id: int, provider_auth_id: str, cu
             new_escrow = max(0, (wallet.get("escrow_balance") or 0) - amount)
             supabase.table("wallets").update({"escrow_balance": new_escrow}).eq("id", wallet["id"]).execute()
         
+        # Platform commission (rate set in Admin > Financial Settings; 0 = none). The customer paid `amount`;
+        # the provider receives amount minus the commission, which stays with the platform.
+        commission_pct = float(_load_withdrawal_fee_settings().get("booking_commission_percentage") or 0)
+        platform_fee = round(amount * commission_pct / 100.0, 2) if commission_pct > 0 else 0.0
+        provider_amount = round(amount - platform_fee, 2)
+        if platform_fee > 0:
+            try:
+                supabase.table("bookings").update({
+                    "platform_fee_amount": platform_fee,
+                    "platform_fee_percentage": commission_pct,
+                }).eq("id", booking_id).execute()
+            except Exception as fee_err:
+                logging.warning(f"could not record platform fee on booking {booking_id}: {fee_err}")
+
         # Credit to provider's available balance
         provider_wallet = supabase.table("wallets").select("*").eq("user_auth_id", provider_auth_id).execute()
         if provider_wallet.data:
             wallet = provider_wallet.data[0]
-            new_balance = (wallet.get("balance") or 0) + amount
+            new_balance = (wallet.get("balance") or 0) + provider_amount
             supabase.table("wallets").update({"balance": new_balance}).eq("id", wallet["id"]).execute()
         else:
             supabase.table("wallets").insert({
                 "user_auth_id": provider_auth_id,
-                "balance": amount,
+                "balance": provider_amount,
                 "escrow_balance": 0
             }).execute()
         
@@ -1679,10 +1693,10 @@ async def _release_escrow_to_provider(booking_id: int, provider_auth_id: str, cu
                 "auth_id": provider_auth_id,
                 "type": "credit",  # DB constraint: 'credit' or 'debit'
                 "direction": "credit",  # lowercase
-                "amount": amount,
+                "amount": provider_amount,
                 "reference": release_ref,
                 "booking_id": booking_id,
-                "description": f"Earnings from booking #{booking_id}",
+                "description": f"Earnings from booking #{booking_id}" + (f" (after {commission_pct:g}% platform fee)" if platform_fee > 0 else ""),
                 "status": "completed",
                 "created_at": datetime.utcnow().isoformat()
             }).execute()
@@ -2928,6 +2942,8 @@ def backfill_transaction_auth_ids():
 DEFAULT_WITHDRAWAL_FEE_SETTINGS = {
     "enabled": True,
     "fee_percentage": 0.0,
+    "fee_flat": 0.0,                      # fixed fee per withdrawal (e.g. 100 = 100 naira)
+    "booking_commission_percentage": 0.0, # platform cut of each completed booking
     "min_withdrawal": 0.0,
     "max_withdrawal": None,
     "currency": "NGN",
@@ -2953,6 +2969,8 @@ def _load_withdrawal_fee_settings() -> dict:
 
 class FinancialSettingsUpdate(BaseModel):
     fee_percentage: Optional[float] = None
+    fee_flat: Optional[float] = None
+    booking_commission_percentage: Optional[float] = None
     min_withdrawal: Optional[float] = None
     max_withdrawal: Optional[float] = None  # use 0/null to disable
     enabled: Optional[bool] = None
@@ -3156,6 +3174,7 @@ def get_withdrawal_fee_public():
     s = _load_withdrawal_fee_settings()
     return {
         "fee_percentage": float(s.get("fee_percentage") or 0),
+        "fee_flat": float(s.get("fee_flat") or 0),
         "min_withdrawal": float(s.get("min_withdrawal") or 0),
         "max_withdrawal": (
             float(s["max_withdrawal"]) if s.get("max_withdrawal") not in (None, "", "null") else None
@@ -3193,6 +3212,14 @@ def admin_update_financial_settings(
         if payload.fee_percentage < 0 or payload.fee_percentage > 100:
             raise HTTPException(status_code=400, detail="fee_percentage must be between 0 and 100")
         updated["fee_percentage"] = float(payload.fee_percentage)
+    if payload.fee_flat is not None:
+        if payload.fee_flat < 0:
+            raise HTTPException(status_code=400, detail="fee_flat must be >= 0")
+        updated["fee_flat"] = float(payload.fee_flat)
+    if payload.booking_commission_percentage is not None:
+        if payload.booking_commission_percentage < 0 or payload.booking_commission_percentage > 100:
+            raise HTTPException(status_code=400, detail="booking_commission_percentage must be between 0 and 100")
+        updated["booking_commission_percentage"] = float(payload.booking_commission_percentage)
     if payload.min_withdrawal is not None:
         if payload.min_withdrawal < 0:
             raise HTTPException(status_code=400, detail="min_withdrawal must be >= 0")
@@ -3311,6 +3338,7 @@ async def request_withdrawal(
         # will be debited from the wallet on approval.
         fee_settings = _load_withdrawal_fee_settings()
         fee_percentage = float(fee_settings.get("fee_percentage") or 0)
+        fee_flat = float(fee_settings.get("fee_flat") or 0)
         min_withdrawal = float(fee_settings.get("min_withdrawal") or 0)
         max_withdrawal_raw = fee_settings.get("max_withdrawal")
         max_withdrawal = float(max_withdrawal_raw) if max_withdrawal_raw not in (None, "", "null") else None
@@ -3337,7 +3365,7 @@ async def request_withdrawal(
             )
 
         gross_amount = round(float(request_data.amount), 2)
-        fee_amount = round(gross_amount * (fee_percentage / 100.0), 2)
+        fee_amount = round(min(gross_amount, gross_amount * (fee_percentage / 100.0) + fee_flat), 2)
         net_amount = round(gross_amount - fee_amount, 2)
         if net_amount < 0:
             net_amount = 0.0
@@ -10544,6 +10572,13 @@ try:
         logging.info("[startup] promotion routes registered")
     except Exception as _me:
         logging.warning("[startup] promotion routes NOT registered: %s", _me)
+
+    try:
+        from earnings_routes import register_earnings_routes
+        register_earnings_routes(api_router, supabase, check_table_exists)
+        logging.info("[startup] earnings routes registered")
+    except Exception as _ee:
+        logging.warning("[startup] earnings routes NOT registered: %s", _ee)
 
     try:
         from reschedule_routes import register_reschedule_routes

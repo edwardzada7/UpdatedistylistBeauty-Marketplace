@@ -809,7 +809,8 @@ export default function WalletScreen() {
               {withdrawAmount && Number(withdrawAmount) > 0 && (() => {
                 const gross = Math.round(parseFloat(withdrawAmount) * 100) / 100;
                 const feePct = Number(feeSettings.fee_percentage) || 0;
-                const fee = Math.round(gross * (feePct / 100) * 100) / 100;
+                const feeFlat = Number(feeSettings.fee_flat) || 0;
+                const fee = Math.min(gross, Math.round((gross * (feePct / 100) + feeFlat) * 100) / 100);
                 const net = Math.max(0, Math.round((gross - fee) * 100) / 100);
                 return (
                   <div
@@ -824,7 +825,7 @@ export default function WalletScreen() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-700">
-                        Platform Fee ({feePct}%):
+                        Withdrawal fee{feePct > 0 ? ` (${feePct}%${feeFlat > 0 ? " + flat" : ""})` : ""}:
                       </span>
                       <span className="font-semibold text-amber-700" data-testid="preview-fee">
                         {CURRENCY}{fee.toLocaleString()}
