@@ -6,7 +6,7 @@ import { CURRENCY } from "@/utils/constants";
 import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import NotificationBell from "@/components/NotificationBell";
-import ProfileAvatar from "@/components/ProfileAvatar";
+import PersonAvatar from "@/components/PersonAvatar";
 import { avatarOf } from "@/utils/profile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -230,7 +230,7 @@ const StylistDashboard = () => {
         {/* Profile Section */}
         <div className="px-6 pb-6">
           <div className="flex items-center gap-4">
-            <ProfileAvatar src={avatarOf(providerData) || avatarOf(userData)} name={displayName} size={80} className="ring-2 ring-white/40" />
+            <PersonAvatar id={userData?.id} authId={userData?.auth_id} src={avatarOf(providerData) || avatarOf(userData)} name={displayName} size={80} className="ring-2 ring-white/40" />
             <div className="flex-1">
               <h2 className="text-2xl font-bold">{displayName}</h2>
               <div className="mt-1"><LocationChip areaId={userData?.area_id} tone="light" /></div>
