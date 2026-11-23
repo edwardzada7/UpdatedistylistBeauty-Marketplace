@@ -74,12 +74,12 @@ def register_location_routes(api_router: APIRouter, supabase: Any) -> None:
         """Match people's typed locations to areas. Preview first, then apply=true. Never overwrites an area already set."""
         areas = load_areas("NG", None)
         matched, unmatched = [], []
-        users = supabase.table("users").select("id, name, role, city, location_address, area_id, latitude, longitude").execute().data or []
+        users = supabase.table("users").select("id, name, role, location_address, area_id, latitude, longitude").execute().data or []
         stylists = {s["user_id"]: s for s in (supabase.table("stylists").select("user_id, location").execute().data or [])}
         for u in users:
             if u.get("area_id"):
                 continue
-            text = " ".join(str(x) for x in [stylists.get(u["id"], {}).get("location"), u.get("location_address"), u.get("city")] if x)
+            text = " ".join(str(x) for x in [stylists.get(u["id"], {}).get("location"), u.get("location_address")] if x)
             if not text.strip():
                 continue
             area = match_area(text, areas)
@@ -90,7 +90,7 @@ def register_location_routes(api_router: APIRouter, supabase: Any) -> None:
             row["area"] = area["name"]
             matched.append(row)
             if apply:
-                update: Dict[str, Any] = {"area_id": area["id"], "country_code": area["country_code"], "region": area["region"], "city": u.get("city") or area["city"]}
+                update: Dict[str, Any] = {"area_id": area["id"], "country_code": area["country_code"], "region": area["region"]}
                 if u.get("latitude") is None or u.get("longitude") is None:
                     update.update({"latitude": area["latitude"], "longitude": area["longitude"]})
                 supabase.table("users").update(update).eq("id", u["id"]).execute()

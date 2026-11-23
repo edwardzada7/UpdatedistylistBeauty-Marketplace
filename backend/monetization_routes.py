@@ -87,7 +87,7 @@ def register_monetization_routes(api_router: APIRouter, supabase: Any) -> None:
         return data[0] if data else None
 
     def require_provider(auth_id: str) -> dict:
-        user = first(supabase.table("users").select("id, name, city, role, auth_id").eq("auth_id", auth_id))
+        user = first(supabase.table("users").select("id, name, role, auth_id").eq("auth_id", auth_id))
         if not user or user.get("role") not in PROVIDER_ROLES:
             raise HTTPException(status_code=403, detail="Only provider accounts can use promotions")
         return user
@@ -245,8 +245,16 @@ def register_monetization_routes(api_router: APIRouter, supabase: Any) -> None:
         auth_ids = list({r["provider_auth_id"] for r in rows})
         users = {}
         if auth_ids:
-            for u in supabase.table("users").select("id, auth_id, name, city").in_("auth_id", auth_ids).execute().data or []:
+            for u in supabase.table("users").select("id, auth_id, name, area_id").in_("auth_id", auth_ids).execute().data or []:
                 users[u["auth_id"]] = u
+        area_city = {}
+        try:
+            area_ids = list({u["area_id"] for u in users.values() if u.get("area_id")})
+            if area_ids:
+                for a in supabase.table("service_areas").select("id, name, city").in_("id", area_ids).execute().data or []:
+                    area_city[a["id"]] = a
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("sponsored area lookup failed: %s", exc)
         items: List[dict] = []
         for r in rows:
             owner = users.get(r["provider_auth_id"])
@@ -259,7 +267,8 @@ def register_monetization_routes(api_router: APIRouter, supabase: Any) -> None:
                 "provider_id": owner["id"],
                 "provider_auth_id": owner["auth_id"],
                 "provider_name": owner.get("name"),
-                "city": owner.get("city"),
+                "city": (area_city.get(owner.get("area_id")) or {}).get("city"),
+                "area": (area_city.get(owner.get("area_id")) or {}).get("name"),
                 "ends_at": r["ends_at"],
             }
             try:

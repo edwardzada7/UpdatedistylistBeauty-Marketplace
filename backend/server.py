@@ -5096,9 +5096,16 @@ def get_provider_full_profile(provider_id: int):
                     "city": user_data.get("city"),
                     "country": user_data.get("country")
                 }
+                user_extra["_photo"] = (
+                    user_data.get("profile_image_url") or user_data.get("avatar_url") or user_data.get("photo_url")
+                )
         except Exception:
             # If columns don't exist, just continue without them
             pass
+        profile_photo = (
+            stylist.get("profile_image_url") or stylist.get("photo_url") or stylist.get("avatar_url")
+            or user_extra.pop("_photo", None)
+        )
         
         # Get all services
         services_response = supabase.table("services").select("*").eq(
@@ -5121,6 +5128,8 @@ def get_provider_full_profile(provider_id: int):
             "name": stylist["users"]["name"] if stylist.get("users") else "Provider",
             # Phase 1.9 - Show business_name if business type
             "display_name": stylist.get("business_name") if stylist.get("provider_type") == "business" and stylist.get("business_name") else (stylist["users"]["name"] if stylist.get("users") else "Provider"),
+            "profile_image_url": profile_photo,
+            "photo_url": profile_photo,
             "bio": stylist.get("bio"),
             "location": stylist.get("location"),
             # Phase 1.9 - Provider type info
@@ -9349,6 +9358,7 @@ def admin_reported_no_shows(
             except Exception:
                 pass
         out = _enrich_admin_booking_people(items)
+        return {"items": out, "total": res.count if res.count is not None else len(out)}
     except Exception as e:
         logging.error(f"admin_reported_no_shows failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed: {e}")
