@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { providerServicesAPI, providersAPI, bookingsAPI } from "@/services/api";
+import { providerServicesAPI, providersAPI, bookingsAPI, promoAPI } from "@/services/api";
+import ProBadge from "@/components/ProBadge";
 import { CURRENCY } from "@/utils/constants";
 import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -43,6 +44,10 @@ import LocationChip from "@/components/LocationChip";
 const StylistDashboard = () => {
   const navigate = useNavigate();
   const { userData, providerData, displayName, isProvider, signOut } = useAuth();
+  const [isPro, setIsPro] = useState(false);
+  useEffect(() => {
+    promoAPI.me().then((r) => setIsPro(Boolean(r.data?.subscription))).catch(() => setIsPro(false));
+  }, []);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeServices, setActiveServices] = useState([]);
@@ -232,7 +237,7 @@ const StylistDashboard = () => {
           <div className="flex items-center gap-4">
             <PersonAvatar id={userData?.id} authId={userData?.auth_id} src={avatarOf(providerData) || avatarOf(userData)} name={displayName} size={80} className="ring-2 ring-white/40" />
             <div className="flex-1">
-              <h2 className="text-2xl font-bold">{displayName}</h2>
+              <h2 className="text-2xl font-bold">{displayName} <ProBadge pro={isPro} size="md" /></h2>
               <div className="mt-1"><LocationChip areaId={userData?.area_id} tone="light" /></div>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
                 {providerData?.is_verified && (

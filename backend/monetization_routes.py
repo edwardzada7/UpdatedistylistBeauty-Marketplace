@@ -229,6 +229,19 @@ def register_monetization_routes(api_router: APIRouter, supabase: Any) -> None:
         rows = supabase.table("promo_plans").select("*").eq("active", True).order("sort_order").execute().data or []
         return {"boosts": [r for r in rows if r["kind"] == "boost"], "subscriptions": [r for r in rows if r["kind"] == "subscription"]}
 
+    @api_router.get("/promo/pro-providers")
+    def promo_pro_providers():
+        """Auth ids of providers with an active Pro plan (public: it only drives the PRO badge)."""
+        try:
+            rows = (
+                supabase.table("provider_subscriptions").select("provider_auth_id")
+                .eq("status", "active").gt("ends_at", _iso(_now())).limit(2000).execute().data or []
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("pro-providers failed: %s", exc)
+            rows = []
+        return {"auth_ids": sorted({r["provider_auth_id"] for r in rows if r.get("provider_auth_id")})}
+
     @api_router.get("/promo/sponsored")
     def promo_sponsored(
         city: Optional[str] = None,
@@ -309,6 +322,15 @@ def register_monetization_routes(api_router: APIRouter, supabase: Any) -> None:
             except Exception:  # noqa: BLE001
                 viewer_city = ""
         owner_area = {u["auth_id"]: u.get("area_id") for u in users.values()}
+        try:
+            pro_ids = {
+                r["provider_auth_id"]
+                for r in supabase.table("provider_subscriptions").select("provider_auth_id").eq("status", "active").gt("ends_at", now).in_("provider_auth_id", auth_ids or ["-"]).execute().data or []
+            }
+        except Exception:  # noqa: BLE001
+            pro_ids = set()
+        for it in items:
+            it["is_pro"] = it["provider_auth_id"] in pro_ids
 
         def nearness(i: dict) -> int:
             if area_id and owner_area.get(i["provider_auth_id"]) == area_id:

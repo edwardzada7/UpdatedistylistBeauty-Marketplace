@@ -30,6 +30,7 @@ import { avatarOf } from "@/utils/profile";
 import { usePerson } from "@/services/peopleApi";
 import PostComments from "@/components/PostComments";
 import { getSavedPostIds, toggleSavedPost } from "@/utils/savedPosts";
+import ProBadge from "@/components/ProBadge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -381,6 +382,7 @@ export function PostCard({
             <p className="font-semibold text-sm text-gray-900 leading-tight flex items-center gap-1">
               {display}
               <PersonVerified authId={post.provider?.auth_id || post.provider_auth_id} id={post.provider?.id} verified={post.provider?.is_verified} size={15} />
+              <ProBadge pro={post.provider?.is_pro} />
             </p>
             {subtitle && (
               <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">

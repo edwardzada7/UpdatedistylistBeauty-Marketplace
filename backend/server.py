@@ -4991,6 +4991,7 @@ def get_providers_with_services(
                     "profile_image_url": stylist.get("profile_image_url"),
                     "is_verified": stylist.get("is_verified", False),
                     "is_premium": stylist.get("is_premium", False),
+                    "is_pro": bool(stylist.get("auth_id") and stylist.get("auth_id") in _pro_auth_ids()),
                     "starting_price": min_service_price,
                     "primary_service": primary_service["sub_service_name"] if primary_service else None,
                     "primary_category": primary_service["category_id"] if primary_service else None,
@@ -5130,6 +5131,7 @@ def get_provider_full_profile(provider_id: int):
             "display_name": stylist.get("business_name") if stylist.get("provider_type") == "business" and stylist.get("business_name") else (stylist["users"]["name"] if stylist.get("users") else "Provider"),
             "profile_image_url": profile_photo,
             "photo_url": profile_photo,
+            "is_pro": bool(stylist.get("auth_id") and stylist.get("auth_id") in _pro_auth_ids()),
             "bio": stylist.get("bio"),
             "location": stylist.get("location"),
             # Phase 1.9 - Provider type info
@@ -7951,6 +7953,25 @@ def _enrich_post(post: dict, viewer_auth_id: Optional[str] = None) -> dict:
     return enriched
 
 
+_PRO_CACHE: Dict[str, Any] = {"at": 0.0, "ids": set()}
+
+
+def _pro_auth_ids() -> set:
+    """Auth ids of providers with an active Pro subscription (cached for 60 seconds)."""
+    import time as _t
+    if _t.time() - _PRO_CACHE["at"] < 60:
+        return _PRO_CACHE["ids"]
+    ids: set = set()
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        rows = supabase.table("provider_subscriptions").select("provider_auth_id").eq("status", "active").gt("ends_at", now).limit(2000).execute().data or []
+        ids = {r["provider_auth_id"] for r in rows if r.get("provider_auth_id")}
+    except Exception as ex:  # table may not exist yet
+        logging.warning(f"_pro_auth_ids failed: {ex}")
+    _PRO_CACHE.update({"at": _t.time(), "ids": ids})
+    return ids
+
+
 def _enrich_posts(posts: list, viewer_auth_id: Optional[str] = None) -> list:
     """Batch version of _enrich_post: 3 queries total instead of 2-3 per post."""
     if not posts:
@@ -7959,7 +7980,7 @@ def _enrich_posts(posts: list, viewer_auth_id: Optional[str] = None) -> list:
     users_by_auth, users_by_id = {}, {}
     try:
         if auth_ids:
-            for u in supabase.table("users").select("id, name, city, country, auth_id").in_("auth_id", auth_ids).execute().data or []:
+            for u in supabase.table("users").select("*").in_("auth_id", auth_ids).execute().data or []:
                 users_by_auth[u.get("auth_id")] = u
                 users_by_id[u.get("id")] = u
     except Exception as ex:
@@ -7971,7 +7992,7 @@ def _enrich_posts(posts: list, viewer_auth_id: Optional[str] = None) -> list:
     })
     if missing_user_ids:
         try:
-            for u in supabase.table("users").select("id, name, city, country, auth_id").in_("id", missing_user_ids).execute().data or []:
+            for u in supabase.table("users").select("*").in_("id", missing_user_ids).execute().data or []:
                 users_by_id[u.get("id")] = u
                 if u.get("auth_id"):
                     users_by_auth.setdefault(u.get("auth_id"), u)
@@ -8023,6 +8044,7 @@ def _enrich_posts(posts: list, viewer_auth_id: Optional[str] = None) -> list:
             "photo_url": st.get("photo_url"),
             "city": user.get("city"),
             "display_name": display or "Provider",
+            "is_pro": bool(provider_auth_id and provider_auth_id in _pro_auth_ids()),
         }
         enriched["liked_by_me"] = post.get("id") in liked
         out.append(enriched)

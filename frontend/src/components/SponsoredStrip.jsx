@@ -4,6 +4,7 @@ import { ImageOff } from "lucide-react";
 import { promoAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { CURRENCY } from "@/utils/constants";
+import ProBadge from "@/components/ProBadge";
 
 /** Boosted profiles, services, products or posts. Always labelled "Sponsored". Renders nothing when there are none. */
 export default function SponsoredStrip({ types = "profile,service", title = "Sponsored", limit = 6 }) {
@@ -46,7 +47,7 @@ export default function SponsoredStrip({ types = "profile,service", title = "Spo
               <div className="h-24 w-full bg-gray-100 flex items-center justify-center"><ImageOff className="h-5 w-5 text-gray-400" /></div>
             )}
             <div className="p-2">
-              <p className="text-sm font-medium truncate">{i.title || i.provider_name}</p>
+              <p className="text-sm font-medium truncate">{i.title || i.provider_name} <ProBadge pro={i.is_pro} /></p>
               <p className="text-xs text-gray-500 truncate">
                 {i.type === "service" || i.type === "product" ? `${i.price != null ? `${CURRENCY}${Number(i.price).toLocaleString()} · ` : ""}${i.provider_name || ""}` : i.city || "Provider"}
               </p>

@@ -18,6 +18,7 @@ import EmptyState from "@/components/EmptyState";
 import BottomNavigation from "@/components/BottomNavigation";
 import Footer from "@/components/Footer";
 import SponsoredStrip from "@/components/SponsoredStrip";
+import ProBadge from "@/components/ProBadge";
 
 const ProvidersListScreen = () => {
   const navigate = useNavigate();
@@ -295,6 +296,7 @@ const ProvidersListScreen = () => {
                           <h3 className="font-semibold text-lg flex items-center gap-1 min-w-0">
                             <span className="truncate">{provider.display_name || provider.name || "Provider"}</span>
                             <PersonVerified id={provider.provider_id ?? provider.user_id} verified={provider.is_verified} size={18} />
+                            <ProBadge pro={provider.is_pro} />
                           </h3>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
                             {/* Phase 1.9 - Show business badge */}
