@@ -8117,6 +8117,37 @@ def list_feed_posts(
         raise HTTPException(status_code=500, detail=f"Failed to list posts: {e}")
 
 
+@api_router.get("/feed/sponsored")
+def list_sponsored_posts(
+    limit: int = Query(3, ge=1, le=10),
+    auth_id: Optional[str] = Query(None),
+):
+    """Currently boosted posts (full post objects) to mix into the feed. Clients label them 'Sponsored'."""
+    import random
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        promos = (
+            supabase.table("promotions").select("id, target_id")
+            .eq("status", "active").eq("target_type", "post").lte("starts_at", now).gt("ends_at", now)
+            .limit(50).execute().data or []
+        )
+        random.shuffle(promos)
+        out = []
+        for pr in promos:
+            rows = supabase.table("provider_posts").select("*").eq("id", pr["target_id"]).eq("is_active", True).limit(1).execute().data or []
+            if rows:
+                post = _enrich_posts(rows, viewer_auth_id=auth_id)[0]
+                post["sponsored"] = True
+                post["promotion_id"] = pr["id"]
+                out.append(post)
+            if len(out) >= limit:
+                break
+        return {"posts": out}
+    except Exception as e:
+        logging.warning(f"list_sponsored_posts failed: {e}")
+        return {"posts": []}
+
+
 @api_router.get("/feed/posts/by-provider/{provider_id}")
 def list_feed_posts_by_provider(
     provider_id: int,

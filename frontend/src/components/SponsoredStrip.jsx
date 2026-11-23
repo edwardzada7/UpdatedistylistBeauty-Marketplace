@@ -10,18 +10,18 @@ export default function SponsoredStrip({ types = "profile,service", title = "Spo
   const navigate = useNavigate();
   const { userData } = useAuth();
   const [items, setItems] = useState([]);
-  const city = userData?.city;
+  const areaId = userData?.area_id;
 
   useEffect(() => {
     let cancelled = false;
     promoAPI
-      .sponsored({ types, limit, ...(city ? { city } : {}) })
+      .sponsored({ types, limit, ...(areaId ? { area_id: areaId } : {}) })
       .then((r) => !cancelled && setItems(r.data?.items || []))
       .catch(() => !cancelled && setItems([]));
     return () => {
       cancelled = true;
     };
-  }, [types, limit, city]);
+  }, [types, limit, areaId]);
 
   if (!items.length) return null;
 

@@ -378,6 +378,9 @@ export const utilityAPI = {
 // ==================== FEED API (Phase 4 - Social Feed Lite) ====================
 
 export const feedAPI = {
+  // Boosted posts to mix into the feed (labelled Sponsored)
+  sponsored: (authId, limit = 3) => api.get("/feed/sponsored", { params: { limit, ...(authId ? { auth_id: authId } : {}) } }),
+
   // Public listing (newest first). authId optional → enables liked_by_me flag.
   list: (authId, limit = 20, offset = 0) => {
     const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });

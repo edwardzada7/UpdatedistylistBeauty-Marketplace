@@ -232,6 +232,7 @@ def register_monetization_routes(api_router: APIRouter, supabase: Any) -> None:
     @api_router.get("/promo/sponsored")
     def promo_sponsored(
         city: Optional[str] = None,
+        area_id: Optional[int] = None,
         types: str = Query("profile,service,product,post"),
         limit: int = Query(6, ge=1, le=20),
     ):
@@ -245,7 +246,7 @@ def register_monetization_routes(api_router: APIRouter, supabase: Any) -> None:
         auth_ids = list({r["provider_auth_id"] for r in rows})
         users = {}
         if auth_ids:
-            for u in supabase.table("users").select("id, auth_id, name, area_id").in_("auth_id", auth_ids).execute().data or []:
+            for u in supabase.table("users").select("*").in_("auth_id", auth_ids).execute().data or []:
                 users[u["auth_id"]] = u
         area_city = {}
         try:
@@ -274,7 +275,10 @@ def register_monetization_routes(api_router: APIRouter, supabase: Any) -> None:
             try:
                 if r["target_type"] == "profile":
                     st = first(supabase.table("stylists").select("business_name, profile_image_url, photo_url").eq("user_id", owner["id"])) or {}
-                    item.update({"title": st.get("business_name") or owner.get("name"), "image": st.get("profile_image_url") or st.get("photo_url")})
+                    item.update({
+                        "title": st.get("business_name") or owner.get("name"),
+                        "image": st.get("profile_image_url") or st.get("photo_url") or owner.get("profile_image_url") or owner.get("avatar_url") or owner.get("photo_url"),
+                    })
                 elif r["target_type"] == "service":
                     sv = first(supabase.table("services").select("id, name, price").eq("id", r["target_id"])) or {}
                     if not sv or _is_disabled(sv.get("name")):
@@ -297,8 +301,23 @@ def register_monetization_routes(api_router: APIRouter, supabase: Any) -> None:
                 continue
             items.append(item)
         random.shuffle(items)
-        if city:
-            items.sort(key=lambda i: 0 if (i.get("city") or "").strip().lower() == city.strip().lower() else 1)
+        viewer_city = (city or "").strip().lower()
+        if area_id and not viewer_city:
+            try:
+                va = first(supabase.table("service_areas").select("city").eq("id", area_id))
+                viewer_city = ((va or {}).get("city") or "").strip().lower()
+            except Exception:  # noqa: BLE001
+                viewer_city = ""
+        owner_area = {u["auth_id"]: u.get("area_id") for u in users.values()}
+
+        def nearness(i: dict) -> int:
+            if area_id and owner_area.get(i["provider_auth_id"]) == area_id:
+                return 0  # same area first
+            if viewer_city and (i.get("city") or "").strip().lower() == viewer_city:
+                return 1  # then same city
+            return 2
+
+        items.sort(key=nearness)
         return {"items": items[:limit]}
 
     # ---------------------------------------------------------------- provider

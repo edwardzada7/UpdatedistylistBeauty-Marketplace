@@ -17,6 +17,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
 import BottomNavigation from "@/components/BottomNavigation";
 import Footer from "@/components/Footer";
+import SponsoredStrip from "@/components/SponsoredStrip";
 
 const ProvidersListScreen = () => {
   const navigate = useNavigate();
@@ -264,6 +265,7 @@ const ProvidersListScreen = () => {
           />
         ) : (
           <div className="space-y-4">
+            <div className="-mx-4"><SponsoredStrip types="profile" title="Sponsored providers" /></div>
             <p className="text-sm text-gray-600">
               {filteredProviders.length} provider{filteredProviders.length !== 1 ? "s" : ""} found
             </p>
