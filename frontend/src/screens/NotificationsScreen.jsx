@@ -119,7 +119,7 @@ const NotificationsScreen = () => {
     // 5) Booking-related (created/confirmed/cancelled/completed/declined/reminders)
     //    → BookingDetailsScreen if we have a booking_id
     if (bookingId) {
-      navigate(`/bookings/${bookingId}`);
+      navigate(`/bookings/${bookingId}${meta.action === "reschedule" ? "?reschedule=1" : ""}`);
       return;
     }
 
@@ -365,8 +365,14 @@ const NotificationsScreen = () => {
                           Open wallet <ChevronRight className="h-3 w-3" />
                         </span>
                       )}
+                      {notification.metadata?.action === "reschedule" && (
+                        <span className="text-xs font-semibold text-white bg-purple-600 rounded-full px-3 py-1">Reschedule</span>
+                      )}
+                      {notification.metadata?.action === "review_reschedule" && (
+                        <span className="text-xs font-semibold text-white bg-purple-600 rounded-full px-3 py-1">Review request</span>
+                      )}
                       {notification.metadata?.booking_id &&
-                        notification.type !== "chat_message" && (
+                        notification.type !== "chat_message" && !notification.metadata?.action && (
                         <span className="text-xs text-purple-600 flex items-center gap-1">
                           View booking <ChevronRight className="h-3 w-3" />
                         </span>

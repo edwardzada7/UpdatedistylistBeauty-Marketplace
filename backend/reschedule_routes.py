@@ -148,6 +148,24 @@ def register_reschedule_routes(api_router: APIRouter, supabase: Any, get_slots: 
         auth_id = _current_auth_id(authorization)
         return state(load_booking(booking_id), auth_id)
 
+    @api_router.get("/bookings/{booking_id}/reschedule/slots")
+    async def reschedule_slots(booking_id: int, date: str, authorization: Optional[str] = Header(None)):
+        """Open slots for this booking's provider (and service length) on a date."""
+        auth_id = _current_auth_id(authorization)
+        b = load_booking(booking_id)
+        role_of(b, auth_id)
+        user = first(supabase.table("users").select("id").eq("auth_id", b["provider_id"]))
+        if not user:
+            raise HTTPException(status_code=404, detail="Provider not found")
+        duration = int(b.get("service_duration_minutes") or b.get("duration_minutes") or 30)
+        staff = b.get("staff_id")
+        res = await get_slots(user["id"], date, duration, int(staff) if staff else None)
+        slots = [_hhmm(x.get("time") if isinstance(x, dict) else x) for x in (res.get("slots") or [])]
+        if date == _now_lagos().strftime("%Y-%m-%d"):
+            cutoff = (_now_lagos() + timedelta(minutes=RESCHEDULE_CUTOFF_MIN)).strftime("%H:%M")
+            slots = [t for t in slots if t >= cutoff]
+        return {"date": date, "slots": slots}
+
     @api_router.post("/bookings/{booking_id}/reschedule")
     async def propose_reschedule(booking_id: int, body: ProposeBody, authorization: Optional[str] = Header(None)):
         auth_id = _current_auth_id(authorization)
