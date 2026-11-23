@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { adminAPI, noShowAPI } from "@/services/api";
 import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
+import { formatMoney } from "@/utils/money";
 
 const OPEN = ["no_show_pending", "disputed"];
 
@@ -120,8 +121,15 @@ export default function AdminNoShowsScreen() {
                   </div>
                   <p className="text-sm text-gray-600 mt-1">
                     {b.customer_name || "Customer"} with {b.provider_name || "Provider"}
-                    {b.date ? ` · ${b.date}${b.time ? ` ${b.time}` : ""}` : ""}
                   </p>
+                  <div className="text-sm mt-2 grid sm:grid-cols-2 gap-x-6 gap-y-1">
+                    <p><span className="text-gray-500">Appointment:</span> {[b.booking_date || b.date, b.booking_time || b.time].filter(Boolean).join(" ") || "-"}</p>
+                    <p><span className="text-gray-500">Amount held:</span> {formatMoney(b.total_amount ?? b.amount ?? b.total_price ?? 0)}</p>
+                    <p><span className="text-gray-500">Payment:</span> {b.payment_status || "-"}</p>
+                    <p><span className="text-gray-500">Mode:</span> {b.service_mode === "home" ? "Home visit" : "At provider"}</p>
+                    {b.no_show_reported_at && <p><span className="text-gray-500">Reported:</span> {new Date(b.no_show_reported_at).toLocaleString()}</p>}
+                    {b.dispute_opened_at && <p><span className="text-gray-500">Disputed:</span> {new Date(b.dispute_opened_at).toLocaleString()}</p>}
+                  </div>
                   {b.no_show_reporter_role && <p className="text-sm mt-2"><span className="text-gray-500">Reported by:</span> {b.no_show_reporter_role}</p>}
                   {b.no_show_reason && <p className="text-sm"><span className="text-gray-500">Reason:</span> {b.no_show_reason}</p>}
                   {b.dispute_reason && <p className="text-sm"><span className="text-gray-500">Dispute reason:</span> {b.dispute_reason}</p>}
