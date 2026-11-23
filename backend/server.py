@@ -9358,6 +9358,18 @@ def admin_reported_no_shows(
             except Exception:
                 pass
         out = _enrich_admin_booking_people(items)
+        # Amount held in escrow = services total + travel fee (falls back to the booking's own total)
+        try:
+            ids = [b["id"] for b in out if b.get("id") is not None]
+            sums = {}
+            if ids and check_table_exists("booking_services"):
+                for r in supabase.table("booking_services").select("booking_id, price").in_("booking_id", ids).execute().data or []:
+                    sums[r["booking_id"]] = sums.get(r["booking_id"], 0) + float(r.get("price") or 0)
+            for b in out:
+                base = sums.get(b.get("id")) or float(b.get("total_amount") or b.get("service_price") or 0)
+                b["amount_held"] = round(base + (float(b.get("travel_fee") or 0) if b.get("id") in sums else 0), 2)
+        except Exception as exc:  # noqa: BLE001
+            logging.warning(f"no-show amount enrich failed: {exc}")
         return {"items": out, "total": res.count if res.count is not None else len(out)}
     except Exception as e:
         logging.error(f"admin_reported_no_shows failed: {e}")
@@ -9893,10 +9905,26 @@ async def admin_resolve_no_show_dispute(
         }
         if body.admin_notes:
             update_data["admin_notes"] = body.admin_notes[:1000]
-        supabase.table("bookings").update(update_data).eq("id", body.booking_id).execute()
+        # Optional columns may not exist on every database: drop whichever one the error names and retry.
+        optional = ["updated_at", "admin_notes", "dispute_opened"]
+        last_err = None
+        for _ in range(len(optional) + 1):
+            try:
+                supabase.table("bookings").update(update_data).eq("id", body.booking_id).execute()
+                last_err = None
+                break
+            except Exception as inner:  # noqa: BLE001
+                last_err = inner
+                msg = str(inner)
+                drop = next((c for c in optional if c in update_data and c in msg), None)
+                if not drop:
+                    break
+                update_data.pop(drop, None)
+        if last_err:
+            raise last_err
     except Exception as e:
         logging.error(f"[admin] dispute resolution update failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to update booking")
+        raise HTTPException(status_code=500, detail=f"Failed to update booking: {str(e)[:300]}")
 
     # Move the escrowed money (both helpers are idempotent).
     try:

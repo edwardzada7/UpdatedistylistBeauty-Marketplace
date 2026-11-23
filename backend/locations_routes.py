@@ -7,7 +7,7 @@ import math
 import re
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from consultation_routes import _admin_key
@@ -95,3 +95,23 @@ def register_location_routes(api_router: APIRouter, supabase: Any) -> None:
                     update.update({"latitude": area["latitude"], "longitude": area["longitude"]})
                 supabase.table("users").update(update).eq("id", u["id"]).execute()
         return {"applied": apply, "matched": len(matched), "unmatched": len(unmatched), "matched_rows": matched[:200], "unmatched_rows": unmatched[:200]}
+
+    class AssignBody(BaseModel):
+        user_id: int
+        area_id: int
+
+    @api_router.post("/admin/locations/assign", dependencies=[Depends(_admin_key)])
+    def assign_area(body: AssignBody):
+        """Admin picks the area for someone the automatic match could not place."""
+        rows = supabase.table("service_areas").select("*").eq("id", body.area_id).limit(1).execute().data or []
+        if not rows:
+            raise HTTPException(status_code=404, detail="Area not found")
+        area = rows[0]
+        user = (supabase.table("users").select("id, latitude, longitude").eq("id", body.user_id).limit(1).execute().data or [None])[0]
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        update: Dict[str, Any] = {"area_id": area["id"], "country_code": area["country_code"], "region": area["region"]}
+        if user.get("latitude") is None or user.get("longitude") is None:
+            update.update({"latitude": area["latitude"], "longitude": area["longitude"]})
+        supabase.table("users").update(update).eq("id", body.user_id).execute()
+        return {"ok": True, "area": area["name"]}

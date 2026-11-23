@@ -124,8 +124,7 @@ export default function AdminNoShowsScreen() {
                   </p>
                   <div className="text-sm mt-2 grid sm:grid-cols-2 gap-x-6 gap-y-1">
                     <p><span className="text-gray-500">Appointment:</span> {[b.booking_date || b.date, b.booking_time || b.time].filter(Boolean).join(" ") || "-"}</p>
-                    <p><span className="text-gray-500">Amount held:</span> {formatMoney(b.total_amount ?? b.amount ?? b.total_price ?? 0)}</p>
-                    <p><span className="text-gray-500">Payment:</span> {b.payment_status || "-"}</p>
+                    <p><span className="text-gray-500">Amount held:</span> {formatMoney(b.amount_held ?? b.total_amount ?? 0)}</p>
                     <p><span className="text-gray-500">Mode:</span> {b.service_mode === "home" ? "Home visit" : "At provider"}</p>
                     {b.no_show_reported_at && <p><span className="text-gray-500">Reported:</span> {new Date(b.no_show_reported_at).toLocaleString()}</p>}
                     {b.dispute_opened_at && <p><span className="text-gray-500">Disputed:</span> {new Date(b.dispute_opened_at).toLocaleString()}</p>}
