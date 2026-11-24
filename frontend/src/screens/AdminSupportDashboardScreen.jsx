@@ -165,15 +165,15 @@ export default function AdminSupportDashboardScreen() {
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-3">
-              <Shield className="h-6 w-6 text-purple-600" />
+          <div className="flex flex-wrap items-center justify-between gap-2 py-3 sm:py-0 sm:h-16">
+            <div className="flex items-center gap-3 min-w-0">
+              <Shield className="h-6 w-6 text-purple-600 shrink-0" />
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Support Tickets</h1>
+                <h1 className="text-lg sm:text-xl font-bold text-gray-900">Support Tickets</h1>
                 <p className="text-xs text-gray-500">{filteredTickets.length} tickets</p>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -203,7 +203,7 @@ export default function AdminSupportDashboardScreen() {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {/* Search */}
         <div className="mb-6">
           <div className="relative">
@@ -219,7 +219,7 @@ export default function AdminSupportDashboardScreen() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6">
+          <TabsList className="mb-6 grid w-full h-auto grid-cols-2 sm:grid-cols-4 gap-1">
             <TabsTrigger value="open">Open</TabsTrigger>
             <TabsTrigger value="pending">Pending</TabsTrigger>
             <TabsTrigger value="resolved">Resolved</TabsTrigger>
@@ -244,10 +244,10 @@ export default function AdminSupportDashboardScreen() {
                         className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer"
                         onClick={() => handleOpenReplyDialog(ticket)}
                       >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1">
-                            <h3 className="font-medium text-gray-900">{ticket.subject}</h3>
-                            <div className="flex items-center space-x-4 text-xs text-gray-500 mt-1">
+                        <div className="flex flex-col-reverse sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-medium text-gray-900 break-words">{ticket.subject}</h3>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs text-gray-500 mt-1 break-all">
                               <span className="flex items-center">
                                 <Mail className="h-3 w-3 mr-1" />
                                 {ticket.email}
@@ -264,7 +264,7 @@ export default function AdminSupportDashboardScreen() {
                           </div>
                           {statusBadge(ticket.status)}
                         </div>
-                        <p className="text-sm text-gray-600 line-clamp-2">{ticket.message}</p>
+                        <p className="text-sm text-gray-600 line-clamp-2 break-words">{ticket.message}</p>
                         {ticket.admin_reply && (
                           <div className="mt-3 pt-3 border-t border-gray-200">
                             <p className="text-xs font-medium text-purple-600 mb-1">Admin Reply:</p>
@@ -283,7 +283,7 @@ export default function AdminSupportDashboardScreen() {
 
       {/* Reply Dialog */}
       <Dialog open={replyDialogOpen} onOpenChange={setReplyDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-1.5rem)] max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Support Ticket #{selectedTicket?.id}</DialogTitle>
           </DialogHeader>
@@ -292,8 +292,8 @@ export default function AdminSupportDashboardScreen() {
             <div className="space-y-4">
               {/* Ticket Details */}
               <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium text-gray-900">{selectedTicket.subject}</h4>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="font-medium text-gray-900 break-words">{selectedTicket.subject}</h4>
                   {statusBadge(selectedTicket.status)}
                 </div>
                 <div className="text-sm text-gray-600">
@@ -302,7 +302,7 @@ export default function AdminSupportDashboardScreen() {
                   <p><strong>Submitted:</strong> {new Date(selectedTicket.created_at).toLocaleString()}</p>
                 </div>
                 <div className="pt-2 border-t border-gray-200">
-                  <p className="text-sm text-gray-700">{selectedTicket.message}</p>
+                  <p className="text-sm text-gray-700 break-words whitespace-pre-wrap">{selectedTicket.message}</p>
                 </div>
               </div>
 

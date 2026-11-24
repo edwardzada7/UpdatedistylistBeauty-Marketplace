@@ -163,15 +163,15 @@ export default function AdminCopyrightScreen() {
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-3">
-              <Shield className="h-6 w-6 text-purple-600" />
+          <div className="flex flex-wrap items-center justify-between gap-2 py-3 sm:py-0 sm:h-16">
+            <div className="flex items-center gap-3 min-w-0">
+              <Shield className="h-6 w-6 text-purple-600 shrink-0" />
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Copyright Complaints</h1>
+                <h1 className="text-lg sm:text-xl font-bold text-gray-900">Copyright Complaints</h1>
                 <p className="text-xs text-gray-500">{filteredComplaints.length} complaints</p>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -201,7 +201,7 @@ export default function AdminCopyrightScreen() {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {/* Search */}
         <div className="mb-6">
           <div className="relative">
@@ -217,7 +217,7 @@ export default function AdminCopyrightScreen() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6">
+          <TabsList className="mb-6 grid w-full h-auto grid-cols-2 sm:grid-cols-4 gap-1">
             <TabsTrigger value="pending">Pending</TabsTrigger>
             <TabsTrigger value="under_review">Under Review</TabsTrigger>
             <TabsTrigger value="action_taken">Action Taken</TabsTrigger>
@@ -243,12 +243,12 @@ export default function AdminCopyrightScreen() {
                         className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer"
                         onClick={() => handleOpenReviewDialog(complaint)}
                       >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1">
-                            <h3 className="font-medium text-gray-900">
+                        <div className="flex flex-col-reverse sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-medium text-gray-900 break-words">
                               {complaint.complaint_type} - {complaint.target_type} #{complaint.target_id}
                             </h3>
-                            <div className="flex items-center space-x-4 text-xs text-gray-500 mt-1">
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs text-gray-500 mt-1 break-all">
                               <span>{complaint.complainant_name}</span>
                               <span>{complaint.complainant_email}</span>
                               <span>{timeAgoShort(complaint.created_at)}</span>
@@ -283,7 +283,7 @@ export default function AdminCopyrightScreen() {
 
       {/* Review Dialog */}
       <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-1.5rem)] max-w-3xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Copyright Complaint #{selectedComplaint?.id}</DialogTitle>
           </DialogHeader>
@@ -292,7 +292,7 @@ export default function AdminCopyrightScreen() {
             <div className="space-y-4">
               {/* Complaint Details */}
               <div className="bg-red-50 border border-red-200 p-4 rounded-lg space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <h4 className="font-medium text-red-900 flex items-center">
                     <AlertTriangle className="h-5 w-5 mr-2" />
                     DMCA Complaint
@@ -300,7 +300,7 @@ export default function AdminCopyrightScreen() {
                   {statusBadge(selectedComplaint.status)}
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm break-words">
                   <div>
                     <p className="text-red-700 font-medium">Complainant:</p>
                     <p className="text-red-900">{selectedComplaint.complainant_name}</p>

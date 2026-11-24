@@ -134,15 +134,15 @@ export default function AdminLegalEditorScreen() {
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-3">
-              <Shield className="h-6 w-6 text-purple-600" />
+          <div className="flex flex-wrap items-center justify-between gap-2 py-3 sm:py-0 sm:h-16">
+            <div className="flex items-center gap-3 min-w-0">
+              <Shield className="h-6 w-6 text-purple-600 shrink-0" />
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Legal Pages Editor</h1>
+                <h1 className="text-lg sm:text-xl font-bold text-gray-900">Legal Pages Editor</h1>
                 <p className="text-xs text-gray-500">Edit platform legal documents</p>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => navigate("/admin/dashboard")}>
                 Dashboard
               </Button>
@@ -163,9 +163,9 @@ export default function AdminLegalEditorScreen() {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {hasUnsavedChanges && (
-          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center justify-between">
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center text-yellow-800">
               <AlertCircle className="h-5 w-5 mr-2" />
               <span className="text-sm font-medium">You have unsaved changes</span>
@@ -178,7 +178,7 @@ export default function AdminLegalEditorScreen() {
         )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6">
+          <TabsList className="mb-6 grid w-full h-auto grid-cols-2 sm:grid-cols-4 gap-1">
             <TabsTrigger value="privacy">
               <FileText className="h-4 w-4 mr-2" />
               Privacy
@@ -200,7 +200,7 @@ export default function AdminLegalEditorScreen() {
           <TabsContent value={activeTab}>
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
                     <CardTitle>{getPageTitle(activeTab)}</CardTitle>
                     {pages[activeTab]?.last_updated && (
@@ -209,7 +209,7 @@ export default function AdminLegalEditorScreen() {
                       </p>
                     )}
                   </div>
-                  <Button onClick={handleSave} disabled={saving || !hasUnsavedChanges}>
+                  <Button className="w-full sm:w-auto" onClick={handleSave} disabled={saving || !hasUnsavedChanges}>
                     {saving ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     ) : (
@@ -230,14 +230,14 @@ export default function AdminLegalEditorScreen() {
                       onChange={(e) => setEditedContent(e.target.value)}
                       placeholder={`Enter ${getPageTitle(activeTab)} content...`}
                       rows={25}
-                      className="font-mono text-sm"
+                      className="font-mono text-sm w-full min-h-[50vh]"
                     />
                     <p className="text-xs text-gray-500 mt-2">
                       {editedContent.length} characters
                     </p>
                   </div>
 
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200">
                     <a
                       href={`/${activeTab}`}
                       target="_blank"
@@ -246,7 +246,7 @@ export default function AdminLegalEditorScreen() {
                     >
                       Preview live page →
                     </a>
-                    <div className="flex space-x-2">
+                    <div className="flex gap-2 [&>button]:flex-1 sm:[&>button]:flex-none">
                       <Button
                         variant="outline"
                         onClick={() => setEditedContent(pages[activeTab]?.content || "")}

@@ -70,6 +70,16 @@ export const shopApi = {
     );
   },
 
+  async addReview(productId, authId, { rating, comment }) {
+    const res = await api.post(`/shop/products/${productId}/reviews`, { rating, comment }, { params: { auth_id: authId } });
+    return res.data;
+  },
+
+  async updateReview(productId, reviewId, authId, { rating, comment }) {
+    const res = await api.patch(`/shop/products/${productId}/reviews/${reviewId}`, { rating, comment }, { params: { auth_id: authId } });
+    return res.data;
+  },
+
   async getReviews(productId) {
     try {
       const res = await api.get(`/shop/products/${productId}/reviews`);

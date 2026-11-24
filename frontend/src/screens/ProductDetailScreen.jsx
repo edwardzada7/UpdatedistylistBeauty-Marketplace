@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ImageOff, Minus, Plus, ShoppingCart, Star } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { shopApi } from "@/services/shopApi";
 import { useCart } from "@/contexts/CartContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,6 +23,36 @@ export default function ProductDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [imageIndex, setImageIndex] = useState(0);
   const [qty, setQty] = useState(1);
+  const [myRating, setMyRating] = useState(0);
+  const [myComment, setMyComment] = useState("");
+  const [savingReview, setSavingReview] = useState(false);
+
+  const authId = userData?.auth_id;
+  const myReview = authId ? reviews.reviews.find((r) => r.reviewer_auth_id === authId) : null;
+  const ownProduct = Boolean(authId && product && (product.stylist_auth_id === authId || product.seller_auth_id === authId));
+
+  useEffect(() => {
+    if (myReview) {
+      setMyRating(Number(myReview.rating) || 0);
+      setMyComment(myReview.comment || "");
+    }
+  }, [myReview]);
+
+  const submitReview = async () => {
+    if (!myRating) return toast.error("Tap the stars to rate this product");
+    setSavingReview(true);
+    try {
+      const body = { rating: myRating, comment: myComment.trim() || null };
+      if (myReview) await shopApi.updateReview(product.id, myReview.id, authId, body);
+      else await shopApi.addReview(product.id, authId, body);
+      toast.success(myReview ? "Review updated" : "Thanks for your review");
+      setReviews(await shopApi.getReviews(product.id));
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Could not save your review");
+    } finally {
+      setSavingReview(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -137,9 +168,27 @@ export default function ProductDetailScreen() {
             </Button>
           </div>
 
-          {reviews.reviews.length > 0 && (
-            <div className="mt-8">
-              <h3 className="font-semibold mb-3">Reviews</h3>
+          <div className="mt-8">
+            <h3 className="font-semibold mb-3">Reviews</h3>
+            {authId && !ownProduct ? (
+              <div className="bg-white rounded-lg border p-3 mb-4 space-y-2" data-testid="review-form">
+                <p className="text-sm font-medium">{myReview ? "Your review" : "Rate this product"}</p>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button key={n} type="button" onClick={() => setMyRating(n)} aria-label={`${n} star${n > 1 ? "s" : ""}`}>
+                      <Star className={`h-7 w-7 ${n <= myRating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
+                    </button>
+                  ))}
+                </div>
+                <Textarea rows={3} maxLength={500} placeholder="Write a short review (optional)" value={myComment} onChange={(e) => setMyComment(e.target.value)} data-testid="review-comment" />
+                <Button onClick={submitReview} disabled={savingReview || !myRating} className="bg-pink-600 hover:bg-pink-700" data-testid="review-submit">
+                  {savingReview ? "Saving..." : myReview ? "Update review" : "Submit review"}
+                </Button>
+              </div>
+            ) : !authId ? (
+              <p className="text-sm text-gray-500 mb-3">Sign in to leave a review.</p>
+            ) : null}
+            {reviews.reviews.length === 0 && <p className="text-sm text-gray-500">No reviews yet.</p>}
               <div className="space-y-3">
                 {reviews.reviews.slice(0, 10).map((r, i) => (
                   <div key={r.id || i} className="bg-white rounded-lg border p-3">
@@ -153,8 +202,7 @@ export default function ProductDetailScreen() {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+          </div>
         </div>
       </div>
       <BottomNavSpacer />
