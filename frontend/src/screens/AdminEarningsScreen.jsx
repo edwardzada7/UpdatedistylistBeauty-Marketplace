@@ -12,6 +12,7 @@ const STREAM_LABELS = {
   booking_commission: "Booking commission",
   shop_commission: "Shop commission",
   withdrawal_fees: "Withdrawal fees",
+  events: "Event tickets",
   promotions: "Promotions (boosts)",
   subscriptions: "Pro subscriptions",
 };

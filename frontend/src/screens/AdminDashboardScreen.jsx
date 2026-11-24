@@ -440,6 +440,13 @@ export default function AdminDashboardScreen() {
             Announcements →
           </button>
           <button
+            onClick={() => navigate("/admin/events")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-fuchsia-600 text-white hover:bg-fuchsia-700 text-sm font-medium"
+            data-testid="admin-events-link"
+          >
+            Events →
+          </button>
+          <button
             onClick={() => navigate("/admin/official")}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 text-sm font-medium"
             data-testid="admin-official-link"

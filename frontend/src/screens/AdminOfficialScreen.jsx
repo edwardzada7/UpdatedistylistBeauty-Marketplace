@@ -259,8 +259,8 @@ export default function AdminOfficialScreen() {
       </header>
       <div className="container mx-auto px-4 py-6">
         <div className="flex gap-2 mb-6">
-          {[["post", "Feed post"], ["shop", "Official shop"]].map(([key, label]) => (
-            <button key={key} onClick={() => setTab(key)} className={`rounded-full px-4 py-1.5 text-sm border ${tab === key ? "bg-pink-600 text-white border-pink-600" : "bg-white"}`} data-testid={`official-tab-${key}`}>
+          {[["post", "Feed post"], ["shop", "Official shop"], ["events", "Events"]].map(([key, label]) => (
+            <button key={key} onClick={() => (key === "events" ? navigate("/admin/events") : setTab(key))} className={`rounded-full px-4 py-1.5 text-sm border ${tab === key ? "bg-pink-600 text-white border-pink-600" : "bg-white"}`} data-testid={`official-tab-${key}`}>
               {label}
             </button>
           ))}
