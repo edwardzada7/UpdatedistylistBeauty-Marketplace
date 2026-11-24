@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Scissors, Wallet, User, Star, CheckCircle2, TrendingUp, Grid3X3, Sparkles, Heart, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
-import { stylistsAPI, feedAPI } from "@/services/api";
+import { stylistsAPI, feedAPI, providersAPI } from "@/services/api";
+import ProBadge from "@/components/ProBadge";
 import { useAuth } from "@/contexts/AuthContext";
 import { APP_NAME, APP_TAGLINE, CURRENCY, SERVICE_CATEGORIES } from "@/utils/constants";
 import BottomNavigation from "@/components/BottomNavigation";
@@ -35,17 +36,31 @@ const HomeScreen = () => {
 
   const fetchTopProviders = useCallback(async () => {
     try {
-      const response = await stylistsAPI.getAll({ 
-        verifiedOnly: true, 
-        sortBy: "premium" 
-      });
-      const allProviders = response.data;
-      setTopProviders(allProviders.slice(0, 3));
-      
+      let allProviders;
+      try {
+        // Same data as the Providers page: price, rating, area, services
+        const response = await providersAPI.getWithServices({});
+        allProviders = (response.data || []).map((p) => ({ ...p, user_id: p.provider_id, user_name: p.name }));
+      } catch (err) {
+        const response = await stylistsAPI.getAll({ verifiedOnly: true, sortBy: "premium" });
+        allProviders = (response.data || []).map((s) => ({
+          ...s,
+          name: s.user_name,
+          starting_price: s.hourly_rate,
+          rating: s.rating || 0,
+          active_service_count: 0,
+          services: [],
+        }));
+      }
+      const verified = allProviders.filter((p) => p.is_verified);
+      const rank = (p) => (p.is_pro ? 2 : 0) + (p.is_premium ? 1 : 0);
+      const ranked = [...verified].sort((x, y) => rank(y) - rank(x) || (y.rating || 0) - (x.rating || 0));
+      setTopProviders(ranked.slice(0, 3));
+
       setStats({
         totalProviders: allProviders.length,
-        verified: allProviders.filter(s => s.is_verified).length,
-        premium: allProviders.filter(s => s.is_premium).length,
+        verified: verified.length,
+        premium: allProviders.filter((p) => p.is_premium).length,
       });
     } catch (error) {
       console.error("Failed to fetch providers:", error);
@@ -283,6 +298,7 @@ const HomeScreen = () => {
                         <h4 className="font-semibold text-lg mb-1 flex items-center gap-1 min-w-0">
                           <span className="truncate">{provider.user_name || "Provider"}</span>
                           <PersonVerified id={provider.user_id} verified={provider.is_verified} size={18} />
+                          <ProBadge pro={provider.is_pro} />
                         </h4>
                         <div className="flex items-center gap-1">
                           {provider.is_premium && (
@@ -291,14 +307,40 @@ const HomeScreen = () => {
                         </div>
                       </div>
                     </div>
-                    <p className="text-2xl font-bold text-purple-600">
-                      {CURRENCY}{provider.hourly_rate?.toLocaleString() || "0"}
-                      <span className="text-sm text-gray-600">/session</span>
-                    </p>
+                    <div className="flex items-end justify-between gap-2">
+                      <div>
+                        <p className="text-xs text-gray-500">From</p>
+                        <p className="text-2xl font-bold text-purple-600">
+                          {CURRENCY}{Number(provider.starting_price ?? provider.hourly_rate ?? 0).toLocaleString()}
+                          <span className="text-sm text-gray-600">/session</span>
+                        </p>
+                      </div>
+                      {provider.rating > 0 && (
+                        <div className="flex items-center gap-1">
+                          <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                          <span className="text-sm font-medium">{Number(provider.rating).toFixed(1)}</span>
+                        </div>
+                      )}
+                    </div>
+                    {provider.primary_service && (
+                      <p className="text-sm text-purple-600 mt-1 truncate">{provider.primary_service}</p>
+                    )}
                     {locationOf(provider) && (
                       <p className="text-xs text-gray-500 mt-2">
-                        📍 {locationOf(provider)}
+                        📍 {provider.area_name || locationOf(provider)}
                       </p>
+                    )}
+                    {provider.services && provider.services.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {provider.services.slice(0, 3).map((svc) => (
+                          <span key={svc.sub_service_id || svc.id} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                            {svc.sub_service_name || svc.service_name}
+                          </span>
+                        ))}
+                        {provider.active_service_count > 3 && (
+                          <span className="text-xs text-gray-400">+{provider.active_service_count - 3} more</span>
+                        )}
+                      </div>
                     )}
                   </CardContent>
                 </Card>
