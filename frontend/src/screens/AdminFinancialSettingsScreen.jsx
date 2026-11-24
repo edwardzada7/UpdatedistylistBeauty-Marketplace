@@ -120,10 +120,23 @@ export default function AdminFinancialSettingsScreen() {
   };
 
   // Live preview using ₦10,000 as example
+  // Live preview: always reflects what is typed in the form (not only what was saved)
+  const num = (v) => {
+    const n = parseFloat(v);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
   const previewGross = 10000;
-  const previewPct = Number(feePercentage) || 0;
-  const previewFee = Math.round(previewGross * (previewPct / 100) * 100) / 100;
-  const previewNet = previewGross - previewFee;
+  const previewPct = num(feePercentage);
+  const previewFlat = num(feeFlat);
+  const previewFee = Math.min(previewGross, Math.round((previewGross * (previewPct / 100) + previewFlat) * 100) / 100);
+  const previewNet = Math.round((previewGross - previewFee) * 100) / 100;
+  const bookingPct = num(bookingCommission);
+  const bookingCut = Math.round(previewGross * (bookingPct / 100) * 100) / 100;
+  const shopPctPreview = num(shopCommissionPercentage);
+  const shopCut = Math.round(previewGross * (shopPctPreview / 100) * 100) / 100;
+  const minW = num(minWithdrawal);
+  const maxW = num(maxWithdrawal);
+  const money = (n) => `${CURRENCY}${n.toLocaleString()}`;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -293,21 +306,47 @@ export default function AdminFinancialSettingsScreen() {
               <CardHeader>
                 <CardTitle className="text-base">Live Preview</CardTitle>
                 <CardDescription>
-                  Example breakdown for a {CURRENCY}10,000 withdrawal request.
+                  Updates as you type. Examples use {money(10000)}. Nothing is saved until you press Save.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Requested Amount:</span>
-                  <span className="font-semibold">{CURRENCY}{previewGross.toLocaleString()}</span>
+              <CardContent className="space-y-4 text-sm">
+                <div className="space-y-1">
+                  <p className="font-semibold text-gray-900">1. A provider withdraws {money(previewGross)}</p>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">
+                      Withdrawal fee{previewPct > 0 || previewFlat > 0 ? ` (${[previewPct > 0 ? `${previewPct}%` : "", previewFlat > 0 ? `${money(previewFlat)} flat` : ""].filter(Boolean).join(" + ")})` : " (none)"}:
+                    </span>
+                    <span className="font-semibold text-amber-700" data-testid="preview-fee-amount">{money(previewFee)}</span>
+                  </div>
+                  <div className="flex justify-between pt-1 border-t border-gray-200">
+                    <span className="text-gray-900 font-medium">Provider receives:</span>
+                    <span className="font-bold text-purple-700">{money(previewNet)}</span>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {minW > 0 ? `Minimum ${money(minW)}. ` : "No minimum. "}
+                    {maxW > 0 ? `Maximum ${money(maxW)}.` : "No maximum."}
+                  </p>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Platform Fee ({previewPct}%):</span>
-                  <span className="font-semibold text-amber-700">{CURRENCY}{previewFee.toLocaleString()}</span>
+
+                <div className="space-y-1">
+                  <p className="font-semibold text-gray-900">2. A customer books a {money(10000)} service</p>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Your booking commission ({bookingPct}%):</span>
+                    <span className="font-semibold text-green-700">{money(bookingCut)}</span>
+                  </div>
+                  <div className="flex justify-between pt-1 border-t border-gray-200">
+                    <span className="text-gray-900 font-medium">Provider earns:</span>
+                    <span className="font-bold text-purple-700">{money(previewGross - bookingCut)}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between pt-2 border-t border-gray-200">
-                  <span className="text-gray-900 font-medium">Amount Provider Receives:</span>
-                  <span className="font-bold text-purple-700">{CURRENCY}{previewNet.toLocaleString()}</span>
+
+                <div className="space-y-1">
+                  <p className="font-semibold text-gray-900">3. A customer buys a {money(10000)} shop item</p>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Shop commission ({shopPctPreview}%):</span>
+                    <span className="font-semibold text-green-700">{money(shopCut)}</span>
+                  </div>
+                  <p className="text-xs text-gray-500">Shop payouts are made manually for now, so deduct this amount when you pay the seller.</p>
                 </div>
               </CardContent>
             </Card>

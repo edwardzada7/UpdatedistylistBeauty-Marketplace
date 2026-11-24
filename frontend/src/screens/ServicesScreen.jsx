@@ -152,12 +152,6 @@ export default function ServicesScreen() {
           </div>
         </div>
 
-        {/* Phase 2 Notice */}
-        <div className="mt-8 p-4 bg-purple-50 rounded-xl border border-purple-100">
-          <p className="text-sm text-purple-700 text-center">
-            🚀 <strong>Coming Soon:</strong> Book appointments, chat with providers, and pay securely — all in Phase 2!
-          </p>
-        </div>
       </div>
 
       <Footer />
