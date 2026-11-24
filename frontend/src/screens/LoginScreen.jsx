@@ -1,3 +1,4 @@
+import { takeReturnTo } from "@/utils/returnTo";
 import React, { useState, useEffect } from "react";
 import { loginWithEmail } from "@/services/authService";
 import { Button } from "@/components/ui/button";
@@ -35,7 +36,7 @@ export default function LoginScreen() {
       setLoading(true);
       await loginWithEmail(email, password);
       toast.success("Logged in successfully!");
-      navigate("/home", { replace: true });
+      navigate(takeReturnTo() || "/home", { replace: true });
     } catch (error) {
       console.error("[LoginScreen] Login error:", error);
       // Safely extract error message to avoid any body stream issues

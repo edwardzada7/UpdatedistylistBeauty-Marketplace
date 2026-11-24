@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, CalendarDays, MapPin, Ticket } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { setReturnTo } from "@/utils/returnTo";
+import { APP_NAME } from "@/utils/constants";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import VerifiedBadge from "@/components/VerifiedBadge";
@@ -9,6 +12,7 @@ import { formatMoney } from "@/utils/money";
 
 export default function EventsScreen() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const [events, setEvents] = useState(null);
   const [error, setError] = useState("");
 
@@ -21,13 +25,27 @@ export default function EventsScreen() {
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <Button variant="ghost" size="sm" onClick={() => navigate(-1)} aria-label="Back"><ArrowLeft className="h-4 w-4" /></Button>
-            <h1 className="text-xl font-bold truncate">Events</h1>
+            {isAuthenticated && <Button variant="ghost" size="sm" onClick={() => navigate(-1)} aria-label="Back"><ArrowLeft className="h-4 w-4" /></Button>}
+            <h1 className="text-xl font-bold truncate">{isAuthenticated ? "Events" : `${APP_NAME} Events`}</h1>
           </div>
-          <Button size="sm" variant="outline" onClick={() => navigate("/tickets")}><Ticket className="h-4 w-4 mr-1" /> My Tickets</Button>
+          {isAuthenticated ? (
+            <Button size="sm" variant="outline" onClick={() => navigate("/tickets")}><Ticket className="h-4 w-4 mr-1" /> My Tickets</Button>
+          ) : (
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => { setReturnTo("/events"); navigate("/login"); }}>Log in</Button>
+              <Button size="sm" onClick={() => { setReturnTo("/events"); navigate("/signup"); }}>Join free</Button>
+            </div>
+          )}
         </div>
       </header>
       <main className="container mx-auto px-4 py-5 max-w-2xl space-y-4">
+        {!isAuthenticated && (
+          <div className="rounded-2xl bg-gradient-to-br from-purple-600 to-pink-500 text-white p-5 space-y-2" data-testid="events-join-banner">
+            <h2 className="text-xl font-bold">Beauty, fashion &amp; style events near you</h2>
+            <p className="text-sm text-white/90">Browse what's happening. Create a free {APP_NAME} account to get your tickets, and to book trusted stylists, makeup artists and more.</p>
+            <Button className="bg-white text-purple-700 hover:bg-white/90" onClick={() => { setReturnTo("/events"); navigate("/signup"); }}>Join {APP_NAME} free</Button>
+          </div>
+        )}
         {events === null && <p className="text-center text-gray-500 py-10">Loading events...</p>}
         {error && <p className="text-center text-red-600">{error}</p>}
         {events && !events.length && !error && (

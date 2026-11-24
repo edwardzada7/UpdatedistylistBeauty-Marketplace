@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { ArrowLeft, User, Mail, Phone, Save, Loader2, LogOut, Shield, Star, MapPin, FileText, Building2, CalendarClock, AlertTriangle, Trash2 } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, Save, Loader2, LogOut, Shield, Star, MapPin, FileText, Building2, CalendarClock, AlertTriangle, Trash2, Ticket, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { usersAPI, stylistsAPI, kycAPI } from "@/services/api";
 import { loginWithEmail } from "@/services/authService";
@@ -549,6 +549,15 @@ const ProfileScreen = () => {
                         {role === "stylist" || role === "provider" ? "Service Provider" : "Customer"}
                       </p>
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button variant="outline" className="h-auto py-3 flex-col gap-1" onClick={() => navigate("/tickets")} data-testid="profile-my-tickets">
+                      <Ticket className="h-5 w-5 text-purple-600" /> My Tickets
+                    </Button>
+                    <Button variant="outline" className="h-auto py-3 flex-col gap-1" onClick={() => navigate("/events")} data-testid="profile-events">
+                      <CalendarDays className="h-5 w-5 text-purple-600" /> Events
+                    </Button>
                   </div>
                 </div>
               )}

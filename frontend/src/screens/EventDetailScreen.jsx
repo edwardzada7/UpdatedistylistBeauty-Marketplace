@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CalendarDays, Loader2, MapPin, Minus, Plus, Ticket } from "lucide-react";
+import { ArrowLeft, CalendarDays, Loader2, MapPin, Minus, Plus, Share2, Ticket } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { useAuth } from "@/contexts/AuthContext";
+import { setReturnTo } from "@/utils/returnTo";
 import { eventsAPI, formatEventDate } from "@/services/eventsApi";
 import { formatMoney } from "@/utils/money";
 
@@ -43,10 +44,19 @@ export default function EventDetailScreen() {
 
   const maxQty = selected ? Math.min(selected.max_per_order, selected.remaining ?? selected.max_per_order) : 1;
 
+  const share = async () => {
+    const url = `${window.location.origin}/events/${id}`;
+    try {
+      if (navigator.share) await navigator.share({ title: event?.title, text: event?.title, url });
+      else { await navigator.clipboard.writeText(url); toast.success("Link copied"); }
+    } catch (_) { /* share dismissed */ }
+  };
+
   const buy = async () => {
     if (!isAuthenticated) {
-      toast.info("Please sign in to get tickets");
-      navigate("/login");
+      toast.info("Create a free account (or log in) to get tickets");
+      setReturnTo(`/events/${id}`);
+      navigate("/signup");
       return;
     }
     const email = userData?.email || user?.email;
@@ -83,8 +93,9 @@ export default function EventDetailScreen() {
     <div className="min-h-screen bg-gray-50 pb-32">
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="container mx-auto px-4 py-3 flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => navigate(-1)} aria-label="Back"><ArrowLeft className="h-4 w-4" /></Button>
-          <h1 className="text-lg font-bold truncate">Event details</h1>
+          <Button variant="ghost" size="sm" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/events"))} aria-label="Back"><ArrowLeft className="h-4 w-4" /></Button>
+          <h1 className="text-lg font-bold truncate flex-1">Event details</h1>
+          <Button variant="outline" size="sm" onClick={share} data-testid="event-share-btn"><Share2 className="h-4 w-4 mr-1" />Share</Button>
         </div>
       </header>
       <main className="container mx-auto max-w-2xl">
@@ -157,7 +168,7 @@ export default function EventDetailScreen() {
         <div className="fixed bottom-0 inset-x-0 bg-white border-t p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] z-20">
           <div className="container mx-auto max-w-2xl">
             <Button className="w-full h-12 text-base" disabled={busy || !selected?.on_sale} onClick={buy} data-testid="event-buy-btn">
-              {busy ? "Please wait..." : !selected ? "Sold out" : free ? "I'm attending" : `Buy ${qty > 1 ? `${qty} tickets` : "ticket"}${quote ? ` · ${formatMoney(quote.total)}` : ""}`}
+              {busy ? "Please wait..." : !selected ? "Sold out" : !isAuthenticated ? "Sign up to get tickets" : free ? "I'm attending" : `Buy ${qty > 1 ? `${qty} tickets` : "ticket"}${quote ? ` · ${formatMoney(quote.total)}` : ""}`}
             </Button>
           </div>
         </div>

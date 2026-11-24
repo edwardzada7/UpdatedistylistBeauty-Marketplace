@@ -33,6 +33,8 @@ export default function EventScannerScreen() {
   const [counts, setCounts] = useState({ total: 0, checked_in: 0 });
   const [cameraOn, setCameraOn] = useState(false);
   const [camError, setCamError] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const autoTried = useRef(false);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const timerRef = useRef(null);
@@ -48,7 +50,9 @@ export default function EventScannerScreen() {
       setCounts({ total: data.total, checked_in: data.checked_in });
     } catch (e) {
       sessionStorage.removeItem(CODE_KEY);
-      toast.error(e?.response?.data?.detail || "Invalid scanner code");
+      const msg = e?.response?.data?.detail || "Could not reach the server. Check your connection.";
+      setLoginError(msg);
+      toast.error(msg);
     }
   }, []);
 
@@ -95,7 +99,7 @@ export default function EventScannerScreen() {
     setCameraOn(false);
   }, []);
 
-  const startCamera = async () => {
+  const startCamera = useCallback(async () => {
     setCamError("");
     if (!("BarcodeDetector" in window)) {
       setCamError("This browser can't scan QR codes. Use Chrome on Android, or type the PIN below.");
@@ -117,9 +121,21 @@ export default function EventScannerScreen() {
       }, 350);
       setCameraOn(true);
     } catch (e) {
-      setCamError("Camera access was blocked. Allow the camera for this site, or type the PIN below.");
+      setCamError(
+        e?.name === "NotAllowedError"
+          ? "Camera access was blocked. Tap the lock icon in the address bar, allow the camera, then tap Start camera."
+          : `Couldn't start the camera (${e?.name || "error"}). Type the PIN below instead.`
+      );
     }
-  };
+  }, [handleCode]);
+
+  // Try to open the camera as soon as the scanner is signed in.
+  useEffect(() => {
+    if (session && creds && !autoTried.current) {
+      autoTried.current = true;
+      startCamera();
+    }
+  }, [session, creds, startCamera]);
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
@@ -132,7 +148,9 @@ export default function EventScannerScreen() {
             <h1 className="text-xl font-bold mt-2">Ticket scanner</h1>
             <p className="text-sm text-gray-600">Enter the scanner code you were given for this event.</p>
           </div>
-          <Input value={codeInput} onChange={(e) => setCodeInput(e.target.value.toUpperCase())} placeholder="Scanner code" className="text-center text-lg tracking-widest" autoCapitalize="characters" data-testid="scanner-code-input" />
+          {/^\d{6}$/.test(codeInput.trim()) && <p className="text-sm text-amber-700">That looks like a ticket PIN. Scanner codes are 8 letters/numbers created in Admin → Events → Scanners.</p>}
+          {loginError && <p className="text-sm text-red-600">{loginError}</p>}
+          <Input value={codeInput} onChange={(e) => { setLoginError(""); setCodeInput(e.target.value.toUpperCase()); }} placeholder="Scanner code" className="text-center text-lg tracking-widest" autoCapitalize="characters" data-testid="scanner-code-input" />
           <Button className="w-full" disabled={codeInput.trim().length < 4} onClick={() => signIn(codeInput.trim())}>Start scanning</Button>
         </div>
       </div>
@@ -152,7 +170,7 @@ export default function EventScannerScreen() {
               <p className="text-xs text-gray-500">Checked in {counts.checked_in} / {counts.total}</p>
             </div>
           </div>
-          {!adminEventId && <Button variant="outline" size="sm" onClick={() => { stopCamera(); sessionStorage.removeItem(CODE_KEY); setCreds(null); setSession(null); }}>Sign out</Button>}
+          {!adminEventId && <Button variant="outline" size="sm" onClick={() => { stopCamera(); autoTried.current = false; sessionStorage.removeItem(CODE_KEY); setCreds(null); setSession(null); }}>Sign out</Button>}
         </div>
       </header>
       <main className="container mx-auto px-4 py-4 max-w-md space-y-4">

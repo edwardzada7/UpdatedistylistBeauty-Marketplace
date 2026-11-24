@@ -15,7 +15,20 @@ export default function EventsStrip({ showTickets = true }) {
     return () => { cancelled = true; };
   }, []);
 
-  if (!events.length) return null;
+  if (!events.length) {
+    if (!showTickets) return null;
+    return (
+      <section className="mb-6" data-testid="events-strip">
+        <div className="flex items-center justify-between gap-2 bg-white rounded-xl border p-3">
+          <h3 className="font-bold flex items-center gap-2"><CalendarDays className="h-5 w-5 text-purple-600" /> Events</h3>
+          <div className="flex items-center gap-3 text-sm">
+            <button type="button" onClick={() => navigate("/tickets")} className="text-purple-700 font-medium flex items-center gap-1"><Ticket className="h-4 w-4" /> My Tickets</button>
+            <button type="button" onClick={() => navigate("/events")} className="text-gray-700 font-medium">Browse →</button>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="mb-8" data-testid="events-strip">
