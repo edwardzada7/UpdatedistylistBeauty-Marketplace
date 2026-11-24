@@ -154,6 +154,11 @@ export const providerShopApi = {
     return res.data;
   },
 
+  async updateOrderStatus(orderId, status) {
+    const res = await api.patch(`/shop/orders/${orderId}`, { status });
+    return res.data;
+  },
+
   /** Orders for products this provider owns (shop_orders has no seller column, so go through the items). */
   async getOrders(authId) {
     const { data: itemRows } = await supabase
