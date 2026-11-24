@@ -115,7 +115,6 @@ const ProviderProfileScreen = () => {
   }, [provider]);
 
   const fetchProviderProfile = useCallback(async () => {
-    setLoading(true);
     try {
       const response = await providersAPI.getFullProfile(userId);
       setProvider(response.data);
@@ -854,17 +853,18 @@ const ProviderProfileScreen = () => {
                   src={avatarOf(provider)}
                   name={provider.display_name || provider.name}
                   size={96}
+                  className="shrink-0"
                 />
-                <div className="flex-1">
-                  <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-                    <span>{provider.display_name || provider.name || "Provider"}</span>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-xl sm:text-2xl font-bold mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="break-words min-w-0">{provider.display_name || provider.name || "Provider"}</span>
                     <PersonVerified id={provider.user_id} authId={provider.auth_id} verified={provider.is_verified || provider.kyc_status === "verified"} size={22} />
                     <ProBadge pro={provider.is_pro} size="md" />
                     <CertifiedBadge certified={provider.is_certified} size="md" />
                   </h2>
                   {locationOf(provider) && (
-                    <p className="text-sm text-gray-600 mb-2 flex items-center gap-1" data-testid="provider-location">
-                      <MapPin className="h-3.5 w-3.5" />
+                    <p className="text-sm text-gray-600 mb-2 flex items-start gap-1 break-words" data-testid="provider-location">
+                      <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                       {locationOf(provider)}
                     </p>
                   )}

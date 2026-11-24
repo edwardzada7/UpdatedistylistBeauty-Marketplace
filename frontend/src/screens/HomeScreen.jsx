@@ -284,10 +284,10 @@ const HomeScreen = () => {
               {topProviders.map((provider) => (
                 <Card
                   key={provider.user_id}
-                  className="cursor-pointer hover:shadow-lg transition-all"
+                  className="cursor-pointer hover:shadow-lg transition-all min-w-0 overflow-hidden"
                   onClick={() => navigate(`/providers/${provider.user_id}`)}
                 >
-                  <CardContent className="p-6">
+                  <CardContent className="p-4 sm:p-6">
                     <div className="flex items-center gap-3 mb-3">
                       <PersonAvatar
                         id={provider.user_id}
@@ -295,9 +295,9 @@ const HomeScreen = () => {
                         name={provider.user_name || provider.business_name}
                         size={52}
                       />
-                      <div className="min-w-0">
-                        <h4 className="font-semibold text-lg mb-1 flex items-center gap-1 min-w-0">
-                          <span className="truncate">{provider.user_name || "Provider"}</span>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-semibold text-lg mb-1 flex flex-wrap items-center gap-x-1 gap-y-1 min-w-0">
+                          <span className="break-words min-w-0">{provider.user_name || "Provider"}</span>
                           <PersonVerified id={provider.user_id} verified={provider.is_verified} size={18} />
                           <ProBadge pro={provider.is_pro} />
                           <CertifiedBadge certified={provider.is_certified} />
@@ -309,8 +309,8 @@ const HomeScreen = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-end justify-between gap-2">
-                      <div>
+                    <div className="flex flex-wrap items-end justify-between gap-2">
+                      <div className="min-w-0">
                         <p className="text-xs text-gray-500">From</p>
                         <p className="text-2xl font-bold text-purple-600">
                           {CURRENCY}{Number(provider.starting_price ?? provider.hourly_rate ?? 0).toLocaleString()}
@@ -325,10 +325,10 @@ const HomeScreen = () => {
                       )}
                     </div>
                     {provider.primary_service && (
-                      <p className="text-sm text-purple-600 mt-1 truncate">{provider.primary_service}</p>
+                      <p className="text-sm text-purple-600 mt-1 break-words">{provider.primary_service}</p>
                     )}
                     {locationOf(provider) && (
-                      <p className="text-xs text-gray-500 mt-2">
+                      <p className="text-xs text-gray-500 mt-2 break-words">
                         📍 {provider.area_name || locationOf(provider)}
                       </p>
                     )}

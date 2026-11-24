@@ -353,8 +353,8 @@ const ProfileScreen = () => {
           {/* Profile Card */}
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4 min-w-0">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 min-w-0 text-center sm:text-left">
                   <div className="flex flex-col items-center gap-2 shrink-0">
                     <PersonAvatar
                       authId={userData?.auth_id}
@@ -364,12 +364,12 @@ const ProfileScreen = () => {
                     />
                     <AvatarUploader userData={userData} isProvider={isProvider} onDone={async (url) => { setPhoto(url); await refreshUser(); }} />
                   </div>
-                  <div className="min-w-0">
-                    <CardTitle className="text-xl sm:text-2xl flex items-center gap-2 flex-wrap">
+                  <div className="min-w-0 w-full sm:w-auto">
+                    <CardTitle className="text-xl sm:text-2xl flex items-center justify-center sm:justify-start gap-2 flex-wrap break-words">
                       {displayName}
                       <PersonVerified authId={userData?.auth_id} verified={isVerifiedProfile(providerData) || isVerifiedProfile(userData) || kycStatus === "verified"} size={22} />
                     </CardTitle>
-                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <div className="flex items-center justify-center sm:justify-start gap-2 mt-2 flex-wrap">
                       <Badge variant="outline" className="capitalize">
                         {role === "stylist" || role === "provider" ? "Provider" : "Customer"}
                       </Badge>
@@ -411,7 +411,7 @@ const ProfileScreen = () => {
                   </div>
                 </div>
                 {!editing && (
-                  <Button onClick={() => setEditing(true)} size="sm">
+                  <Button onClick={() => setEditing(true)} size="sm" className="w-full sm:w-auto">
                     Edit Profile
                   </Button>
                 )}
