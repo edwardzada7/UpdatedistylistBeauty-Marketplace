@@ -19,6 +19,7 @@ import ReportButton from "@/components/ReportButton";
 import PersonAvatar, { PersonVerified } from "@/components/PersonAvatar";
 import HomeVisitCard from "@/components/HomeVisitCard";
 import { avatarOf, locationOf } from "@/utils/profile";
+import CertifiedBadge from "@/components/CertifiedBadge";
 import ProBadge from "@/components/ProBadge";
 
 const ProviderProfileScreen = () => {
@@ -859,6 +860,7 @@ const ProviderProfileScreen = () => {
                     <span>{provider.display_name || provider.name || "Provider"}</span>
                     <PersonVerified id={provider.user_id} authId={provider.auth_id} verified={provider.is_verified || provider.kyc_status === "verified"} size={22} />
                     <ProBadge pro={provider.is_pro} size="md" />
+                    <CertifiedBadge certified={provider.is_certified} size="md" />
                   </h2>
                   {locationOf(provider) && (
                     <p className="text-sm text-gray-600 mb-2 flex items-center gap-1" data-testid="provider-location">

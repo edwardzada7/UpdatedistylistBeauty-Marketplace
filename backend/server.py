@@ -99,6 +99,7 @@ class UserUpdate(BaseModel):
     location_address: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    profile_image_url: Optional[str] = None
 
 class UserResponse(BaseModel):
     id: int
@@ -151,6 +152,7 @@ class StylistUpdate(BaseModel):
     # Home-service range (phase34)
     travel_radius_km: Optional[float] = None
     travel_fee_per_km: Optional[float] = None
+    profile_image_url: Optional[str] = None
 
 class StylistResponse(BaseModel):
     user_id: int  # Primary key
@@ -5020,6 +5022,7 @@ def get_providers_with_services(
                     "is_verified": stylist.get("is_verified", False),
                     "is_premium": stylist.get("is_premium", False),
                     "is_pro": bool(stylist.get("auth_id") and stylist.get("auth_id") in _pro_auth_ids()),
+                    "is_certified": bool(stylist.get("auth_id") and stylist.get("auth_id") in _certified_auth_ids()),
                     "starting_price": min_service_price,
                     "primary_service": primary_service["sub_service_name"] if primary_service else None,
                     "primary_category": primary_service["category_id"] if primary_service else None,
@@ -5160,6 +5163,7 @@ def get_provider_full_profile(provider_id: int):
             "profile_image_url": profile_photo,
             "photo_url": profile_photo,
             "is_pro": bool(stylist.get("auth_id") and stylist.get("auth_id") in _pro_auth_ids()),
+            "is_certified": bool(stylist.get("auth_id") and stylist.get("auth_id") in _certified_auth_ids()),
             "bio": stylist.get("bio"),
             "location": stylist.get("location"),
             # Phase 1.9 - Provider type info
@@ -7984,6 +7988,38 @@ def _enrich_post(post: dict, viewer_auth_id: Optional[str] = None) -> dict:
 _PRO_CACHE: Dict[str, Any] = {"at": 0.0, "ids": set()}
 
 
+_CERT_CACHE = {"at": 0.0, "ids": set()}
+
+
+def _certified_auth_ids() -> set:
+    """Auth ids of providers with an approved, unexpired certificate (cached for 60 seconds)."""
+    import time as _t
+    if _t.time() - _CERT_CACHE["at"] < 60:
+        return _CERT_CACHE["ids"]
+    ids: set = set()
+    try:
+        rows = supabase.table("provider_certifications").select("*").limit(5000).execute().data or []
+        today = datetime.utcnow().date()
+        for r in rows:
+            if not (r.get("status") == "approved" or r.get("verification_status") == "approved"):
+                continue
+            if r.get("is_active") is False:
+                continue
+            exp = r.get("expiry_date") or r.get("expires_at")
+            if exp:
+                try:
+                    if datetime.fromisoformat(str(exp).replace("Z", "+00:00")).date() < today:
+                        continue
+                except ValueError:
+                    continue
+            if r.get("provider_auth_id"):
+                ids.add(r["provider_auth_id"])
+    except Exception as ex:
+        logging.warning(f"_certified_auth_ids failed: {ex}")
+    _CERT_CACHE.update({"at": _t.time(), "ids": ids})
+    return ids
+
+
 def _pro_auth_ids() -> set:
     """Auth ids of providers with an active Pro subscription (cached for 60 seconds)."""
     import time as _t
@@ -8073,6 +8109,7 @@ def _enrich_posts(posts: list, viewer_auth_id: Optional[str] = None) -> list:
             "city": user.get("city"),
             "display_name": display or "Provider",
             "is_pro": bool(provider_auth_id and provider_auth_id in _pro_auth_ids()),
+            "is_certified": bool(provider_auth_id and provider_auth_id in _certified_auth_ids()),
         }
         enriched["liked_by_me"] = post.get("id") in liked
         out.append(enriched)

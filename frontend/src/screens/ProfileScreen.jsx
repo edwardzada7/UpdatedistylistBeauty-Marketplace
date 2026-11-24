@@ -20,6 +20,8 @@ import KYCStatusBadge from "@/components/KYCStatusBadge";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
 import PersonAvatar, { PersonVerified } from "@/components/PersonAvatar";
+import AvatarUploader from "@/components/AvatarUploader";
+import CertifiedBadge, { useOwnCertified } from "@/components/CertifiedBadge";
 import { avatarOf, isVerifiedProfile } from "@/utils/profile";
 import NotificationBell from "@/components/NotificationBell";
 import { currencySymbol } from "@/utils/money";
@@ -30,6 +32,8 @@ const ProfileScreen = () => {
   const navigate = useNavigate();
   const { user, userData, providerData, displayName, role, isProvider, signOut, refreshUser } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [photo, setPhoto] = useState(null);
+  const certified = useOwnCertified(userData?.auth_id, isProvider);
   const [editing, setEditing] = useState(false);
   const [editingProvider, setEditingProvider] = useState(false);
 
@@ -351,12 +355,15 @@ const ProfileScreen = () => {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4 min-w-0">
-                  <PersonAvatar
-                    authId={userData?.auth_id}
-                    src={avatarOf(providerData) || avatarOf(userData)}
-                    name={displayName}
-                    size={80}
-                  />
+                  <div className="flex flex-col items-center gap-2 shrink-0">
+                    <PersonAvatar
+                      authId={userData?.auth_id}
+                      src={photo || avatarOf(providerData) || avatarOf(userData)}
+                      name={displayName}
+                      size={80}
+                    />
+                    <AvatarUploader userData={userData} isProvider={isProvider} onDone={async (url) => { setPhoto(url); await refreshUser(); }} />
+                  </div>
                   <div className="min-w-0">
                     <CardTitle className="text-xl sm:text-2xl flex items-center gap-2 flex-wrap">
                       {displayName}
@@ -372,6 +379,7 @@ const ProfileScreen = () => {
                           Verified
                         </Badge>
                       )}
+                      <CertifiedBadge certified={certified} size="md" />
                       {isProvider && providerData?.is_premium && (
                         <Badge className="bg-amber-50 text-amber-700 border-amber-200">
                           <Star className="h-3 w-3 mr-1" />
