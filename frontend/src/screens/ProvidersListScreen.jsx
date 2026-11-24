@@ -57,7 +57,6 @@ const ProvidersListScreen = () => {
   };
 
   const fetchProviders = useCallback(async () => {
-    setLoading(true);
     try {
       // First try to get providers with services (Phase 1.4)
       const filters = {};
@@ -294,8 +293,8 @@ const ProvidersListScreen = () => {
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
                           {/* Phase 1.9 - Use display_name */}
-                          <h3 className="font-semibold text-lg flex items-center gap-1 min-w-0">
-                            <span className="truncate">{provider.display_name || provider.name || "Provider"}</span>
+                          <h3 className="font-semibold text-lg flex flex-wrap items-center gap-x-1 gap-y-1 min-w-0">
+                            <span className="break-words min-w-0">{provider.display_name || provider.name || "Provider"}</span>
                             <PersonVerified id={provider.provider_id ?? provider.user_id} verified={provider.is_verified} size={18} />
                             <ProBadge pro={provider.is_pro} />
                             <CertifiedBadge certified={provider.is_certified} />

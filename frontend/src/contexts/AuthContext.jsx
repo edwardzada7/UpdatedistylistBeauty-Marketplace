@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import {
   getCurrentUser,
   onAuthStateChange,
@@ -20,6 +20,9 @@ export const AuthProvider = ({ children }) => {
   const [userData, setUserData] = useState(null);   // User data from our backend
   const [providerData, setProviderData] = useState(null); // Provider/stylist profile if exists
   const [loading, setLoading] = useState(true);
+  const initialLoadDone = useRef(false);
+  // Keep the old object when nothing changed so screens don't refetch on every quiet refresh.
+  const keepIfSame = (next) => (prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next);
 
   /**
    * Get display name from userData or user metadata
@@ -140,23 +143,25 @@ export const AuthProvider = ({ children }) => {
    */
   const loadUser = useCallback(async () => {
     try {
-      setLoading(true);
+      // Only the very first load shows the full-screen spinner. Later refreshes (token refresh,
+      // tab focus, profile edits) update quietly in the background so pages don't remount.
+      if (!initialLoadDone.current) setLoading(true);
       const result = await getCurrentUser();
 
       if (result?.user) {
-        setUser(result.user);
+        setUser(keepIfSame(result.user));
         
         // Ensure user exists in backend and get/create their record
         let userRecord = result.userData;
         if (!userRecord) {
           userRecord = await ensureUserExists(result.user);
         }
-        setUserData(userRecord);
+        setUserData(keepIfSame(userRecord));
         
         // If user is a provider, ensure provider profile exists
         if (userRecord && (userRecord.role === "stylist" || userRecord.role === "provider")) {
           const provider = await ensureProviderExists(userRecord);
-          setProviderData(provider);
+          setProviderData(keepIfSame(provider));
         } else {
           setProviderData(null);
         }
@@ -171,6 +176,7 @@ export const AuthProvider = ({ children }) => {
       setUserData(null);
       setProviderData(null);
     } finally {
+      initialLoadDone.current = true;
       setLoading(false);
     }
   }, []);
@@ -186,7 +192,8 @@ export const AuthProvider = ({ children }) => {
     loadUser();
 
     const { data: listener } = onAuthStateChange((event) => {
-      console.log("[AuthContext] Auth state changed:", event);
+      // Token refreshes and the initial-session echo don't change who is signed in.
+      if (event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") return;
       loadUser();
     });
 
