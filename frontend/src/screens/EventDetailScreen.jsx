@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CalendarDays, Loader2, MapPin, Minus, Plus, Ticket } from "lucide-react";
+import { ArrowLeft, CalendarDays, Loader2, MapPin, Minus, Plus, Share2, Ticket } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -45,7 +45,8 @@ export default function EventDetailScreen() {
 
   const buy = async () => {
     if (!isAuthenticated) {
-      toast.info("Please sign in to get tickets");
+      toast.info("Sign in or create a free account to get tickets");
+      try { sessionStorage.setItem("POST_LOGIN_REDIRECT", `/events/${id}`); } catch (_) { /* storage unavailable */ }
       navigate("/login");
       return;
     }
@@ -73,6 +74,14 @@ export default function EventDetailScreen() {
     }
   };
 
+  const share = async () => {
+    const url = `${window.location.origin}/events/${id}`;
+    try {
+      if (navigator.share) await navigator.share({ title: event.title, text: `${event.title} on iStylist`, url });
+      else { await navigator.clipboard.writeText(url); toast.success("Link copied"); }
+    } catch (_) { /* share dismissed */ }
+  };
+
   if (missing) return <div className="min-h-screen flex flex-col items-center justify-center gap-3"><p>This event isn't available.</p><Button onClick={() => navigate("/events")}>Back to events</Button></div>;
   if (!event) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-purple-600" /></div>;
 
@@ -83,8 +92,9 @@ export default function EventDetailScreen() {
     <div className="min-h-screen bg-gray-50 pb-32">
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="container mx-auto px-4 py-3 flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => navigate(-1)} aria-label="Back"><ArrowLeft className="h-4 w-4" /></Button>
-          <h1 className="text-lg font-bold truncate">Event details</h1>
+          <Button variant="ghost" size="sm" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/events"))} aria-label="Back"><ArrowLeft className="h-4 w-4" /></Button>
+          <h1 className="text-lg font-bold truncate flex-1">Event details</h1>
+          {event && <Button variant="outline" size="sm" onClick={share}><Share2 className="h-4 w-4 mr-1" />Share</Button>}
         </div>
       </header>
       <main className="container mx-auto max-w-2xl">

@@ -8,6 +8,27 @@ import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
 import { adminEventsAPI, scannerAPI } from "@/services/eventsApi";
 
 const CODE_KEY = "EVENT_SCANNER_CODE";
+const JSQR_URL = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
+
+/** Loads the jsQR decoder on demand, for phones whose browser has no built-in QR detector. */
+const loadJsQR = () =>
+  new Promise((resolve, reject) => {
+    if (window.jsQR) return resolve(window.jsQR);
+    const script = document.createElement("script");
+    script.src = JSQR_URL;
+    script.onload = () => (window.jsQR ? resolve(window.jsQR) : reject(new Error("QR reader failed to load")));
+    script.onerror = () => reject(new Error("Could not load the QR reader. Check your internet connection."));
+    document.head.appendChild(script);
+  });
+
+const cameraErrorText = (e) => {
+  const name = e?.name || "";
+  if (name === "NotAllowedError" || name === "SecurityError") return "Camera permission was denied. Tap the lock icon next to the web address, allow Camera, then try again.";
+  if (name === "NotFoundError" || name === "OverconstrainedError") return "No camera was found on this device.";
+  if (name === "NotReadableError" || name === "AbortError") return "The camera is busy. Close other apps using it and try again.";
+  if (!window.isSecureContext) return "The camera only works on a secure (https) page.";
+  return `Could not start the camera${e?.message ? `: ${e.message}` : ""}. You can type the PIN below instead.`;
+};
 const RESULT_STYLE = {
   valid: { box: "bg-green-600", Icon: CheckCircle2, title: "VALID" },
   used: { box: "bg-red-600", Icon: XCircle, title: "ALREADY USED" },
@@ -97,27 +118,59 @@ export default function EventScannerScreen() {
 
   const startCamera = async () => {
     setCamError("");
-    if (!("BarcodeDetector" in window)) {
-      setCamError("This browser can't scan QR codes. Use Chrome on Android, or type the PIN below.");
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCamError(window.isSecureContext ? "This browser can't open the camera. Type the PIN below instead." : "The camera only works on a secure (https) page.");
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+      } catch (first) {
+        if (first?.name === "NotAllowedError") throw first;
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
       streamRef.current = stream;
       const video = videoRef.current;
       video.srcObject = stream;
       await video.play();
-      const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
-      timerRef.current = setInterval(async () => {
-        if (busyRef.current || video.readyState < 2) return;
-        try {
-          const found = await detector.detect(video);
-          if (found.length) handleCode(found[0].rawValue);
-        } catch (_) { /* frame not ready */ }
-      }, 350);
       setCameraOn(true);
+
+      // Use the phone's built-in detector when it works; otherwise fall back to jsQR on a canvas.
+      let native = null;
+      if ("BarcodeDetector" in window) {
+        try { native = new window.BarcodeDetector({ formats: ["qr_code"] }); } catch (_) { native = null; }
+      }
+      let jsQR = null;
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!native) jsQR = await loadJsQR();
+
+      timerRef.current = setInterval(async () => {
+        if (busyRef.current || video.readyState < 2 || !video.videoWidth) return;
+        try {
+          if (native) {
+            const found = await native.detect(video);
+            if (found.length) handleCode(found[0].rawValue);
+            return;
+          }
+        } catch (_) {
+          // Built-in detector unavailable on this phone: switch to jsQR.
+          native = null;
+          try { jsQR = await loadJsQR(); } catch (err) { setCamError(err.message); }
+        }
+        if (!jsQR) return;
+        const scale = Math.min(1, 640 / video.videoWidth);
+        canvas.width = Math.round(video.videoWidth * scale);
+        canvas.height = Math.round(video.videoHeight * scale);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const hit = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
+        if (hit?.data) handleCode(hit.data);
+      }, 300);
     } catch (e) {
-      setCamError("Camera access was blocked. Allow the camera for this site, or type the PIN below.");
+      stopCamera();
+      setCamError(cameraErrorText(e));
     }
   };
 
@@ -133,6 +186,9 @@ export default function EventScannerScreen() {
             <p className="text-sm text-gray-600">Enter the scanner code you were given for this event.</p>
           </div>
           <Input value={codeInput} onChange={(e) => setCodeInput(e.target.value.toUpperCase())} placeholder="Scanner code" className="text-center text-lg tracking-widest" autoCapitalize="characters" data-testid="scanner-code-input" />
+          {/^\d{6}$/.test(codeInput.trim()) && (
+            <p className="text-sm text-amber-700">That looks like a ticket PIN. Enter the scanner code instead (letters and numbers, from Admin → Events → Scanners).</p>
+          )}
           <Button className="w-full" disabled={codeInput.trim().length < 4} onClick={() => signIn(codeInput.trim())}>Start scanning</Button>
         </div>
       </div>
@@ -157,8 +213,8 @@ export default function EventScannerScreen() {
       </header>
       <main className="container mx-auto px-4 py-4 max-w-md space-y-4">
         <div className="rounded-2xl overflow-hidden bg-black aspect-square relative">
-          <video ref={videoRef} playsInline muted className={`h-full w-full object-cover ${cameraOn ? "" : "hidden"}`} />
-          {!cameraOn && <div className="absolute inset-0 flex items-center justify-center text-gray-400"><CameraOff className="h-12 w-12" /></div>}
+          <video ref={videoRef} playsInline muted autoPlay className="h-full w-full object-cover" />
+          {!cameraOn && <div className="absolute inset-0 bg-black flex items-center justify-center text-gray-400"><CameraOff className="h-12 w-12" /></div>}
           {cameraOn && <div className="absolute inset-8 border-2 border-white/70 rounded-xl pointer-events-none" />}
         </div>
         <Button className="w-full" variant={cameraOn ? "outline" : "default"} onClick={cameraOn ? stopCamera : startCamera} data-testid="scanner-camera-btn">

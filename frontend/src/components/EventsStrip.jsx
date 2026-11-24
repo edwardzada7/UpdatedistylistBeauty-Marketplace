@@ -8,14 +8,15 @@ import { formatMoney } from "@/utils/money";
 export default function EventsStrip({ showTickets = true }) {
   const navigate = useNavigate();
   const [events, setEvents] = useState([]);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    eventsAPI.list().then((list) => { if (!cancelled) setEvents(list.slice(0, 6)); }).catch(() => {});
+    eventsAPI.list().then((list) => { if (!cancelled) setEvents(list.slice(0, 6)); }).catch(() => {}).finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, []);
 
-  if (!events.length) return null;
+  if (!loaded) return null;
 
   return (
     <section className="mb-8" data-testid="events-strip">
@@ -28,6 +29,7 @@ export default function EventsStrip({ showTickets = true }) {
           <button type="button" onClick={() => navigate("/events")} className="text-gray-700 font-medium">View all →</button>
         </div>
       </div>
+      {!events.length && <p className="text-sm text-gray-500 bg-white border rounded-xl p-4">No upcoming events right now. Check back soon.</p>}
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x">
         {events.map((e) => (
           <button
