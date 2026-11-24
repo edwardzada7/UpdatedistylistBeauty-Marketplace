@@ -35,7 +35,13 @@ export default function LoginScreen() {
       setLoading(true);
       await loginWithEmail(email, password);
       toast.success("Logged in successfully!");
-      navigate("/home", { replace: true });
+      let next = "/home";
+      try {
+        const saved = sessionStorage.getItem("POST_LOGIN_REDIRECT");
+        if (saved && saved.startsWith("/")) next = saved;
+        sessionStorage.removeItem("POST_LOGIN_REDIRECT");
+      } catch (_) { /* storage unavailable */ }
+      navigate(next, { replace: true });
     } catch (error) {
       console.error("[LoginScreen] Login error:", error);
       // Safely extract error message to avoid any body stream issues

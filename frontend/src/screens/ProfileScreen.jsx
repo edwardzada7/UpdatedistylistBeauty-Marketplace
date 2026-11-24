@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { ArrowLeft, User, Mail, Phone, Save, Loader2, LogOut, Shield, Star, MapPin, FileText, Building2, CalendarClock, AlertTriangle, Trash2 } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, Save, Loader2, LogOut, Shield, Star, MapPin, FileText, Building2, CalendarClock, CalendarDays, Ticket, AlertTriangle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { usersAPI, stylistsAPI, kycAPI } from "@/services/api";
 import { loginWithEmail } from "@/services/authService";
@@ -552,6 +552,14 @@ const ProfileScreen = () => {
                   </div>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle className="text-lg">Events &amp; Tickets</CardTitle></CardHeader>
+            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Button variant="outline" className="justify-start h-12" onClick={() => navigate("/tickets")} data-testid="profile-my-tickets"><Ticket className="h-4 w-4 mr-2" /> My Tickets</Button>
+              <Button variant="outline" className="justify-start h-12" onClick={() => navigate("/events")} data-testid="profile-events"><CalendarDays className="h-4 w-4 mr-2" /> Browse Events</Button>
             </CardContent>
           </Card>
 
