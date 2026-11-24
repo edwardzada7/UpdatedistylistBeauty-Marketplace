@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import DateTimeField from "@/components/DateTimeField";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ADMIN_KEY_STORAGE } from "@/constants/adminAuth";
 import { adminEventsAPI, formatEventDate } from "@/services/eventsApi";
@@ -119,8 +120,8 @@ function EventForm({ adminKey, initial, editingId, onClose, onSaved }) {
           <div><Label>Title</Label><Input value={form.title} onChange={(e) => set({ title: e.target.value })} maxLength={160} /></div>
           <div><Label>Description</Label><Textarea rows={4} value={form.description} onChange={(e) => set({ description: e.target.value })} /></div>
           <div className="grid sm:grid-cols-2 gap-3">
-            <div><Label>Starts</Label><Input type="datetime-local" value={form.starts_at} onChange={(e) => set({ starts_at: e.target.value })} /></div>
-            <div><Label>Ends (optional)</Label><Input type="datetime-local" value={form.ends_at} onChange={(e) => set({ ends_at: e.target.value })} /></div>
+            <div><Label>Starts</Label><DateTimeField value={form.starts_at} onChange={(v) => set({ starts_at: v })} /></div>
+            <div><Label>Ends (optional)</Label><DateTimeField optional value={form.ends_at} onChange={(v) => set({ ends_at: v })} /></div>
             <div><Label>Venue</Label><Input value={form.venue} onChange={(e) => set({ venue: e.target.value })} /></div>
             <div><Label>Address</Label><Input value={form.address} onChange={(e) => set({ address: e.target.value })} /></div>
           </div>
@@ -136,7 +137,7 @@ function EventForm({ adminKey, initial, editingId, onClose, onSaved }) {
                   <div><Label className="text-xs">Price (₦)</Label><Input type="number" min="0" value={t.price} onChange={(e) => setType(i, { price: e.target.value })} /></div>
                   <div><Label className="text-xs">Capacity{t.sold ? ` (sold ${t.sold})` : ""}</Label><Input type="number" min="1" value={t.capacity} onChange={(e) => setType(i, { capacity: e.target.value })} placeholder="Unlimited" /></div>
                   <div><Label className="text-xs">Max per order</Label><Input type="number" min="1" max="50" value={t.max_per_order} onChange={(e) => setType(i, { max_per_order: e.target.value })} /></div>
-                  <div><Label className="text-xs">Sales close (optional)</Label><Input type="datetime-local" value={t.sales_end} onChange={(e) => setType(i, { sales_end: e.target.value })} /></div>
+                  <div><Label className="text-xs">Sales close (optional)</Label><DateTimeField optional value={t.sales_end} onChange={(v) => setType(i, { sales_end: v })} /></div>
                   <div className="col-span-2"><Label className="text-xs">Short note (optional)</Label><Input value={t.description} onChange={(e) => setType(i, { description: e.target.value })} /></div>
                 </div>
                 <div className="flex items-center justify-between">
