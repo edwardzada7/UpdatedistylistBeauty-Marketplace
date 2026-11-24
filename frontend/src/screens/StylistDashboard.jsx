@@ -41,6 +41,7 @@ import {
   Megaphone
 } from "lucide-react";
 import LocationChip from "@/components/LocationChip";
+import EventsStrip from "@/components/EventsStrip";
 
 const StylistDashboard = () => {
   const navigate = useNavigate();
@@ -313,6 +314,8 @@ const StylistDashboard = () => {
       {/* Main Content */}
       <div className="p-4 space-y-4">
         {/* Wallet & Earnings Section - Enhanced */}
+        <EventsStrip />
+
         <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">

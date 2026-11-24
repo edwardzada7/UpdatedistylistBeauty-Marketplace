@@ -60,7 +60,7 @@ def register_earnings_routes(api_router: APIRouter, supabase: Any, table_exists:
 
         streams: Dict[str, Dict[str, float]] = {
             k: {"period": 0.0, "all_time": 0.0}
-            for k in ("booking_commission", "shop_commission", "withdrawal_fees", "promotions", "subscriptions")
+            for k in ("booking_commission", "shop_commission", "withdrawal_fees", "promotions", "subscriptions", "events")
         }
 
         def add(stream: str, amount: float, row: Dict[str, Any]) -> None:
@@ -106,6 +106,11 @@ def register_earnings_routes(api_router: APIRouter, supabase: Any, table_exists:
         for p in promo:
             if p.get("status") == "success":
                 add("subscriptions" if p.get("purpose") == "subscription" else "promotions", num(p.get("amount")), p)
+
+        # Event tickets: the platform's take (all of an admin event, fee + commission otherwise)
+        for o in safe("event_orders", "platform_fee, status, paid_at, created_at") or []:
+            if o.get("status") in ("paid",):
+                add("events", num(o.get("platform_fee")), {"created_at": o.get("paid_at") or o.get("created_at")})
 
         # Money held for others
         wallets = safe("wallets", "balance, escrow_balance") or []

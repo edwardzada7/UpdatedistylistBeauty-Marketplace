@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import SponsoredStrip from "@/components/SponsoredStrip";
+import EventsStrip from "@/components/EventsStrip";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -254,6 +255,8 @@ const HomeScreen = () => {
             </CardContent>
           </Card>
         </div>
+
+        <div className="max-w-4xl mx-auto"><EventsStrip /></div>
 
         {/* Top Verified Providers */}
         <div className="max-w-4xl mx-auto">

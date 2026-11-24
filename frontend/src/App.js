@@ -62,6 +62,12 @@ const AdminReportsScreen = lazy(() => import("@/screens/AdminReportsScreen"));
 const AdminFeedModerationScreen = lazy(() => import("@/screens/AdminFeedModerationScreen"));
 const AdminShopModerationScreen = lazy(() => import("@/screens/AdminShopModerationScreen"));
 const AdminOfficialScreen = lazy(() => import("@/screens/AdminOfficialScreen"));
+const AdminEventsScreen = lazy(() => import("@/screens/AdminEventsScreen"));
+const EventsScreen = lazy(() => import("@/screens/EventsScreen"));
+const EventDetailScreen = lazy(() => import("@/screens/EventDetailScreen"));
+const EventPurchaseCompleteScreen = lazy(() => import("@/screens/EventPurchaseCompleteScreen"));
+const MyTicketsScreen = lazy(() => import("@/screens/MyTicketsScreen"));
+const EventScannerScreen = lazy(() => import("@/screens/EventScannerScreen"));
 const ProviderShopScreen = lazy(() => import("@/screens/ProviderShopScreen"));
 const ProviderPurchaseCompleteScreen = lazy(() => import("@/screens/ProviderPurchaseCompleteScreen"));
 const ProviderPromoteScreen = lazy(() => import("@/screens/ProviderPromoteScreen"));
@@ -182,6 +188,11 @@ function AppRoutes() {
       {/* Transactional routes (wallet, bookings) remain protected. */}
       {/* ============================================= */}
       <Route path="/user/home" element={<HomeScreen />} />
+      <Route path="/events" element={<Suspense fallback={<LoadingSpinner fullScreen />}><EventsScreen /></Suspense>} />
+      <Route path="/events/purchase-complete" element={<ProtectedRoute><Suspense fallback={<LoadingSpinner fullScreen />}><EventPurchaseCompleteScreen /></Suspense></ProtectedRoute>} />
+      <Route path="/events/:id" element={<Suspense fallback={<LoadingSpinner fullScreen />}><EventDetailScreen /></Suspense>} />
+      <Route path="/tickets" element={<ProtectedRoute><Suspense fallback={<LoadingSpinner fullScreen />}><MyTicketsScreen /></Suspense></ProtectedRoute>} />
+      <Route path="/scanner" element={<Suspense fallback={<LoadingSpinner fullScreen />}><EventScannerScreen /></Suspense>} />
       <Route path="/user/services" element={<ServicesScreen />} />
       <Route path="/user/providers" element={<ProvidersListScreen />} />
       <Route path="/user/providers/:userId" element={<ProviderProfileScreen />} />
@@ -387,6 +398,7 @@ function AppRoutes() {
       <Route path="/admin/reports" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminReportsScreen /></Suspense>} />
       <Route path="/admin/feed-moderation" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminFeedModerationScreen /></Suspense>} />
       <Route path="/admin/shop-moderation" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminShopModerationScreen /></Suspense>} />
+      <Route path="/admin/events" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminEventsScreen /></Suspense>} />
       <Route path="/admin/official" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminOfficialScreen /></Suspense>} />
       <Route path="/admin/promotions" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminPromotionsScreen /></Suspense>} />
       <Route path="/admin/earnings" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminEarningsScreen /></Suspense>} />

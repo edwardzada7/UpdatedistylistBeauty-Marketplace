@@ -27,3 +27,6 @@ python-dotenv==1.2.1
 APScheduler==3.10.4
 pytz==2025.2
 tzlocal==5.4
+
+# ---- Event tickets: QR codes (pure Python SVG output, no Pillow needed) ----
+qrcode==7.4.2

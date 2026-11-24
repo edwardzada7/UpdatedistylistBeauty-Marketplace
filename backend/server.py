@@ -1847,7 +1847,11 @@ async def paystack_webhook(request: Request, x_paystack_signature: str = Header(
         # Handle charge.success
         if event == "charge.success":
             reference = data.get("reference")
-            if reference:
+            if reference and str(reference).startswith("istylist_evt_"):
+                # Event tickets: confirm the payment and issue the QR/PIN tickets.
+                from events_routes import fulfil_event_reference
+                fulfil_event_reference(reference)
+            elif reference:
                 # Reuse verification logic
                 await verify_paystack_payment(reference)
         
@@ -10623,6 +10627,13 @@ try:
         logging.info("[startup] reschedule routes registered")
     except Exception as _re:
         logging.warning("[startup] reschedule routes NOT registered: %s", _re)
+
+    try:
+        from events_routes import register_events_routes
+        register_events_routes(api_router, supabase)
+        logging.info("[startup] events routes registered")
+    except Exception as _ev:
+        logging.warning("[startup] events routes NOT registered: %s", _ev)
 
     try:
         from broadcast_routes import register_broadcast_routes
