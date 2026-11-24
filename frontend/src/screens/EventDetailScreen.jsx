@@ -4,10 +4,14 @@ import { ArrowLeft, CalendarDays, Loader2, MapPin, Minus, Plus, Share2, Ticket }
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { useAuth } from "@/contexts/AuthContext";
 import { eventsAPI, formatEventDate } from "@/services/eventsApi";
 import { formatMoney } from "@/utils/money";
+import { saveGuestOrder } from "@/utils/guestTickets";
 
 export default function EventDetailScreen() {
   const { id } = useParams();
@@ -19,6 +23,9 @@ export default function EventDetailScreen() {
   const [qty, setQty] = useState(1);
   const [quote, setQuote] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [guestOpen, setGuestOpen] = useState(false);
+  const [guest, setGuest] = useState({ name: "", email: "", phone: "" });
+  const [emailSent, setEmailSent] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -45,9 +52,7 @@ export default function EventDetailScreen() {
 
   const buy = async () => {
     if (!isAuthenticated) {
-      toast.info("Sign in or create a free account to get tickets");
-      try { sessionStorage.setItem("POST_LOGIN_REDIRECT", `/events/${id}`); } catch (_) { /* storage unavailable */ }
-      navigate("/login");
+      setGuestOpen(true);
       return;
     }
     const email = userData?.email || user?.email;
@@ -72,6 +77,41 @@ export default function EventDetailScreen() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const guestBuy = async () => {
+    if (guest.name.trim().length < 2) return toast.error("Enter your name");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(guest.email.trim())) return toast.error("Enter a valid email address");
+    setBusy(true);
+    try {
+      const res = await eventsAPI.guestCheckout(id, {
+        ticket_type_id: selected.id,
+        quantity: qty,
+        name: guest.name.trim(),
+        email: guest.email.trim(),
+        phone: guest.phone.trim() || null,
+        redirect_url: `${window.location.origin}/events/guest-tickets`,
+      });
+      if (res.status === "free") {
+        setGuestOpen(false);
+        if (res.emailed) { setEmailSent(res.email); return; }
+        saveGuestOrder({ reference: res.reference, token: res.access_token, title: event.title });
+        navigate(`/events/guest-tickets?reference=${res.reference}&t=${res.access_token}`);
+      } else if (res.authorization_url) {
+        window.location.href = res.authorization_url;
+        return;
+      }
+    } catch (e) {
+      const detail = e?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Could not start checkout");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const goAuth = (path) => {
+    try { sessionStorage.setItem("POST_LOGIN_REDIRECT", `/events/${id}`); } catch (_) { /* storage unavailable */ }
+    navigate(path);
   };
 
   const share = async () => {
@@ -162,6 +202,34 @@ export default function EventDetailScreen() {
           )}
         </div>
       </main>
+
+      <Dialog open={guestOpen} onOpenChange={setGuestOpen}>
+        <DialogContent className="w-[calc(100vw-1.5rem)] max-w-md p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>{free ? "Get your free ticket" : "Get your tickets"}</DialogTitle>
+            <DialogDescription>No account needed. We'll email your tickets (QR code + PIN) to you.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div><Label>Full name</Label><Input value={guest.name} onChange={(e) => setGuest({ ...guest, name: e.target.value })} autoComplete="name" /></div>
+            <div><Label>Email</Label><Input type="email" inputMode="email" value={guest.email} onChange={(e) => setGuest({ ...guest, email: e.target.value })} autoComplete="email" placeholder="Your tickets will be sent here" /></div>
+            <div><Label>Phone (optional)</Label><Input type="tel" inputMode="tel" value={guest.phone} onChange={(e) => setGuest({ ...guest, phone: e.target.value })} autoComplete="tel" /></div>
+            {quote && !free && <p className="text-sm text-gray-600">Total to pay: <b>{formatMoney(quote.total)}</b> via Paystack</p>}
+          </div>
+          <DialogFooter className="flex-col sm:flex-col gap-2">
+            <Button className="w-full" onClick={guestBuy} disabled={busy}>{busy ? "Please wait..." : free ? "Get my ticket" : "Continue to payment"}</Button>
+            <p className="text-xs text-center text-gray-500">
+              Want more? <button type="button" className="text-purple-700 font-medium underline" onClick={() => goAuth("/signup")}>Sign up</button> or <button type="button" className="text-purple-700 font-medium underline" onClick={() => goAuth("/login")}>sign in</button> to keep your tickets in the app and book stylists.
+            </p>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!emailSent} onOpenChange={(o) => !o && setEmailSent("")}>
+        <DialogContent className="w-[calc(100vw-1.5rem)] max-w-md p-4 sm:p-6">
+          <DialogHeader><DialogTitle>Check your email</DialogTitle><DialogDescription>We sent your ticket(s) to {emailSent}. Open the link in that email to see your QR code and PIN.</DialogDescription></DialogHeader>
+          <DialogFooter><Button onClick={() => setEmailSent("")}>Done</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {!canceled && (
         <div className="fixed bottom-0 inset-x-0 bg-white border-t p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] z-20">

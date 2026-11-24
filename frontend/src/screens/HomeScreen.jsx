@@ -1,3 +1,4 @@
+import GuestPromptBar from "@/components/GuestPromptBar";
 import { useState, useEffect, useCallback } from "react";
 import SponsoredStrip from "@/components/SponsoredStrip";
 import EventsStrip from "@/components/EventsStrip";
@@ -94,6 +95,7 @@ const HomeScreen = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
+      <GuestPromptBar />
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">

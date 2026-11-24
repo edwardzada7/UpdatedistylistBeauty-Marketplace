@@ -11,6 +11,9 @@ export const eventsAPI = {
   quote: async (id, ticketTypeId, quantity) => (await api.get(`/events/${id}/quote`, { params: { ticket_type_id: ticketTypeId, quantity } })).data,
   checkout: async (id, body) => (await api.post(`/events/${id}/checkout`, body)).data,
   verify: async (reference) => (await api.get("/events/orders/verify", { params: { reference } })).data,
+  guestCheckout: async (id, body) => (await api.post(`/events/${id}/guest-checkout`, body)).data,
+  guestVerify: async (reference, token) => (await api.get("/events/guest/verify", { params: { reference, t: token } })).data,
+  guestTickets: async (reference, token) => (await api.get("/events/guest/tickets", { params: { reference, t: token } })).data.tickets || [],
   myTickets: async () => (await api.get("/events/my-tickets")).data.tickets || [],
 };
 

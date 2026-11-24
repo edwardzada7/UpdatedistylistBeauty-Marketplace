@@ -1,3 +1,4 @@
+import GuestPromptBar from "@/components/GuestPromptBar";
 import { useEffect, useMemo, useState } from "react";
 import SponsoredStrip from "@/components/SponsoredStrip";
 import { useNavigate } from "react-router-dom";
@@ -83,6 +84,7 @@ export default function ShopScreen() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
+      <GuestPromptBar />
       <ShopHeader title="Shop" subtitle="Beauty and fashion products">
         <div className="relative mt-3">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
