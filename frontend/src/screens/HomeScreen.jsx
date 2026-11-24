@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Scissors, Wallet, User, Star, CheckCircle2, TrendingUp, Grid3X3, Sparkles, Heart, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 import { stylistsAPI, feedAPI, providersAPI } from "@/services/api";
+import CertifiedBadge from "@/components/CertifiedBadge";
 import ProBadge from "@/components/ProBadge";
 import { useAuth } from "@/contexts/AuthContext";
 import { APP_NAME, APP_TAGLINE, CURRENCY, SERVICE_CATEGORIES } from "@/utils/constants";
@@ -299,6 +300,7 @@ const HomeScreen = () => {
                           <span className="truncate">{provider.user_name || "Provider"}</span>
                           <PersonVerified id={provider.user_id} verified={provider.is_verified} size={18} />
                           <ProBadge pro={provider.is_pro} />
+                          <CertifiedBadge certified={provider.is_certified} />
                         </h4>
                         <div className="flex items-center gap-1">
                           {provider.is_premium && (

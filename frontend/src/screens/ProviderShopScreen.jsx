@@ -155,7 +155,7 @@ export default function ProviderShopScreen() {
             ) : (
               <div className="space-y-3">
                 {filteredMarket.map((p) => (
-                  <div key={`${p.id}-${p.seller_listing_id}`} className="bg-white rounded-xl border p-3 flex gap-3">
+                  <div key={`${p.id}-${p.seller_listing_id}`} role="button" tabIndex={0} onClick={() => setViewing(p)} onKeyDown={(e) => e.key === "Enter" && setViewing(p)} className="bg-white rounded-xl border p-3 flex gap-3 cursor-pointer hover:border-purple-300">
                     <Thumb product={p} />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold truncate">{p.name}</p>
@@ -163,8 +163,8 @@ export default function ProviderShopScreen() {
                       <p className="text-purple-700 font-bold">{formatNaira(p.price)} <span className="text-xs font-normal text-gray-500">· {p.stock} left</span></p>
                       {p.buyable && <p className="text-xs text-green-700">Buy for My Shop: {formatNaira(p.purchase_price)} each</p>}
                       <div className="mt-2 flex flex-wrap gap-2">
-                        <Button size="sm" variant="outline" disabled={p.alreadyListed} onClick={() => add(p)}>{p.alreadyListed ? "In My Shop" : "Add to My Shop"}</Button>
-                        {p.buyable && <Button size="sm" onClick={() => setBuying(p)}>Buy for My Shop</Button>}
+                        <Button size="sm" variant="outline" disabled={p.alreadyListed} onClick={(e) => { e.stopPropagation(); add(p); }}>{p.alreadyListed ? "In My Shop" : "Add to My Shop"}</Button>
+                        {p.buyable && <Button size="sm" onClick={(e) => { e.stopPropagation(); setBuying(p); }}>Buy for My Shop</Button>}
                       </div>
                     </div>
                   </div>
@@ -208,7 +208,7 @@ export default function ProviderShopScreen() {
         )}
       </main>
 
-      {viewing && <ProductViewDialog product={viewing} onClose={() => setViewing(null)} onEdit={() => { const p = viewing; setViewing(null); setEditing(p); }} />}
+      {viewing && <ProductViewDialog product={viewing} onClose={() => setViewing(null)} onEdit={viewing.kind ? () => { const p = viewing; setViewing(null); setEditing(p); } : null} />}
       {orderView && <OrderDialog order={orderView} onClose={() => setOrderView(null)} onSaved={() => { setOrderView(null); load(); }} />}
       {editing && <EditDialog product={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
       {creating && <CreateDialog authId={authId} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); load(); }} />}
@@ -227,7 +227,7 @@ function ProductViewDialog({ product, onClose, onEdit }) {
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>{product.name}</DialogTitle><DialogDescription>{product.kind === "listing" ? "Resale listing" : "Your product"}</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>{product.name}</DialogTitle><DialogDescription>{!product.kind ? (product.isOfficial ? "iStylist Official" : product.seller_name || "Marketplace product") : product.kind === "listing" ? "Resale listing" : "Your product"}</DialogDescription></DialogHeader>
         {imgs.length > 0 && <div className="flex gap-2 overflow-x-auto">{imgs.map((u) => <img key={u} src={u} alt={product.name} className="h-40 w-40 rounded-lg object-cover shrink-0" />)}</div>}
         <div className="space-y-1 text-sm">
           <p className="text-purple-700 font-bold text-lg">{formatNaira(product.price)}</p>
@@ -236,7 +236,7 @@ function ProductViewDialog({ product, onClose, onEdit }) {
           {product.status && <p className="text-gray-600">Status: {product.status}</p>}
           <p className="text-gray-700 whitespace-pre-wrap pt-2">{product.description || "No description."}</p>
         </div>
-        <DialogFooter><Button variant="outline" onClick={onClose}>Close</Button><Button onClick={onEdit}>Edit</Button></DialogFooter>
+        <DialogFooter><Button variant="outline" onClick={onClose}>Close</Button>{onEdit && <Button onClick={onEdit}>Edit</Button>}</DialogFooter>
       </DialogContent>
     </Dialog>
   );
