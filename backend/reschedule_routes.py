@@ -179,7 +179,7 @@ def register_reschedule_routes(api_router: APIRouter, supabase: Any, get_slots: 
             raise HTTPException(status_code=400, detail="Pick a valid date and time")
         now = _now_lagos().replace(tzinfo=None)
         if new_dt < now + timedelta(minutes=RESCHEDULE_CUTOFF_MIN):
-            raise HTTPException(status_code=400, detail="Pick a time at least 30 minutes from now")
+            raise HTTPException(status_code=400, detail=f"Pick a time at least {RESCHEDULE_CUTOFF_MIN} minutes from now")
         if new_dt > now + timedelta(days=MAX_DAYS_AHEAD):
             raise HTTPException(status_code=400, detail=f"Pick a date within the next {MAX_DAYS_AHEAD} days")
         if body.new_date == b.get("booking_date") and _hhmm(body.new_time) == _hhmm(b.get("booking_time")):

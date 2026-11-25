@@ -36,7 +36,7 @@ _EMAIL_WORDS = re.compile(r"\b(?:gmail|yahoo|hotmail|outlook|icloud|protonmail)\
 
 _SOCIAL = re.compile(
     r"\b(?:instagram|insta|whatsapp|whatsap|whats\s?app|snapchat|snap\s?chat|tiktok|tik\s?tok|twitter|telegram|facebook|"
-    r"call\s+me|text\s+me|dm\s+me|add\s+me|ping\s+me|contact\s+me|my\s+(?:number|digits|handle|insta|ig|snap|whatsapp|telegram))\b"
+    r"text\s+me|dm\s+me|add\s+me|ping\s+me|my\s+(?:number|digits|handle|insta|ig|snap|whatsapp|telegram))\b"
 )
 _HANDLE = re.compile(r"(?<![\w@])@[a-z0-9_.]{3,}")
 _LINK = re.compile(r"(?:https?://|www\.|wa\.me/|t\.me/|\b[a-z0-9\-]+\.(?:com|ng|me|co|io|net|org|ly|gl)\b)")
@@ -77,3 +77,49 @@ def enforce_no_contact_sharing(text: Optional[str]) -> None:
         from fastapi import HTTPException
         logging.info(f"[contact_guard] blocked a message containing {kind}")
         raise HTTPException(status_code=422, detail=CONTACT_POLICY_MESSAGE)
+
+
+# ---------------------------------------------------------------------------
+# Request-level guard: free-text profile / post / comment / review / listing fields
+# ---------------------------------------------------------------------------
+TEXT_FIELDS = {
+    "bio", "about", "description", "caption", "content", "comment", "notes",
+    "provider_reply", "headline", "tagline", "review_text", "short_description", "long_description",
+}
+EXEMPT_PREFIXES = (
+    "/api/admin", "/api/webhooks", "/api/events", "/api/support", "/api/reports", "/api/broadcast",
+    "/api/payments", "/api/wallet", "/api/kyc", "/api/chat",
+)
+
+
+def check_json_payload(path: str, body: bytes, is_admin: bool = False) -> Optional[str]:
+    """Return the first offending field name in a JSON body (or None). Chat is guarded separately."""
+    if is_admin or any(path.startswith(p) for p in EXEMPT_PREFIXES):
+        return None
+    if not body or len(body) > 200_000:
+        return None
+    import json
+    try:
+        data = json.loads(body)
+    except Exception:
+        return None
+
+    def walk(node, depth=0):
+        if depth > 4:
+            return None
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if isinstance(v, str) and str(k).lower() in TEXT_FIELDS and find_contact_violation(v):
+                    return k
+                if isinstance(v, (dict, list)):
+                    hit = walk(v, depth + 1)
+                    if hit:
+                        return hit
+        elif isinstance(node, list):
+            for item in node[:50]:
+                hit = walk(item, depth + 1)
+                if hit:
+                    return hit
+        return None
+
+    return walk(data)

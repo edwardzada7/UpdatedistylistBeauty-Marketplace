@@ -6899,6 +6899,24 @@ async def booking_cancel_policy(booking_id: int, auth_id: str = Query(...)):
     return {**policy, "amount": amount, "penalty_amount": penalty, "refund_amount": round(amount - penalty, 2)}
 
 
+class DismissPromptBody(BaseModel):
+    auth_id: str
+    booking_id: int
+
+
+@api_router.post("/booking-actions/dismiss-review")
+async def dismiss_review_prompt(body: DismissPromptBody):
+    """Remember that the customer closed (or submitted) the review popup so it never shows again for this booking."""
+    booking = _lifecycle_booking_or_404(body.booking_id)
+    if booking.get("customer_auth_id") != body.auth_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    try:
+        supabase.table("bookings").update({"review_prompt_dismissed_at": datetime.utcnow().isoformat()}).eq("id", body.booking_id).execute()
+    except Exception as e:
+        logging.warning(f"review_prompt_dismissed_at not saved (run phase40): {e}")
+    return {"ok": True}
+
+
 class CustomerConfirmBody(BaseModel):
     auth_id: str
     completed: bool
@@ -6968,7 +6986,8 @@ async def booking_pending_actions(auth_id: str = Query(...), role: str = Query("
         logging.warning(f"pending actions fetch failed: {e}")
         return {"items": []}
     now = booking_lifecycle._now_lagos()
-    cutoff = now - timedelta(days=14)
+    cutoff = now - timedelta(days=3)
+    review_item_added = False
     for b in rows:
         try:
             start = booking_lifecycle.appointment_start(b)
@@ -7000,7 +7019,7 @@ async def booking_pending_actions(auth_id: str = Query(...), role: str = Query("
                                   "title": "Mark this session",
                                   "message": f"The session on {when} has ended. Was it completed, or did the customer not show up?",
                                   "reason": f"Payment is released after the customer confirms, or automatically {hrs:g} hours after the session ends. A no-show report gives the customer a chance to dispute."})
-            elif b.get("status") == "completed" and not is_provider and start > cutoff:
+            elif b.get("status") == "completed" and not is_provider and start > cutoff and not b.get("review_prompt_dismissed_at") and not review_item_added:
                 if check_table_exists("reviews"):
                     rv = supabase.table("reviews").select("id").eq("booking_id", b["id"]).limit(1).execute()
                     if rv.data:
@@ -7008,6 +7027,7 @@ async def booking_pending_actions(auth_id: str = Query(...), role: str = Query("
                 items.append({**base, "type": "review", "title": "How was your service?",
                               "message": "Your booking is complete. Please rate your provider.",
                               "reason": "Reviews help other customers choose and reward good providers."})
+                review_item_added = True
         except Exception as e:
             logging.warning(f"pending action skip {b.get('id')}: {e}")
     return {"items": items[:5]}
@@ -11011,6 +11031,29 @@ except Exception as _e:
     import traceback as _tb
     logging.error("[startup] FAILED to include api_router: %s\n%s", _e, _tb.format_exc())
     raise
+
+from starlette.responses import JSONResponse as _GuardJSON
+from contact_guard import check_json_payload as _check_json_payload, CONTACT_POLICY_MESSAGE as _CONTACT_MSG
+
+
+@app.middleware("http")
+async def contact_sharing_middleware(request, call_next):
+    """Blocks phone numbers / emails / socials / links in bios, posts, comments, reviews, notes and listings."""
+    try:
+        if request.method in ("POST", "PUT", "PATCH") and "json" in (request.headers.get("content-type") or "").lower():
+            body = await request.body()
+
+            async def _receive():
+                return {"type": "http.request", "body": body, "more_body": False}
+
+            request._receive = _receive
+            field = _check_json_payload(request.url.path, body, is_admin=bool(request.headers.get("x-admin-key")))
+            if field:
+                return _GuardJSON(status_code=422, content={"detail": _CONTACT_MSG.replace("Message not sent.", f"Could not save ({field}).")})
+    except Exception as e:  # never break requests because of the guard itself
+        logging.warning(f"[contact_guard] middleware skipped: {e}")
+    return await call_next(request)
+
 
 app.add_middleware(
     CORSMiddleware,

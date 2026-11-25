@@ -260,6 +260,9 @@ export const bookingsAPI = {
   customerConfirm: (bookingId, authId, completed, reason = null) =>
     api.post(`/bookings/${bookingId}/customer-confirm`, { auth_id: authId, completed, reason }),
 
+  dismissReviewPrompt: (authId, bookingId) =>
+    api.post("/booking-actions/dismiss-review", { auth_id: authId, booking_id: bookingId }),
+
   pendingActions: (authId, role) =>
     api.get(`/booking-actions/pending?auth_id=${authId}&role=${role}`),
 
