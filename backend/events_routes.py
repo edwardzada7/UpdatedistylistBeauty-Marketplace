@@ -26,11 +26,14 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from consultation_routes import _admin_key, _current_auth_id
+from email_service import email_configured, send_email
 
 logger = logging.getLogger(__name__)
 
 OFFICIAL_NAME = "iStylist Official"
 REFERENCE_PREFIX = "istylist_evt_"
+GUEST_MAX_PER_ORDER = 5
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
 PENDING_HOLD_MINUTES = 30
 DEFAULT_SETTINGS = {
     "service_fee_percentage": 0.0,   # % of the ticket subtotal charged as a service fee
@@ -140,6 +143,15 @@ class CheckoutIn(BaseModel):
     ticket_type_id: int
     quantity: int = Field(ge=1, le=50)
     email: Optional[str] = None
+    redirect_url: Optional[str] = None
+
+
+class GuestCheckoutIn(BaseModel):
+    ticket_type_id: int
+    quantity: int = Field(ge=1, le=GUEST_MAX_PER_ORDER)
+    name: str = Field(min_length=2, max_length=80)
+    email: str = Field(max_length=200)
+    phone: Optional[str] = Field(None, max_length=30)
     redirect_url: Optional[str] = None
 
 
@@ -292,18 +304,43 @@ def register_events_routes(api_router: APIRouter, supabase: Any) -> None:
         pins = new_pins(order["event_id"], qty)
         rows = [{
             "order_id": order["id"], "event_id": order["event_id"], "ticket_type_id": order["ticket_type_id"],
-            "owner_auth_id": order["buyer_auth_id"], "code_token": secrets.token_urlsafe(18), "pin": pins[i], "status": "valid",
+            "owner_auth_id": order.get("buyer_auth_id"), "owner_email": order.get("guest_email"), "owner_name": order.get("guest_name"),
+            "code_token": secrets.token_urlsafe(18), "pin": pins[i], "status": "valid",
         } for i in range(qty)]
         created = supabase.table("event_tickets").insert(rows).execute().data or []
         ttype = first(supabase.table("event_ticket_types").select("*").eq("id", order["ticket_type_id"])) or {}
         supabase.table("event_ticket_types").update({"sold": int(ttype.get("sold") or 0) + qty}).eq("id", order["ticket_type_id"]).execute()
-        event = first(supabase.table("events").select("title").eq("id", order["event_id"])) or {}
-        _notify(
-            order["buyer_auth_id"], "event_ticket", "Your tickets are ready",
-            f"{qty} ticket(s) for {event.get('title', 'the event')}. Open My Tickets to see your QR code and PIN.",
-            {"event_id": order["event_id"], "action": "tickets"},
-        )
+        event = first(supabase.table("events").select("*").eq("id", order["event_id"])) or {}
+        if order.get("buyer_auth_id"):
+            _notify(
+                order["buyer_auth_id"], "event_ticket", "Your tickets are ready",
+                f"{qty} ticket(s) for {event.get('title', 'the event')}. Open My Tickets to see your QR code and PIN.",
+                {"event_id": order["event_id"], "action": "tickets"},
+            )
+        elif order.get("guest_email"):
+            email_guest_tickets(order, event, created)
         return created
+
+    def email_guest_tickets(order: dict, event: dict, tickets: List[dict]) -> bool:
+        base = (os.environ.get("PUBLIC_APP_URL") or "https://app.istylist.online").rstrip("/")
+        link = f"{base}/events/guest-tickets?reference={order['reference']}&t={order.get('access_token')}"
+        when = (_parse(event.get("starts_at")) or _now()).astimezone(timezone(timedelta(hours=1))).strftime("%A %d %B %Y, %I:%M %p")
+        pins = "".join(f"<li>Ticket {i + 1}: <b style='letter-spacing:3px'>{t['pin']}</b></li>" for i, t in enumerate(tickets))
+        html = (
+            f"<div style='font-family:Arial,sans-serif;max-width:480px;margin:auto'>"
+            f"<h2>Your tickets are ready 🎟️</h2><p>Hi {order.get('guest_name') or 'there'},</p>"
+            f"<p><b>{event.get('title')}</b><br>{when}<br>{event.get('venue') or ''}</p>"
+            f"<p><a href='{link}' style='background:#7c3aed;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block'>Open my tickets (QR codes)</a></p>"
+            f"<p>Show the QR code at the door. If scanning fails, give them the PIN for that ticket:</p><ul>{pins}</ul>"
+            f"<p style='color:#666;font-size:13px'>Each ticket works once, so don't share the link or PINs. "
+            f"Create a free iStylist account with this email to keep your tickets in the app and book trusted stylists.</p></div>"
+        )
+        text = (
+            f"Your tickets for {event.get('title')} ({when}) are ready.\nOpen them (QR codes): {link}\n"
+            + "\n".join(f"Ticket {i + 1} PIN: {t['pin']}" for i, t in enumerate(tickets))
+            + "\nEach ticket works once. Don't share the link or PINs."
+        )
+        return send_email(order["guest_email"], f"Your tickets: {event.get('title')}", html, text)
 
     def fulfil(reference: str) -> dict:
         order = first(supabase.table("event_orders").select("*").eq("reference", reference))
@@ -344,6 +381,22 @@ def register_events_routes(api_router: APIRouter, supabase: Any) -> None:
         }
 
     # ------------------------------------------------------------------ public / user
+    def claim_guest_tickets(auth_id: str) -> None:
+        """Attach tickets bought as a guest to the account that later signs up with the same email."""
+        try:
+            user = first(supabase.table("users").select("*").eq("auth_id", auth_id)) or {}
+            email = (user.get("email") or "").strip().lower()
+            if not email:
+                return
+            orders = supabase.table("event_orders").select("id").eq("guest_email", email).is_("buyer_auth_id", "null").execute().data or []
+            if not orders:
+                return
+            ids = [o["id"] for o in orders]
+            supabase.table("event_orders").update({"buyer_auth_id": auth_id}).in_("id", ids).execute()
+            supabase.table("event_tickets").update({"owner_auth_id": auth_id}).in_("order_id", ids).execute()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("claim_guest_tickets failed: %s", exc)
+
     @api_router.get("/events")
     def list_events(authorization: Optional[str] = Header(None), include_past: bool = False):
         events = supabase.table("events").select("*").eq("status", "published").order("starts_at").limit(200).execute().data or []
@@ -366,6 +419,7 @@ def register_events_routes(api_router: APIRouter, supabase: Any) -> None:
     @api_router.get("/events/my-tickets")
     def my_tickets(authorization: Optional[str] = Header(None)):
         auth_id = _current_auth_id(authorization)
+        claim_guest_tickets(auth_id)
         rows = supabase.table("event_tickets").select("*").eq("owner_auth_id", auth_id).order("id", desc=True).limit(200).execute().data or []
         if not rows:
             return {"tickets": []}
@@ -380,6 +434,93 @@ def register_events_routes(api_router: APIRouter, supabase: Any) -> None:
         if not order or order.get("buyer_auth_id") != auth_id:
             raise HTTPException(status_code=404, detail="Order not found")
         return fulfil(reference)
+
+    def guest_order(reference: str, token: str) -> dict:
+        order = first(supabase.table("event_orders").select("*").eq("reference", reference))
+        if not order or order.get("buyer_auth_id") and not order.get("guest_email") or not order.get("access_token") or not secrets.compare_digest(str(order["access_token"]), token or ""):
+            raise HTTPException(status_code=404, detail="Tickets not found")
+        return order
+
+    def guest_ticket_list(order: dict) -> List[dict]:
+        rows = supabase.table("event_tickets").select("*").eq("order_id", order["id"]).order("id").execute().data or []
+        event = first(supabase.table("events").select("*").eq("id", order["event_id"])) or {}
+        ttype = first(supabase.table("event_ticket_types").select("*").eq("id", order["ticket_type_id"])) or {}
+        return [ticket_view(r, event, ttype) for r in rows]
+
+    @api_router.get("/events/guest/verify")
+    def guest_verify(reference: str = Query(...), t: str = Query(...)):
+        order = guest_order(reference, t)
+        result = fulfil(reference)
+        if result.get("status") == "success":
+            result["tickets"] = guest_ticket_list(order)
+        return result
+
+    @api_router.get("/events/guest/tickets")
+    def guest_tickets(reference: str = Query(...), t: str = Query(...)):
+        order = guest_order(reference, t)
+        if order.get("status") not in ("paid", "refund_due"):
+            raise HTTPException(status_code=402, detail="Payment not completed yet")
+        return {"tickets": guest_ticket_list(order)}
+
+    @api_router.post("/events/{event_id}/guest-checkout")
+    def guest_checkout(event_id: int, payload: GuestCheckoutIn):
+        email = payload.email.strip().lower()
+        if not EMAIL_RE.match(email):
+            raise HTTPException(status_code=422, detail="Enter a valid email address")
+        event, ttype = load_event_and_type(event_id, payload.ticket_type_id)
+        qty = payload.quantity
+        check_purchasable(event, ttype, qty, None)
+        free_ticket = float(ttype.get("price") or 0) == 0
+        if free_ticket:
+            have = supabase.table("event_tickets").select("id", count="exact").eq("event_id", event_id).eq("ticket_type_id", ttype["id"]).eq("owner_email", email).execute()
+            if (have.count or 0) + qty > min(int(ttype.get("max_per_order") or 10), GUEST_MAX_PER_ORDER):
+                raise HTTPException(status_code=400, detail="This email already has the maximum free tickets for this event")
+        q = quote(event, ttype, qty)
+        reference = f"{REFERENCE_PREFIX}{uuid.uuid4().hex[:14]}"
+        access_token = secrets.token_urlsafe(24)
+        order_row = {
+            "reference": reference, "event_id": event_id, "ticket_type_id": ttype["id"], "buyer_auth_id": None,
+            "guest_email": email, "guest_name": payload.name.strip(), "guest_phone": payload.phone, "access_token": access_token,
+            "email": email, "quantity": qty, "unit_price": q["unit_price"], "subtotal": q["subtotal"], "service_fee": q["service_fee"],
+            "total_amount": q["total"], "platform_fee": q["platform_fee"], "organizer_payout": q["organizer_payout"],
+            "status": "pending", "processed": False,
+        }
+        if q["total"] <= 0:
+            order_row.update({"status": "paid", "processed": True, "paid_at": _iso()})
+            try:
+                order = supabase.table("event_orders").insert(order_row).execute().data[0]
+            except Exception as exc:  # noqa: BLE001
+                raise HTTPException(status_code=503, detail=f"Guest tickets need the latest database update (phase38): {exc}")
+            tickets = issue_tickets(order)
+            if email_configured():
+                # The tickets go to the inbox only, so nobody can grab free tickets with someone else's address.
+                return {"status": "free", "reference": reference, "ticket_count": len(tickets), "emailed": True, "email": email}
+            return {"status": "free", "reference": reference, "ticket_count": len(tickets), "emailed": False, "access_token": access_token}
+        if not payload.redirect_url:
+            raise HTTPException(status_code=422, detail="redirect_url is required for paid tickets")
+        headers = _paystack_headers()
+        if not headers:
+            raise HTTPException(status_code=503, detail="Payment gateway not configured")
+        try:
+            supabase.table("event_orders").insert(order_row).execute()
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=503, detail=f"Guest tickets need the latest database update (phase38): {exc}")
+        sep = "&" if "?" in payload.redirect_url else "?"
+        res = requests.post(
+            "https://api.paystack.co/transaction/initialize",
+            json={
+                "email": email, "amount": int(round(q["total"] * 100)), "reference": reference,
+                "callback_url": f"{payload.redirect_url}{sep}t={access_token}",
+                "metadata": {"purpose": "event_ticket", "guest": True, "event_id": event_id, "ticket_type_id": ttype["id"], "quantity": qty},
+            },
+            headers=headers, timeout=30,
+        )
+        body = res.json() if res.content else {}
+        if res.status_code != 200 or not body.get("status"):
+            logger.error("guest checkout init failed: %s", res.text[:300])
+            supabase.table("event_orders").update({"status": "failed"}).eq("reference", reference).execute()
+            raise HTTPException(status_code=502, detail="Could not start the payment")
+        return {"status": "pending", "authorization_url": body["data"].get("authorization_url"), "reference": reference, "amount": q["total"], "access_token": access_token}
 
     @api_router.get("/events/{event_id}")
     def get_event(event_id: int, authorization: Optional[str] = Header(None)):
@@ -559,14 +700,17 @@ def register_events_routes(api_router: APIRouter, supabase: Any) -> None:
         for o in paid:
             if float(o.get("total_amount") or 0) > 0:
                 supabase.table("event_orders").update({"status": "refund_due"}).eq("id", o["id"]).execute()
-        for owner in {t["owner_auth_id"] for t in affected}:
+        for owner in {t["owner_auth_id"] for t in affected if t.get("owner_auth_id")}:
             _notify(owner, "event_canceled", "Event canceled", f"{event.get('title')} has been canceled. Any ticket payment will be refunded.", {"event_id": event_id})
+        for guest in {t["owner_email"] for t in affected if not t.get("owner_auth_id") and t.get("owner_email")}:
+            msg = f"{event.get('title')} has been canceled. Any ticket payment will be refunded."
+            send_email(guest, f"Event canceled: {event.get('title')}", f"<p>{msg}</p>", msg)
         return {"status": "canceled", "tickets_affected": len(affected)}
 
     @api_router.get("/admin/events/{event_id}/attendees", dependencies=[Depends(_admin_key)])
     def admin_attendees(event_id: int):
         tickets = supabase.table("event_tickets").select("*").eq("event_id", event_id).order("id").execute().data or []
-        owners = list({t["owner_auth_id"] for t in tickets})
+        owners = list({t["owner_auth_id"] for t in tickets if t.get("owner_auth_id")})
         names: Dict[str, dict] = {}
         if owners:
             for u in supabase.table("users").select("*").in_("auth_id", owners).execute().data or []:
@@ -575,8 +719,8 @@ def register_events_routes(api_router: APIRouter, supabase: Any) -> None:
         return {"attendees": [{
             "id": t["id"], "pin": t["pin"], "status": t["status"], "used_at": t.get("used_at"), "used_via": t.get("used_via"),
             "ticket_type": (types.get(t["ticket_type_id"]) or {}).get("name"),
-            "name": (names.get(t["owner_auth_id"]) or {}).get("name") or (names.get(t["owner_auth_id"]) or {}).get("full_name") or "Guest",
-            "email": (names.get(t["owner_auth_id"]) or {}).get("email"),
+            "name": (names.get(t["owner_auth_id"]) or {}).get("name") or (names.get(t["owner_auth_id"]) or {}).get("full_name") or t.get("owner_name") or "Guest",
+            "email": (names.get(t["owner_auth_id"]) or {}).get("email") or t.get("owner_email"),
         } for t in tickets]}
 
     @api_router.get("/admin/events-settings", dependencies=[Depends(_admin_key)])
@@ -662,10 +806,10 @@ def register_events_routes(api_router: APIRouter, supabase: Any) -> None:
             return {"result": "wrong_event", "message": "This ticket is for a different event"}
         event = first(supabase.table("events").select("*").eq("id", ticket["event_id"])) or {}
         ttype = first(supabase.table("event_ticket_types").select("name").eq("id", ticket["ticket_type_id"])) or {}
-        owner = first(supabase.table("users").select("*").eq("auth_id", ticket["owner_auth_id"])) or {}
+        owner = (first(supabase.table("users").select("*").eq("auth_id", ticket["owner_auth_id"])) if ticket.get("owner_auth_id") else None) or {}
         info = {
             "ticket_id": ticket["id"], "ticket_type": ttype.get("name"), "event_title": event.get("title"),
-            "holder": owner.get("name") or owner.get("full_name") or "Guest", "pin": ticket["pin"],
+            "holder": owner.get("name") or owner.get("full_name") or ticket.get("owner_name") or "Guest", "pin": ticket["pin"],
         }
         if ticket["status"] in ("refund_due", "canceled") or event.get("status") == "canceled":
             return {"result": "canceled", "message": "This ticket is canceled/refunded", **info}

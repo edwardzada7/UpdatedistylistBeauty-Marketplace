@@ -67,6 +67,7 @@ const EventsScreen = lazy(() => import("@/screens/EventsScreen"));
 const EventDetailScreen = lazy(() => import("@/screens/EventDetailScreen"));
 const EventPurchaseCompleteScreen = lazy(() => import("@/screens/EventPurchaseCompleteScreen"));
 const MyTicketsScreen = lazy(() => import("@/screens/MyTicketsScreen"));
+const GuestTicketsScreen = lazy(() => import("@/screens/GuestTicketsScreen"));
 const EventScannerScreen = lazy(() => import("@/screens/EventScannerScreen"));
 const ProviderShopScreen = lazy(() => import("@/screens/ProviderShopScreen"));
 const ProviderPurchaseCompleteScreen = lazy(() => import("@/screens/ProviderPurchaseCompleteScreen"));
@@ -90,6 +91,14 @@ const AdminReferralEarningsScreen = lazy(() => import("@/screens/AdminReferralEa
  * ProtectedRoute - Requires authentication
  * Redirects to /login if not authenticated
  */
+// Signed-in users see their account tickets; guests see the tickets saved on this device.
+const TicketsEntry = () => {
+  const { isAuthenticated, loading } = useAuth();
+  if (loading) return <LoadingSpinner fullScreen message="Loading..." />;
+  if (!isAuthenticated) return <Navigate to="/events/guest-tickets" replace />;
+  return <Suspense fallback={<LoadingSpinner fullScreen />}><MyTicketsScreen /></Suspense>;
+};
+
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
 
@@ -191,7 +200,8 @@ function AppRoutes() {
       <Route path="/events" element={<Suspense fallback={<LoadingSpinner fullScreen />}><EventsScreen /></Suspense>} />
       <Route path="/events/purchase-complete" element={<ProtectedRoute><Suspense fallback={<LoadingSpinner fullScreen />}><EventPurchaseCompleteScreen /></Suspense></ProtectedRoute>} />
       <Route path="/events/:id" element={<Suspense fallback={<LoadingSpinner fullScreen />}><EventDetailScreen /></Suspense>} />
-      <Route path="/tickets" element={<ProtectedRoute><Suspense fallback={<LoadingSpinner fullScreen />}><MyTicketsScreen /></Suspense></ProtectedRoute>} />
+      <Route path="/tickets" element={<TicketsEntry />} />
+      <Route path="/events/guest-tickets" element={<Suspense fallback={<LoadingSpinner fullScreen />}><GuestTicketsScreen /></Suspense>} />
       <Route path="/scanner" element={<Suspense fallback={<LoadingSpinner fullScreen />}><EventScannerScreen /></Suspense>} />
       <Route path="/user/services" element={<ServicesScreen />} />
       <Route path="/user/providers" element={<ProvidersListScreen />} />
