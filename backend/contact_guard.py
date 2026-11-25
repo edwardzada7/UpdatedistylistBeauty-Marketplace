@@ -36,7 +36,7 @@ _EMAIL_WORDS = re.compile(r"\b(?:gmail|yahoo|hotmail|outlook|icloud|protonmail)\
 
 _SOCIAL = re.compile(
     r"\b(?:instagram|insta|whatsapp|whatsap|whats\s?app|snapchat|snap\s?chat|tiktok|tik\s?tok|twitter|telegram|facebook|"
-    r"text\s+me|dm\s+me|add\s+me|ping\s+me|my\s+(?:number|digits|handle|insta|ig|snap|whatsapp|telegram))\b"
+    r"ig|fb|follow\s+me|find\s+me\s+on|text\s+me|dm\s+me|add\s+me|ping\s+me|my\s+(?:number|digits|handle|insta|ig|snap|whatsapp|telegram))\b"
 )
 _HANDLE = re.compile(r"(?<![\w@])@[a-z0-9_.]{3,}")
 _LINK = re.compile(r"(?:https?://|www\.|wa\.me/|t\.me/|\b[a-z0-9\-]+\.(?:com|ng|me|co|io|net|org|ly|gl)\b)")
@@ -88,8 +88,10 @@ TEXT_FIELDS = {
 }
 EXEMPT_PREFIXES = (
     "/api/admin", "/api/webhooks", "/api/events", "/api/support", "/api/reports", "/api/broadcast",
-    "/api/payments", "/api/wallet", "/api/kyc", "/api/chat",
+    "/api/payments", "/api/wallet", "/api/kyc",
 )
+# Chat endpoints carry the text in "message" (booking chat, /chat/messages, conversations)
+CHAT_PATH_HINTS = ("/chat", "/messages")
 
 
 def check_json_payload(path: str, body: bytes, is_admin: bool = False) -> Optional[str]:
@@ -104,12 +106,15 @@ def check_json_payload(path: str, body: bytes, is_admin: bool = False) -> Option
     except Exception:
         return None
 
+    is_chat = any(h in path for h in CHAT_PATH_HINTS)
+    fields = TEXT_FIELDS | {"message"} if is_chat else TEXT_FIELDS
+
     def walk(node, depth=0):
         if depth > 4:
             return None
         if isinstance(node, dict):
             for k, v in node.items():
-                if isinstance(v, str) and str(k).lower() in TEXT_FIELDS and find_contact_violation(v):
+                if isinstance(v, str) and str(k).lower() in fields and find_contact_violation(v):
                     return k
                 if isinstance(v, (dict, list)):
                     hit = walk(v, depth + 1)
