@@ -194,6 +194,7 @@ export const bookingsAPI = {
 
   // Distance, range and travel fee for a home visit
   homeQuote: (data) => api.post("/bookings/home-quote", data),
+  geocodeAddress: (address) => api.post("/geocode/address", { address }),
   
   // Get bookings with filters (enhanced for Phase 2.2)
   list: (params = {}) => {
