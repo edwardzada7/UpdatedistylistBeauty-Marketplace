@@ -120,7 +120,7 @@ const BookingChatScreen = () => {
       ));
     } catch (err) {
       console.error("Failed to send message:", err);
-      toast.error("Failed to send message");
+      toast.error(err?.response?.data?.detail || "Failed to send message");
       
       // Remove temp message on error
       setMessages(prev => prev.filter(m => m.id !== tempMessage.id));

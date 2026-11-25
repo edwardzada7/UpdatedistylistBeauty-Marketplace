@@ -255,6 +255,9 @@ def send_shared_chat_message(conversation_id: int, auth_id: str, message: str, m
     receiver = conversation["provider_auth_id"] if auth_id == conversation["customer_auth_id"] else conversation["customer_auth_id"]
     _assert_not_blocked(auth_id, receiver)
     content = message.strip()
+    if message_type in ("text", "provider_recommendation"):
+        from contact_guard import enforce_no_contact_sharing
+        enforce_no_contact_sharing(content)
     if message_type == "provider_recommendation":
         recommendation = recommendation_data or {}
         recommended = recommendation.get("recommended_provider_auth_id")
