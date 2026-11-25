@@ -3,6 +3,7 @@ import { lazy, Suspense } from "react";
 import "@/App.css";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import BookingPrompts from "@/components/BookingPrompts";
 import { CartProvider } from "@/contexts/CartContext";
 
 // Auth Screens
@@ -438,6 +439,7 @@ function App() {
           <CartProvider>
             <Toaster position="top-center" />
             <AppRoutes />
+            <BookingPrompts />
           </CartProvider>
         </AuthProvider>
       </BrowserRouter>

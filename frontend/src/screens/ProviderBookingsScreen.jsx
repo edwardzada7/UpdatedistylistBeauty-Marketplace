@@ -31,7 +31,8 @@ const STATUS_CONFIG = {
   confirmed: { label: "Confirmed", className: "bg-blue-100 text-blue-700 border-blue-200" },
   completed: { label: "Completed", className: "bg-green-100 text-green-700 border-green-200" },
   canceled: { label: "Canceled", className: "bg-red-100 text-red-700 border-red-200" },
-  declined: { label: "Declined", className: "bg-gray-100 text-gray-700 border-gray-200" }
+  declined: { label: "Declined", className: "bg-gray-100 text-gray-700 border-gray-200" },
+  no_response: { label: "No Response", className: "bg-gray-100 text-gray-700 border-gray-200" }
 };
 
 const ProviderBookingsScreen = () => {

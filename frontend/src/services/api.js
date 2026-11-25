@@ -252,6 +252,16 @@ export const bookingsAPI = {
   markChatRead: (bookingId, authId) => 
     api.post(`/bookings/${bookingId}/chat/mark-read`, { auth_id: authId }),
 
+  // ==================== BOOKING LIFECYCLE ====================
+  cancelPolicy: (bookingId, authId) =>
+    api.get(`/bookings/${bookingId}/cancel-policy?auth_id=${authId}`),
+
+  customerConfirm: (bookingId, authId, completed, reason = null) =>
+    api.post(`/bookings/${bookingId}/customer-confirm`, { auth_id: authId, completed, reason }),
+
+  pendingActions: (authId, role) =>
+    api.get(`/booking-actions/pending?auth_id=${authId}&role=${role}`),
+
   // ==================== NO-SHOW HYBRID FLOW ====================
   reportNoShow: (bookingId, authId, reason = null) =>
     api.post(`/bookings/${bookingId}/no-show/report`, { auth_id: authId, reason }),

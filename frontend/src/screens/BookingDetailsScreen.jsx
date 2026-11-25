@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -44,6 +45,7 @@ const STATUS_CONFIG = {
   no_show_pending: { label: "No-Show Pending", className: "bg-amber-100 text-amber-700 border-amber-200", icon: AlertTriangle },
   user_no_show: { label: "Customer No-Show", className: "bg-red-100 text-red-700 border-red-200", icon: AlertTriangle },
   provider_no_show: { label: "Provider No-Show", className: "bg-red-100 text-red-700 border-red-200", icon: AlertTriangle },
+  no_response: { label: "No Response (auto-cancelled)", className: "bg-gray-100 text-gray-700 border-gray-200", icon: XCircle },
   disputed: { label: "Disputed", className: "bg-purple-100 text-purple-700 border-purple-200", icon: AlertTriangle },
 };
 
@@ -56,6 +58,7 @@ const BookingDetailsScreen = () => {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [cancelInfo, setCancelInfo] = useState(null); // cancellation policy shown before the customer confirms
 
   // Review state
   const [existingReview, setExistingReview] = useState(null);
@@ -143,11 +146,34 @@ const BookingDetailsScreen = () => {
   }, [booking?.status, booking?.no_show_deadline]);
 
 
+  const openCancelDialog = async () => {
+    try {
+      setUpdating(true);
+      const res = await bookingsAPI.cancelPolicy(id, authId);
+      setCancelInfo(res.data);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Could not check the cancellation policy");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const confirmCancel = async () => {
+    setCancelInfo(null);
+    await handleStatusUpdate("canceled");
+  };
+
   const handleStatusUpdate = async (newStatus) => {
     try {
       setUpdating(true);
-      await bookingsAPI.updateStatus(id, newStatus, role, authId);
-      toast.success(`Booking ${newStatus}`);
+      const res = await bookingsAPI.updateStatus(id, newStatus, role, authId);
+      if (res?.data?.awaiting_customer_confirmation) {
+        toast.success("Marked as completed. Payment is released once the customer confirms, or automatically 24 hours after the session ends.");
+      } else if (res?.data?.settlement?.penalty) {
+        toast.info(`Cancelled. Late-cancellation fee N${res.data.settlement.penalty.toLocaleString()} paid to the provider; N${res.data.settlement.refund.toLocaleString()} refunded to your wallet.`);
+      } else {
+        toast.success(`Booking ${newStatus}`);
+      }
       fetchBooking(); // Refresh
     } catch (error) {
       console.error("Failed to update booking:", error);
@@ -614,7 +640,7 @@ const BookingDetailsScreen = () => {
                 <Button
                   variant="outline"
                   className="w-full text-red-600 border-red-200 hover:bg-red-50"
-                  onClick={() => handleStatusUpdate("canceled")}
+                  onClick={() => openCancelDialog()}
                   disabled={updating}
                   data-testid="cancel-booking-btn"
                 >
@@ -1017,6 +1043,29 @@ const BookingDetailsScreen = () => {
       )}
 
       <BottomNavSpacer />
+            <Dialog open={!!cancelInfo} onOpenChange={(o) => { if (!o) setCancelInfo(null); }}>
+        <DialogContent className="max-w-md w-[calc(100vw-2rem)]">
+          <DialogHeader>
+            <DialogTitle>{cancelInfo?.state === "late" ? "Late cancellation fee applies" : cancelInfo?.state === "closed" ? "Cannot cancel now" : "Cancel this booking?"}</DialogTitle>
+            <DialogDescription>{cancelInfo?.message}</DialogDescription>
+          </DialogHeader>
+          {cancelInfo?.state === "late" && cancelInfo.amount > 0 && (
+            <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm space-y-1">
+              <div className="flex justify-between"><span>Fee to provider ({cancelInfo.penalty_percentage}%)</span><span className="font-semibold">{CURRENCY}{cancelInfo.penalty_amount.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span>Refunded to your wallet</span><span className="font-semibold">{CURRENCY}{cancelInfo.refund_amount.toLocaleString()}</span></div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setCancelInfo(null)}>Keep booking</Button>
+            {cancelInfo?.state !== "closed" && (
+              <Button className="bg-red-600 hover:bg-red-700" onClick={confirmCancel}>
+                {cancelInfo?.state === "late" ? "Cancel and pay fee" : "Yes, cancel"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <BottomNavigation />
 
       {/* ============== NO-SHOW MODALS ============== */}
