@@ -30,6 +30,7 @@ from wallet_helpers import (
 
 # Booking reminders - lightweight in-app reminder scheduler
 from booking_reminders import scan_and_create_reminders
+import booking_lifecycle
 
 # No-show automation helpers
 from no_show_helpers import (
@@ -1809,6 +1810,109 @@ async def _refund_escrow_to_customer(booking_id: int, customer_auth_id: str):
         logging.info(f"Escrow refunded: {amount} to customer {customer_auth_id} for booking #{booking_id}")
     except Exception as e:
         logging.error(f"Failed to refund escrow: {str(e)}")
+
+
+def _booking_amount(booking: dict) -> float:
+    """Total the customer paid for a booking (same sources as the escrow helpers)."""
+    booking_id = booking["id"]
+    amount = 0.0
+    if check_table_exists("booking_services"):
+        rows = supabase.table("booking_services").select("price").eq("booking_id", booking_id).execute().data or []
+        if rows:
+            amount = sum(float(r.get("price", 0) or 0) for r in rows) + float(booking.get("travel_fee") or 0)
+    if amount == 0:
+        amount = float(booking.get("total_amount", 0) or 0)
+    if amount == 0:
+        amount = float(booking.get("service_price", 0) or 0)
+    if amount == 0 and check_table_exists("payments"):
+        rows = supabase.table("payments").select("amount").eq("booking_id", booking_id).eq("status", "success").execute().data or []
+        if rows:
+            amount = float(rows[0].get("amount", 0) or 0)
+    return amount
+
+
+def _booking_is_paid(booking: dict) -> bool:
+    if booking.get("payment_status") == "paid":
+        return True
+    try:
+        if check_table_exists("payments"):
+            r = supabase.table("payments").select("id").eq("booking_id", booking["id"]).eq("status", "success").execute()
+            if r.data:
+                return True
+    except Exception:
+        pass
+    return False
+
+
+async def _refund_if_paid(booking: dict):
+    """Refund escrow to the customer only when a payment exists (used by the auto-cancel job)."""
+    if booking.get("customer_auth_id") and _booking_is_paid(booking):
+        await _refund_escrow_to_customer(booking["id"], booking["customer_auth_id"])
+
+
+async def _settle_late_cancel(booking: dict, penalty_pct: float) -> dict:
+    """
+    Customer cancelled inside the cutoff window: penalty (penalty_pct % of the booking) goes to the provider
+    (minus the normal booking commission), the rest is refunded to the customer. Idempotent.
+    """
+    booking_id = booking["id"]
+    cust, prov = booking.get("customer_auth_id"), booking.get("provider_id")
+    amount = _booking_amount(booking)
+    if not (cust and prov) or amount <= 0 or not _booking_is_paid(booking):
+        return {"penalty": 0.0, "refund": 0.0}
+    ref = f"late_cancel_{booking_id}"
+    if check_table_exists("payments"):
+        done = supabase.table("payments").select("id").eq("reference", ref).eq("status", "success").execute()
+        if done.data:
+            return {"penalty": 0.0, "refund": 0.0}
+    penalty = round(amount * penalty_pct / 100.0, 2)
+    refund = round(amount - penalty, 2)
+    commission_pct = float(_load_withdrawal_fee_settings().get("booking_commission_percentage") or 0)
+    platform_fee = round(penalty * commission_pct / 100.0, 2) if commission_pct > 0 else 0.0
+    provider_amount = round(penalty - platform_fee, 2)
+
+    cw = supabase.table("wallets").select("*").eq("user_auth_id", cust).execute().data
+    if not cw:
+        return {"penalty": 0.0, "refund": 0.0}
+    w = cw[0]
+    supabase.table("wallets").update({
+        "escrow_balance": max(0, (w.get("escrow_balance") or 0) - amount),
+        "balance": (w.get("balance") or 0) + refund,
+    }).eq("id", w["id"]).execute()
+
+    pw = supabase.table("wallets").select("*").eq("user_auth_id", prov).execute().data
+    if pw:
+        supabase.table("wallets").update({"balance": (pw[0].get("balance") or 0) + provider_amount}).eq("id", pw[0]["id"]).execute()
+    else:
+        supabase.table("wallets").insert({"user_auth_id": prov, "balance": provider_amount, "escrow_balance": 0}).execute()
+
+    now_iso = datetime.utcnow().isoformat()
+    if check_table_exists("payments"):
+        supabase.table("payments").insert({
+            "reference": ref, "amount": amount, "purpose": "late_cancel_settlement",
+            "payment_provider": "internal", "booking_id": booking_id, "status": "success",
+            "processed": True, "created_at": now_iso, "processed_at": now_iso,
+        }).execute()
+    if check_table_exists("wallet_transactions"):
+        rows = []
+        if refund > 0:
+            rows.append((cust, "credit", refund, f"Refund for booking #{booking_id} (after {penalty_pct:g}% late-cancellation fee)"))
+        if penalty > 0:
+            rows.append((cust, "debit", penalty, f"Late-cancellation fee for booking #{booking_id}"))
+        if provider_amount > 0:
+            rows.append((prov, "credit", provider_amount, f"Late-cancellation fee from booking #{booking_id}"
+                         + (f" (after {commission_pct:g}% platform fee)" if platform_fee > 0 else "")))
+        for uid, kind, amt, desc in rows:
+            supabase.table("wallet_transactions").insert({
+                "user_auth_id": uid, "auth_id": uid, "type": kind, "direction": kind, "amount": amt,
+                "reference": ref, "booking_id": booking_id, "description": desc,
+                "status": "completed", "created_at": now_iso,
+            }).execute()
+    try:
+        supabase.table("bookings").update({"late_cancel_penalty": penalty, "canceled_by": "customer"}).eq("id", booking_id).execute()
+    except Exception:
+        pass
+    return {"penalty": penalty, "refund": refund}
 
 
 @api_router.post("/webhooks/paystack")
@@ -6519,6 +6623,43 @@ async def update_booking(
                     detail="Not authorized to update this booking"
                 )
         
+        # --- Lifecycle rules (phase 39) -------------------------------------------------
+        late_cancel = False
+        if new_status == "canceled" and role == "customer" and current_status == "confirmed":
+            policy = booking_lifecycle.cancel_policy(booking)
+            if policy["state"] == "closed":
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=policy["message"])
+            late_cancel = policy["state"] == "late"
+
+        if new_status == "completed" and role == "provider" and current_status == "confirmed":
+            # Provider says the session is done. Payment is released when the customer confirms
+            # (or automatically after the auto-complete window), not instantly.
+            start_dt = booking_lifecycle.appointment_start(booking)
+            if start_dt and booking_lifecycle._now_lagos() < start_dt:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                    detail="You can mark this session completed once the appointment time has started.")
+            try:
+                supabase.table("bookings").update({
+                    "provider_confirmed_at": datetime.utcnow().isoformat()
+                }).eq("id", booking_id).execute()
+            except Exception as ce:
+                logging.warning(f"provider_confirmed_at not saved (run phase39): {ce}")
+            if booking.get("customer_auth_id"):
+                await create_notification(
+                    recipient_auth_id=booking["customer_auth_id"],
+                    notification_type="booking_completion_prompt",
+                    title="Your provider marked the service completed",
+                    message=(f"Please confirm that your service on {booking.get('booking_date')} was completed. "
+                             f"Tap Yes to release payment to the provider, or No if it did not happen. "
+                             f"If you don't respond, it completes automatically {booking_lifecycle.AUTO_COMPLETE_HOURS:g} hours after the session ends."),
+                    actor_auth_id=booking.get("provider_id"),
+                    metadata={"booking_id": booking_id},
+                )
+            current_row = supabase.table("bookings").select("*").eq("id", booking_id).execute().data[0]
+            out = await _enrich_booking(current_row, role)
+            out["awaiting_customer_confirmation"] = True
+            return out
+
         # Update the booking
         result = supabase.table("bookings").update({"status": new_status}).eq("id", booking_id).execute()
         
@@ -6527,6 +6668,19 @@ async def update_booking(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Booking not found"
             )
+
+        settlement = None
+        if new_status == "canceled" and role in ("customer", "provider"):
+            try:
+                supabase.table("bookings").update({"canceled_by": role}).eq("id", booking_id).execute()
+            except Exception:
+                pass
+        if late_cancel:
+            try:
+                settlement = await _settle_late_cancel(booking, booking_lifecycle.LATE_CANCEL_PENALTY_PCT)
+            except Exception as se:
+                logging.error(f"late-cancel settlement failed for booking {booking_id}: {se}")
+                settlement = None
         
         # Handle escrow release/refund based on status change
         if new_status == "completed" and current_status in ["pending", "confirmed"]:
@@ -6536,7 +6690,7 @@ async def update_booking(
             if provider_id and customer_auth_id:
                 await _release_escrow_to_provider(booking_id, provider_id, customer_auth_id)
         
-        elif new_status in ["canceled", "declined"] and current_status in ["pending", "confirmed", "pending_payment"]:
+        elif new_status in ["canceled", "declined"] and current_status in ["pending", "confirmed", "pending_payment"] and not late_cancel:
             # Refund escrow to customer
             customer_auth_id = booking.get("customer_auth_id")
             if customer_auth_id:
@@ -6617,35 +6771,48 @@ async def update_booking(
         elif new_status == "canceled":
             # Determine who canceled and notify the other party
             if role == "customer" and provider_id:
+                if late_cancel and settlement and settlement.get("penalty"):
+                    p_msg = (f"{customer_name} cancelled the booking for {booking_date} inside the "
+                             f"{booking_lifecycle.CANCEL_CUTOFF_MIN}-minute window. A late-cancellation fee of "
+                             f"N{settlement['penalty']:,.2f} has been paid to your wallet (platform fee, if any, deducted).")
+                    c_msg = (f"You cancelled within {booking_lifecycle.CANCEL_CUTOFF_MIN} minutes of your appointment. "
+                             f"A {booking_lifecycle.LATE_CANCEL_PENALTY_PCT:g}% late-cancellation fee (N{settlement['penalty']:,.2f}) was paid to the provider "
+                             f"for the time they reserved. N{settlement['refund']:,.2f} was refunded to your wallet.")
+                else:
+                    p_msg = f"{customer_name} has canceled the booking for {booking_date}. The customer cancelled in time, so no fee applies."
+                    c_msg = "Your booking was cancelled and any payment was refunded in full. No fee applies."
                 await create_notification(
                     recipient_auth_id=provider_id,
                     notification_type="booking_canceled",
-                    title="Booking Canceled",
-                    message=f"{customer_name} has canceled the booking for {booking_date}",
+                    title="Booking Canceled" + (" (late, fee paid)" if late_cancel and settlement and settlement.get("penalty") else ""),
+                    message=p_msg,
                     actor_auth_id=customer_auth_id,
                     metadata={"booking_id": booking_id}
                 )
+                if customer_auth_id:
+                    await create_notification(
+                        recipient_auth_id=customer_auth_id,
+                        notification_type="booking_canceled",
+                        title="Booking cancelled" + (" (late-cancellation fee)" if late_cancel and settlement and settlement.get("penalty") else ""),
+                        message=c_msg,
+                        metadata={"booking_id": booking_id}
+                    )
             elif role == "provider" and customer_auth_id:
                 await create_notification(
                     recipient_auth_id=customer_auth_id,
                     notification_type="booking_canceled",
                     title="Booking Canceled",
-                    message=f"{provider_name} has canceled your booking for {booking_date}",
+                    message=f"{provider_name} has canceled your booking for {booking_date}. You have been refunded in full and no fee applies to you.",
                     actor_auth_id=provider_id,
                     metadata={"booking_id": booking_id}
                 )
         elif new_status == "completed" and customer_auth_id:
-            await create_notification(
-                recipient_auth_id=customer_auth_id,
-                notification_type="booking_completed",
-                title="Service Completed",
-                message=f"Your appointment with {provider_name} has been marked as completed",
-                actor_auth_id=provider_id,
-                metadata={"booking_id": booking_id}
-            )
+            await booking_lifecycle.notify_completed(create_notification, booking, auto=False)
         
         # Return enriched booking
         enriched = await _enrich_booking(result.data[0], role)
+        if settlement:
+            enriched["settlement"] = settlement
         return enriched
     except HTTPException:
         raise
@@ -6661,6 +6828,143 @@ async def update_booking(
 # - Additive endpoints, no existing routes modified.
 # - Uses existing escrow helpers; never touches wallet logic directly.
 # ====================================================================
+
+# ====================================================================
+# BOOKING LIFECYCLE ENDPOINTS (phase 39)
+# ====================================================================
+
+def _lifecycle_booking_or_404(booking_id: int) -> dict:
+    r = supabase.table("bookings").select("*").eq("id", booking_id).execute()
+    if not r.data:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    return r.data[0]
+
+
+@api_router.get("/bookings/{booking_id}/cancel-policy")
+async def booking_cancel_policy(booking_id: int, auth_id: str = Query(...)):
+    """What happens if the customer cancels right now (free / late fee / closed), with the amounts."""
+    booking = _lifecycle_booking_or_404(booking_id)
+    if auth_id not in (booking.get("customer_auth_id"), booking.get("provider_id")):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    policy = booking_lifecycle.cancel_policy(booking)
+    amount = _booking_amount(booking) if _booking_is_paid(booking) else 0.0
+    penalty = round(amount * policy["penalty_percentage"] / 100.0, 2) if policy["state"] == "late" else 0.0
+    return {**policy, "amount": amount, "penalty_amount": penalty, "refund_amount": round(amount - penalty, 2)}
+
+
+class CustomerConfirmBody(BaseModel):
+    auth_id: str
+    completed: bool
+    reason: Optional[str] = None
+
+
+@api_router.post("/bookings/{booking_id}/customer-confirm")
+async def customer_confirm_completion(booking_id: int, body: CustomerConfirmBody):
+    """Customer answers 'Was your service completed?'. Yes -> completed + escrow released. No -> no-show options."""
+    booking = _lifecycle_booking_or_404(booking_id)
+    cust, prov = booking.get("customer_auth_id"), booking.get("provider_id")
+    if body.auth_id != cust:
+        raise HTTPException(status_code=403, detail="Only the customer can confirm this booking")
+    if booking.get("status") != "confirmed":
+        raise HTTPException(status_code=400, detail=f"This booking is '{booking.get('status')}' and can no longer be confirmed.")
+    start = booking_lifecycle.appointment_start(booking)
+    if start and booking_lifecycle._now_lagos() < start:
+        raise HTTPException(status_code=400, detail="The appointment has not started yet.")
+    when = f"{booking.get('booking_date')} at {str(booking.get('booking_time'))[:5]}"
+    if body.completed:
+        upd = supabase.table("bookings").update({"status": "completed", "completed_by": "customer"}).eq("id", booking_id).eq("status", "confirmed").execute()
+        if not upd.data:
+            raise HTTPException(status_code=409, detail="Booking was already updated.")
+        try:
+            supabase.table("bookings").update({"customer_confirmed_at": datetime.utcnow().isoformat()}).eq("id", booking_id).execute()
+        except Exception:
+            pass
+        if prov and cust:
+            await _release_escrow_to_provider(booking_id, prov, cust)
+        await booking_lifecycle.notify_completed(create_notification, booking, auto=False)
+        return {"status": "completed", "message": "Thanks! Payment was released to your provider."}
+    # No
+    try:
+        supabase.table("bookings").update({
+            "customer_disputed_completion_at": datetime.utcnow().isoformat()
+        }).eq("id", booking_id).execute()
+    except Exception as e:
+        logging.warning(f"customer_disputed_completion_at not saved (run phase39): {e}")
+    reason = (body.reason or "").strip()[:300]
+    await create_notification(
+        recipient_auth_id=prov, notification_type="booking_completion_disputed",
+        title="Customer says the service did not happen",
+        message=(f"For the booking on {when}, the customer answered No to 'Was your service completed?'"
+                 + (f" Reason: {reason}." if reason else "")
+                 + " Payment is on hold. If the customer did not show up, file a no-show on the booking. Otherwise contact support."),
+        metadata={"booking_id": booking_id})
+    await create_notification(
+        recipient_auth_id=cust, notification_type="booking_completion_disputed",
+        title="Payment on hold",
+        message=(f"You said the service on {when} did not happen. Your payment stays on hold and will NOT be auto-released. "
+                 f"File a no-show on the booking so it can be resolved. If the provider disputes it, our team reviews it."),
+        metadata={"booking_id": booking_id})
+    return {"status": "confirmed", "disputed": True,
+            "message": "Payment is on hold. File a no-show on this booking to get a refund, or contact support."}
+
+
+@api_router.get("/booking-actions/pending")
+async def booking_pending_actions(auth_id: str = Query(...), role: str = Query("customer")):
+    """Everything this user should be prompted about right now (popup source for web and mobile)."""
+    items: list = []
+    is_provider = role == "provider"
+    try:
+        q = supabase.table("bookings").select("*")
+        q = q.eq("provider_id", auth_id) if is_provider else q.eq("customer_auth_id", auth_id)
+        rows = q.in_("status", ["confirmed", "completed"]).order("booking_date", desc=True).limit(60).execute().data or []
+    except Exception as e:
+        logging.warning(f"pending actions fetch failed: {e}")
+        return {"items": []}
+    now = booking_lifecycle._now_lagos()
+    cutoff = now - timedelta(days=14)
+    for b in rows:
+        try:
+            start = booking_lifecycle.appointment_start(b)
+            if not start:
+                continue
+            when = f"{b.get('booking_date')} at {str(b.get('booking_time'))[:5]}"
+            base = {"booking_id": b["id"], "when": when, "provider_id": b.get("provider_id")}
+            if b.get("status") == "confirmed":
+                end = booking_lifecycle.session_end(supabase, b)
+                if not end or now < end:
+                    continue
+                if b.get("no_show_reported_at"):
+                    continue
+                hrs = booking_lifecycle.AUTO_COMPLETE_HOURS
+                if b.get("customer_disputed_completion_at"):
+                    items.append({**base, "type": "file_no_show",
+                                  "title": "Service disputed: file a no-show?",
+                                  "message": ("You said this service did not happen. Payment is on hold. File a no-show to resolve it and get a refund."
+                                              if not is_provider else
+                                              "The customer says this service did not happen. Payment is on hold. If the customer did not show up, file a no-show."),
+                                  "reason": "No-show reports are reviewed. False reports can lead to account penalties."})
+                elif not is_provider:
+                    items.append({**base, "type": "customer_confirm",
+                                  "title": "Was your service completed?",
+                                  "message": f"Your booking on {when} has ended. Confirm to release payment to your provider.",
+                                  "reason": f"If you don't answer within {hrs:g} hours of the session ending, it completes automatically and the provider is paid. Choose No if the service did not happen."})
+                elif not b.get("provider_confirmed_at"):
+                    items.append({**base, "type": "provider_mark",
+                                  "title": "Mark this session",
+                                  "message": f"The session on {when} has ended. Was it completed, or did the customer not show up?",
+                                  "reason": f"Payment is released after the customer confirms, or automatically {hrs:g} hours after the session ends. A no-show report gives the customer a chance to dispute."})
+            elif b.get("status") == "completed" and not is_provider and start > cutoff:
+                if check_table_exists("reviews"):
+                    rv = supabase.table("reviews").select("id").eq("booking_id", b["id"]).limit(1).execute()
+                    if rv.data:
+                        continue
+                items.append({**base, "type": "review", "title": "How was your service?",
+                              "message": "Your booking is complete. Please rate your provider.",
+                              "reason": "Reviews help other customers choose and reward good providers."})
+        except Exception as e:
+            logging.warning(f"pending action skip {b.get('id')}: {e}")
+    return {"items": items[:5]}
+
 
 class NoShowReportBody(BaseModel):
     auth_id: str
@@ -10781,6 +11085,17 @@ async def _start_reminder_scheduler():
             coalesce=True,
             max_instances=1,
             misfire_grace_time=300,
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            booking_lifecycle.run_lifecycle,
+            "interval",
+            minutes=1,
+            args=[supabase, create_notification, _release_escrow_to_provider, _refund_if_paid],
+            id="booking_lifecycle_job",
+            coalesce=True,
+            max_instances=1,
+            misfire_grace_time=120,
             replace_existing=True,
         )
         scheduler.start()
