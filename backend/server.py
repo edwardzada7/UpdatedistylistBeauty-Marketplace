@@ -11032,28 +11032,60 @@ except Exception as _e:
     logging.error("[startup] FAILED to include api_router: %s\n%s", _e, _tb.format_exc())
     raise
 
-from starlette.responses import JSONResponse as _GuardJSON
 from contact_guard import check_json_payload as _check_json_payload, CONTACT_POLICY_MESSAGE as _CONTACT_MSG
 
 
-@app.middleware("http")
-async def contact_sharing_middleware(request, call_next):
-    """Blocks phone numbers / emails / socials / links in bios, posts, comments, reviews, notes and listings."""
-    try:
-        if request.method in ("POST", "PUT", "PATCH") and "json" in (request.headers.get("content-type") or "").lower():
-            body = await request.body()
+class ContactGuardMiddleware:
+    """
+    Pure ASGI middleware (no BaseHTTPMiddleware): buffers JSON request bodies, blocks phone numbers / emails /
+    socials / links in bios, posts, comments, reviews, notes and listings, then replays the body untouched.
+    Any internal problem lets the request through unchanged.
+    """
 
-            async def _receive():
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope.get("method") not in ("POST", "PUT", "PATCH"):
+            return await self.app(scope, receive, send)
+        headers = {k.lower(): v for k, v in scope.get("headers", [])}
+        if b"json" not in headers.get(b"content-type", b"").lower():
+            return await self.app(scope, receive, send)
+
+        chunks, more = [], True
+        while more:
+            message = await receive()
+            if message["type"] != "http.request":  # disconnect
+                return await self.app(scope, receive, send)
+            chunks.append(message.get("body", b""))
+            more = message.get("more_body", False)
+        body = b"".join(chunks)
+
+        try:
+            field = _check_json_payload(scope.get("path", ""), body, is_admin=b"x-admin-key" in headers)
+        except Exception as e:
+            logging.warning(f"[contact_guard] skipped: {e}")
+            field = None
+        if field:
+            import json as _json
+            payload = _json.dumps({"detail": _CONTACT_MSG.replace("Message not sent.", f"Could not save ({field}).")}).encode()
+            await send({"type": "http.response.start", "status": 422,
+                        "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(payload)).encode())]})
+            await send({"type": "http.response.body", "body": payload})
+            return
+
+        sent = {"done": False}
+
+        async def replay():
+            if not sent["done"]:
+                sent["done"] = True
                 return {"type": "http.request", "body": body, "more_body": False}
+            return await receive()
 
-            request._receive = _receive
-            field = _check_json_payload(request.url.path, body, is_admin=bool(request.headers.get("x-admin-key")))
-            if field:
-                return _GuardJSON(status_code=422, content={"detail": _CONTACT_MSG.replace("Message not sent.", f"Could not save ({field}).")})
-    except Exception as e:  # never break requests because of the guard itself
-        logging.warning(f"[contact_guard] middleware skipped: {e}")
-    return await call_next(request)
+        await self.app(scope, replay, send)
 
+
+app.add_middleware(ContactGuardMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
