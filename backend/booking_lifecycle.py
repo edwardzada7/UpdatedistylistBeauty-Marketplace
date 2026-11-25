@@ -28,7 +28,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 
-from booking_reminders import _parse_appointment_datetime, _now_lagos, LAGOS_TZ
+from booking_reminders import _parse_appointment_datetime, _now_lagos, LAGOS_TZ, _existing_reminder
 
 
 def _env_num(name: str, default: float) -> float:
@@ -238,11 +238,18 @@ async def run_lifecycle(supabase, create_notification, release_escrow, refund_if
         conf = []
     for b in conf:
         try:
-            end = session_end(supabase, b)
-            if not end or now < end:
-                continue
             when = f"{b.get('booking_date')} at {str(b.get('booking_time'))[:5]}"
             cust, prov = b.get("customer_auth_id"), b.get("provider_id")
+            start = appointment_start(b)
+            end = session_end(supabase, b)
+            if start and now < start:
+                await _notify_before_start(create_notification, supabase, b, start, now, cust, prov, when)
+                continue
+            if start and end and now < end:
+                await _notify_started(create_notification, supabase, b, cust, prov, when, end)
+                continue
+            if not end or now < end:
+                continue
             if not b.get("completion_prompt_sent_at"):
                 auto_at = end + timedelta(hours=AUTO_COMPLETE_HOURS)
                 upd = supabase.table("bookings").update({
@@ -253,15 +260,15 @@ async def run_lifecycle(supabase, create_notification, release_escrow, refund_if
                     if cust:
                         await create_notification(
                             recipient_auth_id=cust, notification_type="booking_completion_prompt",
-                            title="Was your service completed?",
-                            message=(f"Your booking for {when} has ended. Tap Yes to confirm and release payment to your provider. "
+                            title="Your session has ended: was it completed?",
+                            message=(f"Your session for {when} has ended. Tap Yes to confirm and release payment to your provider. "
                                      f"Tap No if the service did not happen and you can file a no-show. "
                                      f"If you don't respond within {AUTO_COMPLETE_HOURS:g} hours, the booking is completed automatically and the provider is paid."),
                             metadata={"booking_id": b["id"]})
                     if prov:
                         await create_notification(
                             recipient_auth_id=prov, notification_type="booking_provider_completion_prompt",
-                            title="Mark this session: completed or no-show",
+                            title="Session has ended: mark it",
                             message=(f"The booked session for {when} has ended. Please mark it Completed, or No-show if the customer did not come. "
                                      f"Payment is only released after the customer confirms, or automatically {AUTO_COMPLETE_HOURS:g} hours after the session ends."),
                             metadata={"booking_id": b["id"]})
@@ -287,6 +294,45 @@ async def run_lifecycle(supabase, create_notification, release_escrow, refund_if
             stats["errors"] += 1
             logging.warning(f"[lifecycle] confirmed loop error: {ex}")
     return stats
+
+
+async def _send_once(create_notification, supabase, ntype, recipient, booking_id, title, message, meta):
+    if not recipient or _existing_reminder(supabase, ntype, recipient, booking_id):
+        return
+    await create_notification(recipient_auth_id=recipient, notification_type=ntype, title=title, message=message,
+                              metadata={"booking_id": booking_id, **meta})
+
+
+async def _notify_before_start(create_notification, supabase, b, start, now, cust, prov, when):
+    """10 minutes before the session: heads-up for both sides."""
+    mins = (start - now).total_seconds() / 60.0
+    if mins > 10:
+        return
+    left = max(1, int(round(mins)))
+    await _send_once(create_notification, supabase, "booking_reminder_10m", cust, b["id"],
+                     "Your session starts soon",
+                     f"Your appointment starts in about {left} minute(s) ({when}). Rescheduling is now closed (it closes {CANCEL_CUTOFF_MIN} minutes before). "
+                     f"Cancelling now costs a {LATE_CANCEL_PENALTY_PCT:g}% fee paid to the provider, so please be ready.",
+                     {"reminder_type": "booking_reminder_10m", "role": "customer"})
+    await _send_once(create_notification, supabase, "booking_reminder_10m", prov, b["id"],
+                     "Session starts soon",
+                     f"A booking with you starts in about {left} minute(s) ({when}). Please be ready and on time. "
+                     f"Late or missed sessions can be reported as a no-show.",
+                     {"reminder_type": "booking_reminder_10m", "role": "provider"})
+
+
+async def _notify_started(create_notification, supabase, b, cust, prov, when, end):
+    """At the start time: the session has started."""
+    end_txt = end.strftime("%H:%M")
+    await _send_once(create_notification, supabase, "booking_session_started", cust, b["id"],
+                     "Your session has started",
+                     f"Your session ({when}) has started and is booked until {end_txt}. When it ends we'll ask you to confirm it was completed. "
+                     f"If your provider hasn't arrived or started, message them in the booking chat.",
+                     {"role": "customer"})
+    await _send_once(create_notification, supabase, "booking_session_started", prov, b["id"],
+                     "Session has started",
+                     f"The session ({when}) has started and is booked until {end_txt}. At the end you'll be asked to mark it Completed or No-show.",
+                     {"role": "provider"})
 
 
 async def notify_completed(create_notification, booking: Dict[str, Any], auto: bool = False):

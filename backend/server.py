@@ -5914,6 +5914,51 @@ def home_service_quote(payload: HomeQuoteInput):
     return _home_quote(payload.provider_id, payload.latitude, payload.longitude)
 
 
+# ---- Address lookup: lets a customer book a home visit to ANY typed address (home, office, another city) ----
+_GEOCODE_CACHE: dict = {}
+_GEOCODE_LAST = {"t": 0.0}
+
+
+class GeocodeInput(BaseModel):
+    address: str = Field(..., min_length=5, max_length=300)
+
+
+@api_router.post("/geocode/address")
+async def geocode_address(payload: GeocodeInput):
+    """Typed address -> coordinates (OpenStreetMap Nominatim). Used to check distance and travel fee."""
+    import httpx, time, asyncio
+    q = " ".join(payload.address.split())
+    key = q.lower()
+    if key in _GEOCODE_CACHE:
+        return _GEOCODE_CACHE[key]
+    countries = os.environ.get("GEOCODE_COUNTRIES", "ng")
+    # Nominatim allows ~1 request/second
+    wait = 1.1 - (time.time() - _GEOCODE_LAST["t"])
+    if wait > 0:
+        await asyncio.sleep(wait)
+    _GEOCODE_LAST["t"] = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.get(
+                "https://nominatim.openstreetmap.org/search",
+                params={"q": q, "format": "jsonv2", "limit": 1, "countrycodes": countries, "addressdetails": 0},
+                headers={"User-Agent": "iStylist/1.0 (support@istylist.online)"},
+            )
+        rows = r.json() if r.status_code == 200 else []
+    except Exception as e:
+        logging.warning(f"geocode failed: {e}")
+        raise HTTPException(status_code=502, detail="Address lookup is unavailable right now. Use 'Use my current location' instead.")
+    if not rows:
+        out = {"found": False, "message": "We couldn't find that address. Add the area or city (for example: 'Orchid Road, Lekki, Lagos'), or use your current location."}
+    else:
+        top = rows[0]
+        out = {"found": True, "latitude": float(top["lat"]), "longitude": float(top["lon"]), "label": top.get("display_name", q)}
+        _GEOCODE_CACHE[key] = out
+        if len(_GEOCODE_CACHE) > 500:
+            _GEOCODE_CACHE.pop(next(iter(_GEOCODE_CACHE)))
+    return out
+
+
 _PRIVATE_UNTIL_CONFIRMED = ("pending_payment", "pending", "declined", "canceled")
 
 
