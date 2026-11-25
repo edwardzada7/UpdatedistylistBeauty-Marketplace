@@ -304,21 +304,25 @@ async def _send_once(create_notification, supabase, ntype, recipient, booking_id
 
 
 async def _notify_before_start(create_notification, supabase, b, start, now, cust, prov, when):
-    """10 minutes before the session: heads-up for both sides."""
+    """20 and 10 minutes before the session: heads-up for both sides."""
     mins = (start - now).total_seconds() / 60.0
-    if mins > 10:
+    if mins > 20:
         return
     left = max(1, int(round(mins)))
-    await _send_once(create_notification, supabase, "booking_reminder_10m", cust, b["id"],
-                     "Your session starts soon",
-                     f"Your appointment starts in about {left} minute(s) ({when}). Rescheduling is now closed (it closes {CANCEL_CUTOFF_MIN} minutes before). "
+    if mins > 10:
+        ntype = "booking_reminder_20m"
+        title_c, title_p = "Your session starts in 20 minutes", "Session starts in 20 minutes"
+    else:
+        ntype = "booking_reminder_10m"
+        title_c, title_p = "Your session starts in 10 minutes", "Session starts in 10 minutes"
+    await _send_once(create_notification, supabase, ntype, cust, b["id"], title_c,
+                     f"Your appointment starts in about {left} minute(s) ({when}). Rescheduling is closed ({CANCEL_CUTOFF_MIN} minutes before the start). "
                      f"Cancelling now costs a {LATE_CANCEL_PENALTY_PCT:g}% fee paid to the provider, so please be ready.",
-                     {"reminder_type": "booking_reminder_10m", "role": "customer"})
-    await _send_once(create_notification, supabase, "booking_reminder_10m", prov, b["id"],
-                     "Session starts soon",
+                     {"reminder_type": ntype, "role": "customer"})
+    await _send_once(create_notification, supabase, ntype, prov, b["id"], title_p,
                      f"A booking with you starts in about {left} minute(s) ({when}). Please be ready and on time. "
                      f"Late or missed sessions can be reported as a no-show.",
-                     {"reminder_type": "booking_reminder_10m", "role": "provider"})
+                     {"reminder_type": ntype, "role": "provider"})
 
 
 async def _notify_started(create_notification, supabase, b, cust, prov, when, end):

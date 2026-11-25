@@ -31,6 +31,7 @@ from wallet_helpers import (
 # Booking reminders - lightweight in-app reminder scheduler
 from booking_reminders import scan_and_create_reminders
 import booking_lifecycle
+from contact_guard import enforce_no_contact_sharing
 
 # No-show automation helpers
 from no_show_helpers import (
@@ -6084,6 +6085,7 @@ async def create_booking(booking: BookingCreate):
             booking_data["customer_id"] = booking.customer_id
         
         if booking.notes:
+            enforce_no_contact_sharing(booking.notes)
             booking_data["notes"] = booking.notes
         if booking.booking_date:
             booking_data["booking_date"] = booking.booking_date
@@ -9551,6 +9553,8 @@ async def create_chat_message(
 ):
     """Send a chat message for a booking via the generic chat endpoint."""
     try:
+        if (chat_message.message_type or "text") == "text":
+            enforce_no_contact_sharing(chat_message.message)
         if chat_message.conversation_id is not None:
             return send_shared_chat_message(
                 conversation_id=chat_message.conversation_id,

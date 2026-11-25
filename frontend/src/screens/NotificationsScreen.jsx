@@ -137,6 +137,9 @@ const NotificationsScreen = () => {
         return <Calendar className="h-5 w-5" />;
       case "booking_reminder_2h":
       case "booking_reminder_30m":
+      case "booking_reminder_20m":
+      case "booking_reminder_10m":
+      case "booking_session_started":
         return <AlarmClock className="h-5 w-5" />;
       case "chat_message":
         return <MessageCircle className="h-5 w-5" />;
@@ -170,6 +173,12 @@ const NotificationsScreen = () => {
         return "Appointment in 2 hours";
       case "booking_reminder_30m":
         return "Appointment in 30 minutes";
+      case "booking_reminder_20m":
+        return "Appointment in 20 minutes";
+      case "booking_reminder_10m":
+        return "Appointment in 10 minutes";
+      case "booking_session_started":
+        return "Session started";
       case "chat_message":
         return "New Message";
       case "review_received":
@@ -203,6 +212,9 @@ const NotificationsScreen = () => {
         return "bg-red-100 text-red-600";
       case "booking_reminder_2h":
       case "booking_reminder_30m":
+      case "booking_reminder_20m":
+      case "booking_reminder_10m":
+      case "booking_session_started":
         return "bg-orange-100 text-orange-600";
       case "chat_message":
         return "bg-indigo-100 text-indigo-600";

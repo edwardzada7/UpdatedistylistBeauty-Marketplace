@@ -254,7 +254,7 @@ def register_reschedule_routes(api_router: APIRouter, supabase: Any, get_slots: 
         supabase.table("booking_reschedules").update({"status": "accepted", "responded_at": now_iso}).eq("id", proposal["id"]).execute()
         # Reminders are sent once per booking, so clear the old ones: new time, new reminders.
         try:
-            supabase.table("notifications").delete().in_("type", ["booking_reminder_2h", "booking_reminder_30m"]).filter("metadata->>booking_id", "eq", str(booking_id)).execute()
+            supabase.table("notifications").delete().in_("type", ["booking_reminder_2h", "booking_reminder_30m", "booking_reminder_20m", "booking_reminder_10m", "booking_session_started"]).filter("metadata->>booking_id", "eq", str(booking_id)).execute()
         except Exception as exc:  # noqa: BLE001
             logger.warning("reminder reset skipped: %s", exc)
         msg = f"Booking #{booking_id} moved to {proposal['new_date']} at {proposal['new_time']}."

@@ -3,7 +3,7 @@ Booking reminder automation - lightweight in-app reminders.
 
 Generates two reminder notifications per confirmed booking:
   - booking_reminder_2h  : ~2 hours before appointment
-  - booking_reminder_30m : ~30 minutes before appointment
+  - 20m / 10m reminders are sent per-minute by booking_lifecycle
 
 Recipients: customer (via customer_auth_id) AND provider (via provider_id which
 is a UUID in the bookings table).
@@ -45,7 +45,6 @@ except Exception:  # pragma: no cover
 REMINDER_DEFINITIONS = [
     # (notification_type, minutes_before, label)
     ("booking_reminder_2h", 120, "in 2 hours"),
-    ("booking_reminder_30m", 30, "in 30 minutes"),
 ]
 
 # How wide the firing window is on either side of the target time.
