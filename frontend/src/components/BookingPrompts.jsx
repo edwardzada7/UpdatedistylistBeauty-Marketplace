@@ -11,11 +11,12 @@ import { bookingsAPI, reviewsAPI } from "@/services/api";
 const POLL_MS = 60000;
 const dismissKey = (it) => `BK_PROMPT_${it.type}_${it.booking_id}`;
 
+const store = (it) => (it.type === "review" ? localStorage : sessionStorage);
 const isDismissed = (it) => {
-  try { return sessionStorage.getItem(dismissKey(it)) === "1"; } catch { return false; }
+  try { return store(it).getItem(dismissKey(it)) === "1"; } catch { return false; }
 };
 const setDismissed = (it) => {
-  try { sessionStorage.setItem(dismissKey(it), "1"); } catch { /* ignore */ }
+  try { store(it).setItem(dismissKey(it), "1"); } catch { /* ignore */ }
 };
 
 /**
@@ -63,7 +64,9 @@ export default function BookingPrompts() {
   }, [isAuthenticated, authId, load]);
 
   const close = (dismiss = true) => {
-    if (item && dismiss) setDismissed(item);
+    if (item && (dismiss || item.type === "review")) setDismissed(item);
+    // review popup: remember on the server too so it never comes back for this booking (any device)
+    if (item && item.type === "review") bookingsAPI.dismissReviewPrompt(authId, item.booking_id).catch(() => {});
     setItem(null); setMode("main"); setPendingAnswer(null); setReason(""); setComment(""); setRating(5);
     setTimeout(load, 400);
   };
