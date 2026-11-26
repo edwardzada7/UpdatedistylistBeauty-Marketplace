@@ -11009,6 +11009,14 @@ try:
         logging.warning("[startup] events routes NOT registered: %s", _ev)
 
     try:
+        from themes_routes import register_themes_routes
+        from consultation_routes import _admin_key as _themes_admin_key
+        register_themes_routes(api_router, supabase, _themes_admin_key)
+        logging.info("[startup] themes routes registered")
+    except Exception as _th:
+        logging.warning("[startup] themes routes NOT registered: %s", _th)
+
+    try:
         from broadcast_routes import register_broadcast_routes
         register_broadcast_routes(api_router, supabase)
         logging.info("[startup] broadcast routes registered")

@@ -1,4 +1,5 @@
 import GuestPromptBar from "@/components/GuestPromptBar";
+import SeasonBanner from "@/components/SeasonBanner";
 import { useState, useEffect, useCallback } from "react";
 import SponsoredStrip from "@/components/SponsoredStrip";
 import EventsStrip from "@/components/EventsStrip";
@@ -124,6 +125,7 @@ const HomeScreen = () => {
           </div>
         </div>
       </header>
+      <SeasonBanner />
 
       {/* Hero Section */}
       <div className="container mx-auto px-4 py-8">
