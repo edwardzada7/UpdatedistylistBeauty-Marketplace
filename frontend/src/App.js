@@ -4,6 +4,8 @@ import "@/App.css";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import BookingPrompts from "@/components/BookingPrompts";
+import { SeasonThemeProvider } from "@/contexts/SeasonThemeContext";
+import SeasonEffects from "@/components/SeasonEffects";
 import { CartProvider } from "@/contexts/CartContext";
 
 // Auth Screens
@@ -63,6 +65,7 @@ const AdminReportsScreen = lazy(() => import("@/screens/AdminReportsScreen"));
 const AdminFeedModerationScreen = lazy(() => import("@/screens/AdminFeedModerationScreen"));
 const AdminShopModerationScreen = lazy(() => import("@/screens/AdminShopModerationScreen"));
 const AdminOfficialScreen = lazy(() => import("@/screens/AdminOfficialScreen"));
+const AdminThemesScreen = lazy(() => import("@/screens/AdminThemesScreen"));
 const AdminEventsScreen = lazy(() => import("@/screens/AdminEventsScreen"));
 const EventsScreen = lazy(() => import("@/screens/EventsScreen"));
 const EventDetailScreen = lazy(() => import("@/screens/EventDetailScreen"));
@@ -409,6 +412,7 @@ function AppRoutes() {
       <Route path="/admin/reports" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminReportsScreen /></Suspense>} />
       <Route path="/admin/feed-moderation" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminFeedModerationScreen /></Suspense>} />
       <Route path="/admin/shop-moderation" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminShopModerationScreen /></Suspense>} />
+      <Route path="/admin/themes" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminThemesScreen /></Suspense>} />
       <Route path="/admin/events" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminEventsScreen /></Suspense>} />
       <Route path="/admin/official" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminOfficialScreen /></Suspense>} />
       <Route path="/admin/promotions" element={<Suspense fallback={<LoadingSpinner fullScreen />}><AdminPromotionsScreen /></Suspense>} />
@@ -436,11 +440,14 @@ function App() {
     <div className="App min-h-screen bg-gray-50">
       <BrowserRouter>
         <AuthProvider>
+          <SeasonThemeProvider>
           <CartProvider>
             <Toaster position="top-center" />
             <AppRoutes />
             <BookingPrompts />
+            <SeasonEffects />
           </CartProvider>
+          </SeasonThemeProvider>
         </AuthProvider>
       </BrowserRouter>
     </div>

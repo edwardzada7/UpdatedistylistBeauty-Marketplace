@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
+import ThemePicker from "@/components/ThemePicker";
+import SeasonBanner from "@/components/SeasonBanner";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { providerServicesAPI, providersAPI, bookingsAPI, promoAPI } from "@/services/api";
@@ -288,6 +290,8 @@ const StylistDashboard = () => {
           </Button>
         </div>
       </div>
+
+      <div className="pb-6"><SeasonBanner /></div>
 
       {/* Stats Cards */}
       <div className="px-4 -mt-4">
@@ -835,6 +839,7 @@ const StylistDashboard = () => {
         {/* Settings & Logout */}
         <Card>
           <CardContent className="p-4 space-y-3">
+            <ThemePicker />
             {/* Profile Settings */}
             <div 
               className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition"

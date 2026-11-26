@@ -24,6 +24,7 @@ import AvatarUploader from "@/components/AvatarUploader";
 import CertifiedBadge, { useOwnCertified } from "@/components/CertifiedBadge";
 import { avatarOf, isVerifiedProfile } from "@/utils/profile";
 import NotificationBell from "@/components/NotificationBell";
+import ThemePicker from "@/components/ThemePicker";
 import { currencySymbol } from "@/utils/money";
 
 const DELETE_CONFIRMATION_PHRASE = "DELETE MY ACCOUNT";
@@ -552,6 +553,16 @@ const ProfileScreen = () => {
                   </div>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Appearance */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Appearance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ThemePicker />
             </CardContent>
           </Card>
 
