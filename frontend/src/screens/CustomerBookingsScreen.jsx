@@ -19,6 +19,7 @@ import {
   User,
   ChevronRight,
   CalendarClock,
+  AlertCircle,
   History,
   Wallet,
   Loader2
@@ -31,7 +32,11 @@ const STATUS_CONFIG = {
   completed: { label: "Completed", className: "bg-green-100 text-green-700 border-green-200" },
   canceled: { label: "Canceled", className: "bg-red-100 text-red-700 border-red-200" },
   declined: { label: "Declined", className: "bg-gray-100 text-gray-700 border-gray-200" },
-  no_response: { label: "No Response", className: "bg-gray-100 text-gray-700 border-gray-200" }
+  no_response: { label: "No Response", className: "bg-gray-100 text-gray-700 border-gray-200" },
+  no_show_pending: { label: "No-show: awaiting response", className: "bg-amber-100 text-amber-800 border-amber-200" },
+  user_no_show: { label: "Customer No-show", className: "bg-red-100 text-red-700 border-red-200" },
+  provider_no_show: { label: "Provider No-show", className: "bg-red-100 text-red-700 border-red-200" },
+  disputed: { label: "No-show Disputed", className: "bg-purple-100 text-purple-700 border-purple-200" }
 };
 
 const formatDate = (dateStr) => {
@@ -190,8 +195,12 @@ const CustomerBookingsScreen = () => {
     return isUpcomingStatus && isUpcomingDate;
   });
 
+  const NO_SHOW = ["no_show_pending", "user_no_show", "provider_no_show", "disputed"];
+  const noShowBookings = bookings.filter(b => NO_SHOW.includes(b.status));
+
   const pastBookings = bookings.filter(b => {
-    const isPastStatus = ["completed", "canceled", "declined"].includes(b.status);
+    if (NO_SHOW.includes(b.status)) return false;
+    const isPastStatus = ["completed", "canceled", "declined", "no_response"].includes(b.status);
     const isPastDate = b.booking_date < today;
     return isPastStatus || isPastDate;
   });
@@ -274,7 +283,7 @@ const CustomerBookingsScreen = () => {
 
       <div className="p-4">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-4">
+          <TabsList className="grid w-full grid-cols-3 mb-4">
             <TabsTrigger value="upcoming" className="flex items-center gap-2">
               <CalendarClock className="h-4 w-4" />
               Upcoming ({upcomingBookings.length})
@@ -282,6 +291,10 @@ const CustomerBookingsScreen = () => {
             <TabsTrigger value="past" className="flex items-center gap-2">
               <History className="h-4 w-4" />
               Past ({pastBookings.length})
+            </TabsTrigger>
+            <TabsTrigger value="noshow" className="flex items-center gap-2" data-testid="noshow-tab">
+              <AlertCircle className="h-4 w-4" />
+              No-show ({noShowBookings.length})
             </TabsTrigger>
           </TabsList>
 
@@ -321,6 +334,25 @@ const CustomerBookingsScreen = () => {
               <EmptyState
                 title="No past bookings"
                 description="Your completed bookings will appear here"
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="noshow" className="space-y-3">
+            {noShowBookings.length > 0 ? (
+              noShowBookings.map(booking => (
+                <BookingCard
+                  key={booking.id}
+                  booking={booking}
+                  onPayNow={handlePayNow}
+                  isPaying={payingBookingId === booking.id}
+                  navigate={navigate}
+                />
+              ))
+            ) : (
+              <EmptyState
+                title="No no-show bookings"
+                description="Bookings reported as no-show will appear here. Open one to respond or follow the outcome."
               />
             )}
           </TabsContent>

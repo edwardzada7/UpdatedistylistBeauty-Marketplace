@@ -32,7 +32,11 @@ const STATUS_CONFIG = {
   completed: { label: "Completed", className: "bg-green-100 text-green-700 border-green-200" },
   canceled: { label: "Canceled", className: "bg-red-100 text-red-700 border-red-200" },
   declined: { label: "Declined", className: "bg-gray-100 text-gray-700 border-gray-200" },
-  no_response: { label: "No Response", className: "bg-gray-100 text-gray-700 border-gray-200" }
+  no_response: { label: "No Response", className: "bg-gray-100 text-gray-700 border-gray-200" },
+  no_show_pending: { label: "No-show: awaiting response", className: "bg-amber-100 text-amber-800 border-amber-200" },
+  user_no_show: { label: "Customer No-show", className: "bg-red-100 text-red-700 border-red-200" },
+  provider_no_show: { label: "Provider No-show", className: "bg-red-100 text-red-700 border-red-200" },
+  disputed: { label: "No-show Disputed", className: "bg-purple-100 text-purple-700 border-purple-200" }
 };
 
 const ProviderBookingsScreen = () => {
@@ -87,7 +91,8 @@ const ProviderBookingsScreen = () => {
   const pendingBookings = bookings.filter(b => b.status === "pending");
   const confirmedBookings = bookings.filter(b => b.status === "confirmed");
   const completedBookings = bookings.filter(b => b.status === "completed");
-  const canceledBookings = bookings.filter(b => ["canceled", "declined"].includes(b.status));
+  const canceledBookings = bookings.filter(b => ["canceled", "declined", "no_response"].includes(b.status));
+  const noShowBookings = bookings.filter(b => ["no_show_pending", "user_no_show", "provider_no_show", "disputed"].includes(b.status));
 
   const formatDate = (dateStr) => {
     if (!dateStr) return "Date TBD";
@@ -255,7 +260,7 @@ const ProviderBookingsScreen = () => {
 
       <div className="p-4">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-4">
+          <TabsList className="grid w-full grid-cols-5 mb-4">
             <TabsTrigger value="pending" className="text-xs px-2">
               <AlertCircle className="h-3.5 w-3.5 mr-1 hidden sm:inline" />
               Pending ({pendingBookings.length})
@@ -271,6 +276,9 @@ const ProviderBookingsScreen = () => {
             <TabsTrigger value="canceled" className="text-xs px-2">
               <CalendarX className="h-3.5 w-3.5 mr-1 hidden sm:inline" />
               Other ({canceledBookings.length})
+            </TabsTrigger>
+            <TabsTrigger value="noshow" className="text-xs px-1" data-testid="noshow-tab">
+              No-show ({noShowBookings.length})
             </TabsTrigger>
           </TabsList>
 
@@ -321,7 +329,20 @@ const ProviderBookingsScreen = () => {
             ) : (
               <EmptyState
                 title="No canceled bookings"
-                description="Canceled or declined bookings will appear here"
+                description="Canceled, declined or no-response bookings will appear here"
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="noshow" className="space-y-3">
+            {noShowBookings.length > 0 ? (
+              noShowBookings.map(booking => (
+                <BookingCard key={booking.id} booking={booking} />
+              ))
+            ) : (
+              <EmptyState
+                title="No no-show bookings"
+                description="Bookings reported as no-show will appear here"
               />
             )}
           </TabsContent>

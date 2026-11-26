@@ -6275,6 +6275,9 @@ async def create_booking(booking: BookingCreate):
 
 # ==================== PROVIDER METRICS ENDPOINT ====================
 
+NO_SHOW_STATUSES = ("no_show_pending", "user_no_show", "provider_no_show", "disputed")
+
+
 @api_router.get("/providers/metrics")
 def get_provider_metrics(auth_id: str = Query(..., description="Provider's auth_id (UUID)")):
     """Get booking metrics for a provider dashboard"""
@@ -6285,6 +6288,8 @@ def get_provider_metrics(auth_id: str = Query(..., description="Provider's auth_
                 "confirmed_count": 0,
                 "completed_count": 0,
                 "canceled_count": 0,
+                "no_show_count": 0,
+                "no_response_count": 0,
                 "total_count": 0
             }
         
@@ -6303,6 +6308,8 @@ def get_provider_metrics(auth_id: str = Query(..., description="Provider's auth_
             "confirmed_count": confirmed_count,
             "completed_count": completed_count,
             "canceled_count": canceled_count,
+            "no_show_count": sum(1 for b in bookings if b.get("status") in NO_SHOW_STATUSES),
+            "no_response_count": sum(1 for b in bookings if b.get("status") == "no_response"),
             "total_count": len(bookings)
         }
     except Exception as e:
