@@ -59,7 +59,9 @@ const StylistDashboard = () => {
     totalEarnings: 0,
     upcomingBookings: 0,
     completedBookings: 0,
-    pendingBookings: 0
+    pendingBookings: 0,
+    noShowBookings: 0,
+    noResponseBookings: 0
   });
   
   // Wallet/Earnings metrics from new endpoint
@@ -130,7 +132,9 @@ const StylistDashboard = () => {
           pending_count: 0,
           confirmed_count: 0,
           completed_count: 0,
-          canceled_count: 0
+          canceled_count: 0,
+          no_show_count: 0,
+          no_response_count: 0
         };
         
         try {
@@ -145,7 +149,9 @@ const StylistDashboard = () => {
           totalEarnings: totalPrice,
           pendingBookings: bookingMetrics.pending_count || 0,
           upcomingBookings: (bookingMetrics.pending_count || 0) + (bookingMetrics.confirmed_count || 0),
-          completedBookings: bookingMetrics.completed_count || 0
+          completedBookings: bookingMetrics.completed_count || 0,
+          noShowBookings: bookingMetrics.no_show_count || 0,
+          noResponseBookings: bookingMetrics.no_response_count || 0
         });
 
       } catch (error) {
@@ -749,6 +755,40 @@ const StylistDashboard = () => {
                 <ChevronRight className="h-4 w-4 text-gray-400" />
               </div>
             </div>
+
+            {/* No-show / No response */}
+            <div
+              className="flex items-center justify-between p-3 bg-red-50 rounded-lg cursor-pointer hover:bg-red-100 transition"
+              onClick={() => navigate("/provider/bookings")}
+              data-testid="noshow-bookings-card"
+            >
+              <div className="flex items-center gap-3">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+                <div>
+                  <p className="font-medium text-gray-900">No-show</p>
+                  <p className="text-xs text-gray-500">Missed or reported sessions</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="bg-red-100 text-red-700">{stats.noShowBookings}</Badge>
+                <ChevronRight className="h-4 w-4 text-gray-400" />
+              </div>
+            </div>
+
+            <div
+              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition"
+              onClick={() => navigate("/provider/bookings")}
+              data-testid="noresponse-bookings-card"
+            >
+              <div className="flex items-center gap-3">
+                <Clock className="h-5 w-5 text-gray-600" />
+                <div>
+                  <p className="font-medium text-gray-900">No response</p>
+                  <p className="text-xs text-gray-500">Requests not answered in time</p>
+                </div>
+              </div>
+              <Badge variant="secondary">{stats.noResponseBookings}</Badge>
+            </div>
           </CardContent>
         </Card>
 
@@ -779,6 +819,14 @@ const StylistDashboard = () => {
               <div className="p-3 bg-amber-50 rounded-lg text-center">
                 <p className="text-2xl font-bold text-amber-600">{stats.completedBookings}</p>
                 <p className="text-xs text-gray-500">Completed</p>
+              </div>
+              <div className="p-3 bg-red-50 rounded-lg text-center">
+                <p className="text-2xl font-bold text-red-600">{stats.noShowBookings}</p>
+                <p className="text-xs text-gray-500">No-shows</p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-lg text-center">
+                <p className="text-2xl font-bold text-gray-600">{stats.noResponseBookings}</p>
+                <p className="text-xs text-gray-500">No response</p>
               </div>
             </div>
           </CardContent>
