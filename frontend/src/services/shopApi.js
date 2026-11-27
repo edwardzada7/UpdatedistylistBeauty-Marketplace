@@ -133,6 +133,30 @@ export const shopApi = {
     return url;
   },
 
+  /** Guest checkout: server computes the total, returns the Paystack URL. */
+  async createGuestOrder({ lines, name, email, phone, address, note }) {
+    const items = lines.map((l) => ({
+      product_id: Number(l.productId),
+      quantity: Number(l.quantity),
+      ...(l.sellerListingId ? { listing_id: Number(l.sellerListingId) } : {}),
+    }));
+    const res = await api.post("/shop/guest-orders", {
+      guest_name: name,
+      guest_email: email,
+      guest_phone: phone,
+      shipping_address: address,
+      note: note || undefined,
+      items,
+      callback_url: `${window.location.origin}/shop/guest-order`,
+    });
+    return res.data || {};
+  },
+
+  async getGuestOrder(orderId, token) {
+    const res = await api.get(`/shop/guest-orders/${orderId}`, { params: { t: token } });
+    return res.data || {};
+  },
+
   async verifyPayment(reference, orderId) {
     const res = await api.get("/payments/paystack/shop/verify", { params: { reference, ...(orderId ? { order_id: orderId } : {}) } });
     return res.data || {};

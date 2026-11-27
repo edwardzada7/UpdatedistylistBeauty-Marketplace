@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useCart } from "@/contexts/CartContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { shopApi, lineKey } from "@/services/shopApi";
+import { setPendingGuestOrder, saveGuestShopOrder } from "@/utils/guestShop";
 import { formatNaira } from "@/screens/ShopScreen";
 import ShopHeader from "@/components/ShopHeader";
 import BottomNavigation, { BottomNavSpacer } from "@/components/BottomNavigation";
@@ -19,6 +20,7 @@ export default function CartScreen() {
   const { lines, setQuantity, removeItem, total } = useCart();
   const { isAuthenticated, userData, user, isProvider } = useAuth();
   const [address, setAddress] = useState({ street: "", city: "", state: "", phone: userData?.phone || "" });
+  const [guest, setGuest] = useState({ name: "", email: "" });
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState(null);
 
@@ -27,8 +29,22 @@ export default function CartScreen() {
   const checkout = async () => {
     setError(null);
     if (!isAuthenticated) {
-      toast.info("Please log in to complete your order. Your cart will be kept.");
-      navigate("/login");
+      const { street, city, state, phone } = Object.fromEntries(Object.entries(address).map(([k, v]) => [k, v.trim()]));
+      const name = guest.name.trim();
+      const gemail = guest.email.trim();
+      if (!name || !/^\S+@\S+\.\S+$/.test(gemail)) { setError("Enter your name and a valid email. We send your order link there."); return; }
+      if (!street || !city || !state || !phone) { setError("Please complete every delivery field."); return; }
+      setPaying(true);
+      try {
+        const r = await shopApi.createGuestOrder({ lines, name, email: gemail, phone, address: `${street}, ${city}, ${state}` });
+        if (!r.authorization_url) throw new Error("Could not start payment. Please try again.");
+        setPendingGuestOrder({ orderId: r.order_id, token: r.access_token });
+        saveGuestShopOrder({ orderId: r.order_id, token: r.access_token, total: r.total_amount, at: Date.now() });
+        window.location.href = r.authorization_url;
+      } catch (err) {
+        setError(err?.response?.data?.detail || err?.message || "Could not start checkout. Please try again.");
+        setPaying(false);
+      }
       return;
     }
     if (isProvider) {
@@ -117,6 +133,13 @@ export default function CartScreen() {
 
         <div className="bg-white rounded-xl border p-4 space-y-3">
           <h2 className="font-semibold">Delivery details</h2>
+          {!isAuthenticated && (
+            <>
+              <p className="text-xs text-gray-500">Checking out as a guest. <button type="button" className="underline text-pink-600" onClick={() => navigate("/login")}>Sign in</button> or <button type="button" className="underline text-pink-600" onClick={() => navigate("/signup")}>sign up</button> to track orders in your account.</p>
+              <div><Label htmlFor="g-name">Full name</Label><Input id="g-name" value={guest.name} onChange={(e) => setGuest((g) => ({ ...g, name: e.target.value }))} /></div>
+              <div><Label htmlFor="g-email">Email (your order link is sent here)</Label><Input id="g-email" type="email" value={guest.email} onChange={(e) => setGuest((g) => ({ ...g, email: e.target.value }))} /></div>
+            </>
+          )}
           {[
             ["street", "Street address"],
             ["city", "City"],
@@ -138,7 +161,7 @@ export default function CartScreen() {
           <p className="text-xs text-gray-500 mt-1">You'll pay securely with Paystack. Delivery arrangements are made with the seller after payment.</p>
           {error && <p className="text-sm text-red-600 mt-3" role="alert">{error}</p>}
           <Button className="w-full mt-4 bg-pink-600 hover:bg-pink-700" onClick={checkout} disabled={paying} data-testid="checkout-button">
-            {paying ? "Starting payment..." : isAuthenticated ? `Pay ${formatNaira(total)}` : "Log in to checkout"}
+            {paying ? "Starting payment..." : `Pay ${formatNaira(total)}${isAuthenticated ? "" : " as guest"}`}
           </Button>
         </div>
       </div>
