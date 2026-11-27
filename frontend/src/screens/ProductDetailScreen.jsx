@@ -186,7 +186,11 @@ export default function ProductDetailScreen() {
                 </Button>
               </div>
             ) : !authId ? (
-              <p className="text-sm text-gray-500 mb-3">Sign in to leave a review.</p>
+              <p className="text-sm text-gray-500 mb-3">
+                Reviews and questions to sellers need an account.{" "}
+                <button type="button" className="underline text-pink-600" onClick={() => { try { sessionStorage.setItem("POST_LOGIN_REDIRECT", window.location.pathname); } catch (_) { /* ignore */ } navigate("/signup"); }}>Sign up</button>{" or "}
+                <button type="button" className="underline text-pink-600" onClick={() => { try { sessionStorage.setItem("POST_LOGIN_REDIRECT", window.location.pathname); } catch (_) { /* ignore */ } navigate("/login"); }}>sign in</button>.
+              </p>
             ) : null}
             {reviews.reviews.length === 0 && <p className="text-sm text-gray-500">No reviews yet.</p>}
               <div className="space-y-3">

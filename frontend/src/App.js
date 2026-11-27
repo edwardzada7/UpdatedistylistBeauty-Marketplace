@@ -35,6 +35,7 @@ import ProductDetailScreen from "@/screens/ProductDetailScreen";
 import CartScreen from "@/screens/CartScreen";
 import ShopOrderCompleteScreen from "@/screens/ShopOrderCompleteScreen";
 import ShopOrdersScreen from "@/screens/ShopOrdersScreen";
+import GuestShopOrderScreen from "@/screens/GuestShopOrderScreen";
 
 // Shared Screens
 import BookingDetailsScreen from "@/screens/BookingDetailsScreen";
@@ -188,6 +189,7 @@ function AppRoutes() {
       <Route path="/user/shop" element={<ShopScreen />} />
       <Route path="/shop/cart" element={<CartScreen />} />
       <Route path="/shop/order-complete" element={<ProtectedRoute><ShopOrderCompleteScreen /></ProtectedRoute>} />
+      <Route path="/shop/guest-order" element={<GuestShopOrderScreen />} />
       <Route path="/shop/orders" element={<ProtectedRoute><ShopOrdersScreen /></ProtectedRoute>} />
       <Route path="/user/orders" element={<ProtectedRoute><ShopOrdersScreen /></ProtectedRoute>} />
       <Route path="/shop/:id" element={<ProductDetailScreen />} />
