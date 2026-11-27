@@ -43,6 +43,7 @@ export default function EventsStrip({ showTickets = true }) {
             </div>
             <div className="p-3 space-y-1">
               {e.is_promoted && <span className="inline-block text-[10px] font-bold uppercase tracking-wide bg-purple-100 text-purple-800 rounded px-1.5 py-0.5">Promoted</span>}
+              <span className={`inline-block text-[10px] font-bold uppercase tracking-wide rounded px-1.5 py-0.5 ${e.is_free ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"}`}>{e.is_free ? "Free" : "Paid"}</span>
               <p className="font-semibold leading-tight line-clamp-2">{e.title}</p>
               <p className="text-xs text-purple-700">{formatEventDate(e.starts_at)}</p>
               {e.venue && <p className="text-xs text-gray-500 flex items-start gap-1"><MapPin className="h-3 w-3 mt-0.5 shrink-0" /><span className="line-clamp-1">{e.venue}</span></p>}

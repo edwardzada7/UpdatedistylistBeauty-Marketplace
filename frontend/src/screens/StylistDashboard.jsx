@@ -4,6 +4,7 @@ import SeasonBanner from "@/components/SeasonBanner";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { providerServicesAPI, providersAPI, bookingsAPI, promoAPI } from "@/services/api";
+import { providerShopApi } from "@/services/providerShopApi";
 import CertifiedBadge, { useOwnCertified } from "@/components/CertifiedBadge";
 import ProBadge from "@/components/ProBadge";
 import { CURRENCY } from "@/utils/constants";
@@ -40,6 +41,7 @@ import {
   ArrowDownLeft,
   Loader2,
   Store,
+  ShoppingBag,
   Megaphone
 } from "lucide-react";
 import LocationChip from "@/components/LocationChip";
@@ -82,6 +84,21 @@ const StylistDashboard = () => {
 
   const providerId = userData?.id;
   const authId = userData?.auth_id;
+  const [orderCounts, setOrderCounts] = useState({ total: 0, todo: 0 });
+  useEffect(() => {
+    if (!userData?.auth_id || !isProvider) return;
+    let off = false;
+    providerShopApi.getOrders(userData.auth_id).then((rows) => {
+      if (off) return;
+      const done = ["delivered", "completed", "cancelled", "canceled", "refunded"];
+      const todo = rows.filter((o) => {
+        const st = String(o.status || o.order_status || "").toLowerCase();
+        return !done.includes(st) && (st === "confirmed" || String(o.payment_status || "").toLowerCase() === "paid");
+      }).length;
+      setOrderCounts({ total: rows.length, todo });
+    }).catch(() => {});
+    return () => { off = true; };
+  }, [userData?.auth_id, isProvider]);
 
   // Load wallet/earnings metrics
   const loadWalletMetrics = useCallback(async () => {
@@ -661,6 +678,29 @@ const StylistDashboard = () => {
                   <p className="text-sm text-gray-500">Boost your profile, services or products. Go Pro for discounts</p>
                 </div>
               </div>
+              <ChevronRight className="h-5 w-5 text-gray-400 shrink-0" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Shop orders */}
+        <Card
+          className="cursor-pointer hover:shadow-md transition-all border-green-200 bg-green-50/50"
+          onClick={() => navigate("/provider/shop?tab=orders")}
+          data-testid="provider-orders-card"
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-12 h-12 shrink-0 bg-green-100 rounded-full flex items-center justify-center">
+                  <ShoppingBag className="h-6 w-6 text-green-600" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-gray-900">Shop Orders</h3>
+                  <p className="text-sm text-gray-500">{orderCounts.todo > 0 ? `${orderCounts.todo} order${orderCounts.todo > 1 ? "s" : ""} to process` : `${orderCounts.total} order${orderCounts.total === 1 ? "" : "s"} · nothing waiting`}</p>
+                </div>
+              </div>
+              {orderCounts.todo > 0 && <span className="shrink-0 bg-red-500 text-white text-xs font-bold rounded-full min-w-6 h-6 px-2 flex items-center justify-center">{orderCounts.todo}</span>}
               <ChevronRight className="h-5 w-5 text-gray-400 shrink-0" />
             </div>
           </CardContent>

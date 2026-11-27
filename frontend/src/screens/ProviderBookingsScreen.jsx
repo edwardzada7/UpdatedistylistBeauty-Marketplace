@@ -260,25 +260,25 @@ const ProviderBookingsScreen = () => {
 
       <div className="p-4">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5 mb-4">
-            <TabsTrigger value="pending" className="text-xs px-2">
-              <AlertCircle className="h-3.5 w-3.5 mr-1 hidden sm:inline" />
-              Pending ({pendingBookings.length})
+          <TabsList className="grid w-full grid-cols-5 mb-4 h-auto p-1 gap-1">
+            <TabsTrigger value="pending" className="flex flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[11px] leading-tight whitespace-normal">
+              <AlertCircle className="hidden" />
+              <span>Pending</span><span className="font-bold text-sm">{pendingBookings.length}</span>
             </TabsTrigger>
-            <TabsTrigger value="confirmed" className="text-xs px-2">
-              <CalendarCheck className="h-3.5 w-3.5 mr-1 hidden sm:inline" />
-              Confirmed ({confirmedBookings.length})
+            <TabsTrigger value="confirmed" className="flex flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[11px] leading-tight whitespace-normal">
+              <CalendarCheck className="hidden" />
+              <span>Confirmed</span><span className="font-bold text-sm">{confirmedBookings.length}</span>
             </TabsTrigger>
-            <TabsTrigger value="completed" className="text-xs px-2">
-              <CheckCircle className="h-3.5 w-3.5 mr-1 hidden sm:inline" />
-              Done ({completedBookings.length})
+            <TabsTrigger value="completed" className="flex flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[11px] leading-tight whitespace-normal">
+              <CheckCircle className="hidden" />
+              <span>Done</span><span className="font-bold text-sm">{completedBookings.length}</span>
             </TabsTrigger>
-            <TabsTrigger value="canceled" className="text-xs px-2">
-              <CalendarX className="h-3.5 w-3.5 mr-1 hidden sm:inline" />
-              Other ({canceledBookings.length})
+            <TabsTrigger value="canceled" className="flex flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[11px] leading-tight whitespace-normal">
+              <CalendarX className="hidden" />
+              <span>Other</span><span className="font-bold text-sm">{canceledBookings.length}</span>
             </TabsTrigger>
-            <TabsTrigger value="noshow" className="text-xs px-1" data-testid="noshow-tab">
-              No-show ({noShowBookings.length})
+            <TabsTrigger value="noshow" className="flex flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[11px] leading-tight whitespace-normal" data-testid="noshow-tab">
+              <span>No-show</span><span className="font-bold text-sm">{noShowBookings.length}</span>
             </TabsTrigger>
           </TabsList>
 

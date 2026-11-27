@@ -139,6 +139,17 @@ class EventIn(BaseModel):
     fee_mode: str = Field("add_on", pattern="^(add_on|absorbed)$")
     ticket_types: List[TicketTypeIn] = Field(default_factory=list)
     announce_in_feed: bool = False
+    is_free: bool = False
+
+
+def normalize_free(payload: "EventIn") -> None:
+    """Free event tick: force every ticket type to price 0, or create one free ticket when none is given."""
+    if not payload.is_free:
+        return
+    if not payload.ticket_types:
+        payload.ticket_types = [TicketTypeIn(name="Free entry", price=0)]
+    for t in payload.ticket_types:
+        t.price = 0
 
 
 class SettingsIn(BaseModel):
@@ -661,6 +672,7 @@ def register_events_routes(api_router: APIRouter, supabase: Any) -> None:
 
     @api_router.post("/admin/events", status_code=201, dependencies=[Depends(_admin_key)])
     def admin_create_event(payload: EventIn):
+        normalize_free(payload)
         if not _parse(payload.starts_at):
             raise HTTPException(status_code=422, detail="Invalid start date/time")
         if payload.status == "published" and not payload.ticket_types:
@@ -682,6 +694,7 @@ def register_events_routes(api_router: APIRouter, supabase: Any) -> None:
 
     @api_router.put("/admin/events/{event_id}", dependencies=[Depends(_admin_key)])
     def admin_update_event(event_id: int, payload: EventIn):
+        normalize_free(payload)
         event = first(supabase.table("events").select("*").eq("id", event_id))
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
