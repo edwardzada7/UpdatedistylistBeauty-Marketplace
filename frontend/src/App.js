@@ -73,6 +73,7 @@ const EventPurchaseCompleteScreen = lazy(() => import("@/screens/EventPurchaseCo
 const MyTicketsScreen = lazy(() => import("@/screens/MyTicketsScreen"));
 const GuestTicketsScreen = lazy(() => import("@/screens/GuestTicketsScreen"));
 const EventScannerScreen = lazy(() => import("@/screens/EventScannerScreen"));
+const ProviderEventsScreen = lazy(() => import("@/screens/ProviderEventsScreen"));
 const ProviderShopScreen = lazy(() => import("@/screens/ProviderShopScreen"));
 const ProviderPurchaseCompleteScreen = lazy(() => import("@/screens/ProviderPurchaseCompleteScreen"));
 const ProviderPromoteScreen = lazy(() => import("@/screens/ProviderPromoteScreen"));
@@ -254,6 +255,10 @@ function AppRoutes() {
       <Route
         path="/provider/promote/complete"
         element={<ProtectedRoute><Suspense fallback={<LoadingSpinner fullScreen />}><PromoCompleteScreen /></Suspense></ProtectedRoute>}
+      />
+      <Route
+        path="/provider/events"
+        element={<ProtectedRoute><Suspense fallback={<LoadingSpinner fullScreen />}><ProviderEventsScreen /></Suspense></ProtectedRoute>}
       />
       <Route
         path="/provider/shop"
