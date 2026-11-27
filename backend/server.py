@@ -1956,6 +1956,9 @@ async def paystack_webhook(request: Request, x_paystack_signature: str = Header(
                 # Event tickets: confirm the payment and issue the QR/PIN tickets.
                 from events_routes import fulfil_event_reference
                 fulfil_event_reference(reference)
+            elif reference and str(reference).startswith("istylist_shop_order_"):
+                # Guests may close the tab before returning to the site: confirm the order here too.
+                await verify_paystack_shop_payment(reference)
             elif reference:
                 # Reuse verification logic
                 await verify_paystack_payment(reference)
@@ -9443,7 +9446,7 @@ def delete_shop_product_review(
 async def _notify_shop_order(order_id: int, event: str, status_value: Optional[str] = None) -> None:
     """Tell the buyer and the seller(s) about a shop order. Never raises."""
     try:
-        order_rows = supabase.table("shop_orders").select("id, customer_auth_id, total_amount").eq("id", order_id).limit(1).execute().data or []
+        order_rows = supabase.table("shop_orders").select("id, customer_auth_id, total_amount, guest_email, access_token").eq("id", order_id).limit(1).execute().data or []
         if not order_rows:
             return
         order = order_rows[0]
@@ -9460,6 +9463,13 @@ async def _notify_shop_order(order_id: int, event: str, status_value: Optional[s
         if event == "placed":
             if customer:
                 await create_notification(customer, "shop_order", "Order placed", f"Your order #{order_id} has been placed.", metadata=meta)
+        elif event == "paid" and not customer and order.get("guest_email"):
+            _email_guest_order(order, f"Order #{order_id} confirmed", "Payment received",
+                               f"Thanks for your order #{order_id}. The seller will prepare it for delivery. Use the button below to track it.")
+            for seller in seller_ids:
+                await create_notification(seller, "shop_order", "New order", f"You have a new paid order #{order_id} to fulfil.", metadata=seller_meta)
+        elif event == "status" and not customer and order.get("guest_email"):
+            _email_guest_order(order, f"Order #{order_id} update", "Order update", f"Your order #{order_id} is now {status_value}.")
         elif event == "paid":
             if customer:
                 await create_notification(customer, "shop_order", "Payment received", f"Payment for order #{order_id} was successful.", metadata=meta)
@@ -9534,9 +9544,161 @@ async def create_shop_order(order: ShopOrderCreate):
         raise HTTPException(status_code=500, detail=f"Failed to create shop order: {e}")
 
 
+# ---------------------------------------------------------------------------
+# Guest shop checkout (no account). Order is tracked with a private token that is emailed to the guest.
+# ---------------------------------------------------------------------------
+class GuestShopOrderCreate(BaseModel):
+    guest_name: str = Field(..., min_length=2, max_length=100)
+    guest_email: EmailStr
+    guest_phone: str = Field(..., min_length=7, max_length=20)
+    shipping_address: str = Field(..., min_length=8, max_length=400)
+    note: Optional[str] = Field(None, max_length=500)
+    items: List[ShopOrderItem]
+    callback_url: Optional[str] = None
+
+
+def _public_app_url() -> str:
+    return (os.environ.get("PUBLIC_APP_URL") or "https://app.istylist.online").rstrip("/")
+
+
+def _guest_order_link(order_id: int, token: str) -> str:
+    return f"{_public_app_url()}/shop/guest-order?order={order_id}&t={token}"
+
+
+def _email_guest_order(order: dict, subject: str, headline: str, body: str) -> None:
+    """Best-effort email to a guest buyer with their private tracking link. Never raises."""
+    try:
+        import email_service
+        to = order.get("guest_email")
+        if not to or not email_service.email_configured():
+            return
+        link = _guest_order_link(order["id"], order.get("access_token") or "")
+        html = (f"<div style='font-family:sans-serif;max-width:480px'><h2>{headline}</h2><p>{body}</p>"
+                f"<p><a href='{link}' style='background:#7c3aed;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none'>View your order</a></p>"
+                f"<p style='color:#666;font-size:12px'>Keep this email: the link is private and is the only way to track your order without an account.</p></div>")
+        email_service.send_email(to, subject, html, f"{headline}\n{body}\nView your order: {link}")
+    except Exception as e:  # noqa: BLE001
+        logging.warning(f"[guest-shop] email failed: {e}")
+
+
+@api_router.post("/shop/guest-orders", status_code=status.HTTP_201_CREATED)
+async def create_guest_shop_order(order: GuestShopOrderCreate, request: Request):
+    """Create an order for a guest and start the Paystack payment. Amount is computed on the server."""
+    _require_products_table()
+    _require_shop_order_tables()
+    headers = get_paystack_headers()
+    if not headers:
+        raise HTTPException(status_code=503, detail="Payment gateway not configured.")
+    if not order.items:
+        raise HTTPException(status_code=400, detail="Your cart is empty")
+    if len(order.items) > 40:
+        raise HTTPException(status_code=400, detail="Too many items in one order")
+    email = str(order.guest_email).strip().lower()
+
+    # light abuse guard: at most 5 unpaid guest orders per email per hour
+    try:
+        since = (datetime.utcnow() - timedelta(hours=1)).isoformat()
+        recent = supabase.table("shop_orders").select("id").eq("guest_email", email).eq("status", "pending").gte("created_at", since).execute().data or []
+        if len(recent) >= 5:
+            raise HTTPException(status_code=429, detail="Too many unpaid orders. Please complete a payment or try again later.")
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
+    total_amount = 0.0
+    items_data = []
+    for item in order.items:
+        if item.quantity < 1 or item.quantity > 50:
+            raise HTTPException(status_code=400, detail="Invalid quantity")
+        pr = supabase.table("products").select("*").eq("id", item.product_id).limit(1).execute()
+        if not pr.data:
+            raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found")
+        product = parse_product_record(pr.data[0])
+        if not product.get("is_active"):
+            raise HTTPException(status_code=400, detail=f"{product.get('name') or 'A product'} is no longer available")
+        unit_price = float(product.get("price", 0) or 0)
+        line_total = round(unit_price * item.quantity, 2)
+        total_amount += line_total
+        items_data.append({"product_id": item.product_id, "quantity": item.quantity, "unit_price": unit_price, "total_price": line_total})
+    total_amount = round(total_amount, 2)
+    if total_amount <= 0:
+        raise HTTPException(status_code=400, detail="Order total must be greater than zero")
+
+    token = uuid.uuid4().hex + uuid.uuid4().hex[:16]
+    now_iso = datetime.utcnow().isoformat()
+    address = f"{order.guest_name.strip()}, {order.guest_phone.strip()}, {order.shipping_address.strip()}"
+    created = supabase.table("shop_orders").insert({
+        "customer_auth_id": None, "status": "pending", "total_amount": total_amount,
+        "shipping_address": address, "note": order.note, "guest_email": email,
+        "guest_name": order.guest_name.strip(), "guest_phone": order.guest_phone.strip(),
+        "access_token": token, "created_at": now_iso, "updated_at": now_iso,
+    }).execute()
+    if not created.data:
+        raise HTTPException(status_code=500, detail="Could not create the order")
+    order_row = created.data[0]
+    for it in items_data:
+        supabase.table("shop_order_items").insert({"order_id": order_row["id"], **it, "created_at": now_iso}).execute()
+
+    reference = f"istylist_shop_order_{uuid.uuid4().hex[:12]}"
+    payload = {
+        "email": email, "amount": int(round(total_amount * 100)), "reference": reference,
+        "metadata": {"purpose": "shop_order", "order_id": order_row["id"], "guest": True},
+    }
+    if order.callback_url:
+        sep = "&" if "?" in order.callback_url else "?"
+        payload["callback_url"] = f"{order.callback_url}{sep}order={order_row['id']}&t={token}"
+    resp = requests.post("https://api.paystack.co/transaction/initialize", json=payload, headers=headers, timeout=30)
+    if resp.status_code != 200 or not resp.json().get("status"):
+        logging.error(f"Paystack guest shop init failed: {resp.text}")
+        raise HTTPException(status_code=502, detail="Could not start the payment. Please try again.")
+    pdata = resp.json()["data"]
+    try:
+        if check_table_exists("payments"):
+            supabase.table("payments").insert({
+                "reference": reference, "email": email, "amount": total_amount, "purpose": "shop_order",
+                "booking_id": order_row["id"], "status": "pending", "paystack_access_code": pdata.get("access_code"),
+                "created_at": now_iso,
+            }).execute()
+    except Exception as e:
+        logging.warning(f"guest shop payment row not saved: {e}")
+    return {
+        "order_id": order_row["id"], "access_token": token, "total_amount": total_amount,
+        "reference": reference, "authorization_url": pdata.get("authorization_url"),
+    }
+
+
+@api_router.get("/shop/guest-orders/{order_id}")
+def get_guest_shop_order(order_id: int, t: str = Query(..., min_length=16)):
+    """Private order tracking for guests. The token from the confirmation email is the credential."""
+    _require_shop_order_tables()
+    rows = supabase.table("shop_orders").select("*").eq("id", order_id).limit(1).execute().data or []
+    if not rows or not rows[0].get("access_token") or not hmac.compare_digest(str(rows[0]["access_token"]), t):
+        raise HTTPException(status_code=404, detail="Order not found")
+    o = rows[0]
+    items = supabase.table("shop_order_items").select("*").eq("order_id", order_id).execute().data or []
+    pids = sorted({i["product_id"] for i in items if i.get("product_id") is not None})
+    prods = {}
+    if pids:
+        for p in supabase.table("products").select("*").in_("id", pids).execute().data or []:
+            pp = parse_product_record(p)
+            prods[p["id"]] = {"name": pp.get("name"), "image": (pp.get("images") or [None])[0] if isinstance(pp.get("images"), list) else pp.get("image_url")}
+    return {
+        "id": o["id"], "status": o.get("status"), "total_amount": float(o.get("total_amount") or 0),
+        "shipping_address": o.get("shipping_address"), "created_at": o.get("created_at"),
+        "guest_email": o.get("guest_email"), "paid": bool(o.get("payment_reference")),
+        "items": [{**i, **prods.get(i.get("product_id"), {})} for i in items],
+    }
+
+
 @api_router.patch("/shop/orders/{order_id}")
-async def update_shop_order(order_id: int, order_update: ShopOrderUpdate):
-    """Update a shop order."""
+async def update_shop_order(
+    order_id: int,
+    order_update: ShopOrderUpdate,
+    authorization: Optional[str] = Header(None),
+    x_admin_key: Optional[str] = Header(None, alias="X-ADMIN-KEY"),
+):
+    """Update a shop order. Sellers of the items (or admin) change status; the buyer may only cancel an unpaid order."""
     _require_shop_order_tables()
 
     existing_response = supabase.table("shop_orders").select("*").eq("id", order_id).limit(1).execute()
@@ -9544,6 +9706,34 @@ async def update_shop_order(order_id: int, order_update: ShopOrderUpdate):
         raise HTTPException(status_code=404, detail="Shop order not found")
 
     existing = existing_response.data[0]
+
+    # ---- who is calling? ----
+    is_admin = False
+    if x_admin_key:
+        try:
+            _require_admin_key(x_admin_key)
+            is_admin = True
+        except HTTPException:
+            is_admin = False
+    caller = None
+    if not is_admin:
+        from consultation_routes import _current_auth_id
+        caller = _current_auth_id(authorization)
+    item_rows = supabase.table("shop_order_items").select("product_id").eq("order_id", order_id).execute().data or []
+    pids = sorted({i["product_id"] for i in item_rows if i.get("product_id") is not None})
+    seller_ids = set()
+    if pids:
+        seller_ids = {p["stylist_auth_id"] for p in (supabase.table("products").select("id, stylist_auth_id").in_("id", pids).execute().data or []) if p.get("stylist_auth_id")}
+    is_seller = bool(caller and caller in seller_ids)
+    is_buyer = bool(caller and caller == existing.get("customer_auth_id"))
+    if not (is_admin or is_seller or is_buyer):
+        raise HTTPException(status_code=403, detail="You are not allowed to change this order")
+    if is_buyer and not (is_admin or is_seller):
+        if order_update.status not in (None, "canceled") or existing.get("status") != "pending" and (order_update.status or order_update.shipping_address is not None or order_update.note is not None):
+            raise HTTPException(status_code=403, detail="You can only cancel an order that has not been paid yet")
+    if order_update.payment_reference is not None and not is_admin:
+        order_update.payment_reference = None
+
     update_data = {}
     if order_update.status is not None:
         allowed_statuses = {"pending", "confirmed", "processing", "shipped", "delivered", "canceled", "returned"}
@@ -9761,8 +9951,12 @@ async def verify_paystack_shop_payment(reference: str = Query(..., description="
         if tx_status == "success" and order_id:
             try:
                 if check_table_exists("shop_orders"):
-                    prior = supabase.table("shop_orders").select("status").eq("id", int(order_id)).limit(1).execute().data or []
+                    prior = supabase.table("shop_orders").select("status, total_amount").eq("id", int(order_id)).limit(1).execute().data or []
                     existing_order_status = prior[0].get("status") if prior else None
+                    expected = float(prior[0].get("total_amount") or 0) if prior else 0.0
+                    if prior and amount_naira + 0.5 < expected:
+                        logging.error(f"Shop payment {reference}: paid {amount_naira} < order total {expected}; not confirming")
+                        return {"status": "amount_mismatch", "message": "Paid amount does not match the order total. Contact support.", "reference": reference, "amount": amount_naira}
                     supabase.table("shop_orders").update({
                         "status": "confirmed",
                         "payment_reference": reference,
