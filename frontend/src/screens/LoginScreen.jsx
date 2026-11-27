@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { rememberGuestChoice } from "@/utils/guestShop";
 import { loginWithEmail } from "@/services/authService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -141,6 +142,14 @@ export default function LoginScreen() {
             Create Account
           </span>
         </p>
+        <button
+          type="button"
+          className="w-full mt-3 h-11 rounded-lg border border-purple-300 text-purple-700 font-medium hover:bg-purple-50"
+          onClick={() => { rememberGuestChoice(); navigate("/shop"); }}
+          data-testid="login-continue-guest"
+        >
+          Continue as guest
+        </button>
 
         {/* Phase 8 - compliance links */}
         <div className="mt-6 pt-4 border-t border-gray-100 flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs text-gray-500" data-testid="login-legal-links">
