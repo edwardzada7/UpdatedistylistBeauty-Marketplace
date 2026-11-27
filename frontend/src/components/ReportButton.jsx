@@ -16,7 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
  * Phase 8 - reusable Report button + modal.
  *
  * Props:
- *   targetType: 'provider' | 'customer' | 'post' | 'review' | 'chat'
+ *   targetType: 'provider' | 'customer' | 'post' | 'review' | 'chat' | 'event'
  *   targetId:   string | number (the entity being reported)
  *   label?:     optional button label override
  *   compact?:   boolean - icon-only button when true

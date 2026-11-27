@@ -688,6 +688,28 @@ const StylistDashboard = () => {
           </CardContent>
         </Card>
 
+        {/* Provider events */}
+        <Card
+          className="cursor-pointer hover:shadow-md transition-all border-purple-200 bg-purple-50/50"
+          onClick={() => navigate("/provider/events")}
+          data-testid="provider-events-card"
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-12 h-12 shrink-0 bg-purple-100 rounded-full flex items-center justify-center">
+                  <Calendar className="h-6 w-6 text-purple-600" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-gray-900">My Events</h3>
+                  <p className="text-sm text-gray-500">Post events, sell tickets and promote them</p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-gray-400 shrink-0" />
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Bookings Section */}
         <Card>
           <CardHeader className="pb-2">

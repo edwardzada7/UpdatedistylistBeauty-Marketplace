@@ -30,6 +30,28 @@ export const adminEventsAPI = {
   upload: async (adminKey, payload) => (await api.post("/admin/official/upload", payload, adminHeaders(adminKey))).data,
 };
 
+export const providerEventsAPI = {
+  mine: async () => (await api.get("/provider/events")).data,
+  create: async (body) => (await api.post("/provider/events", body)).data,
+  update: async (id, body) => (await api.put(`/provider/events/${id}`, body)).data,
+  cancel: async (id) => (await api.post(`/provider/events/${id}/cancel`, {})).data,
+  attendees: async (id) => (await api.get(`/provider/events/${id}/attendees`)).data.attendees || [],
+  scanners: async (id) => (await api.get(`/provider/events/${id}/scanners`)).data.scanners || [],
+  addScanner: async (id, label) => (await api.post(`/provider/events/${id}/scanners`, { label })).data,
+  deleteScanner: async (id, scannerId) => (await api.delete(`/provider/events/${id}/scanners/${scannerId}`)).data,
+  promote: async (id, body) => (await api.post(`/provider/events/${id}/promote`, body)).data,
+  verifyPromo: async (reference) => (await api.get("/provider/events/promote/verify", { params: { reference } })).data,
+};
+
+Object.assign(adminEventsAPI, {
+  approve: async (adminKey, id) => (await api.post(`/admin/events/${id}/approve`, {}, adminHeaders(adminKey))).data,
+  reject: async (adminKey, id, reason) => (await api.post(`/admin/events/${id}/reject`, { reason }, adminHeaders(adminKey))).data,
+  payouts: async (adminKey) => (await api.get("/admin/event-payouts", adminHeaders(adminKey))).data.payouts || [],
+  markPaid: async (adminKey, id) => (await api.post(`/admin/event-payouts/${id}/mark-paid`, {}, adminHeaders(adminKey))).data,
+  tiers: async (adminKey) => (await api.get("/admin/event-promo-tiers", adminHeaders(adminKey))).data.tiers || [],
+  saveTiers: async (adminKey, tiers) => (await api.put("/admin/event-promo-tiers", { tiers }, adminHeaders(adminKey))).data,
+});
+
 export const scannerAPI = {
   login: async (accessCode) => (await api.post("/events/scanner/login", { access_code: accessCode })).data,
   scan: async (creds, code, eventId) => (await api.post("/events/scanner/scan", { code, event_id: eventId || null }, scannerHeaders(creds))).data,
