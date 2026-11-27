@@ -347,6 +347,7 @@ export function PostCard({
   saved = false,
   onSaveToggle,
 }) {
+  const navigate = useNavigate();
   const isOwner = viewerAuthId && post.provider_auth_id === viewerAuthId;
   const person = usePerson(post.provider?.auth_id || post.provider_auth_id, post.provider?.id);
   const apiName = post.provider?.display_name;
@@ -503,6 +504,11 @@ export function PostCard({
             <span className="font-semibold mr-1">{display}</span>
             {post.caption}
           </p>
+        )}
+        {post.event_id && (
+          <Button size="sm" className="w-full" onClick={() => navigate(`/events/${post.event_id}`)} data-testid={`feed-event-link-${post.id}`}>
+            View event &amp; get tickets
+          </Button>
         )}
       </CardContent>
     </Card>

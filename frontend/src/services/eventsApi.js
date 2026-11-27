@@ -62,3 +62,19 @@ export const formatEventDate = (iso) => {
   const d = new Date(iso);
   return d.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 };
+
+export const EVENT_CATEGORIES = [
+  { key: "masterclass", label: "Masterclass & Workshop" },
+  { key: "beauty_show", label: "Beauty & Hair Show" },
+  { key: "fashion_show", label: "Fashion Show" },
+  { key: "bridal", label: "Bridal & Wedding" },
+  { key: "popup_market", label: "Pop-up & Market" },
+  { key: "product_launch", label: "Product Launch" },
+  { key: "party", label: "Party & Social" },
+  { key: "networking", label: "Networking & Meetup" },
+  { key: "training", label: "Training & Certification" },
+  { key: "photoshoot", label: "Photoshoot & Creative" },
+  { key: "cultural", label: "Cultural & Festival" },
+  { key: "charity", label: "Charity & Community" },
+  { key: "other", label: "Other" },
+];
