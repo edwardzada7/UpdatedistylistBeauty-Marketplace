@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ImageOff, Plus, Search, Store, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,8 @@ export default function ProviderShopScreen() {
   const { userData } = useAuth();
   const authId = userData?.auth_id;
   const email = userData?.email;
-  const [tab, setTab] = useState("shop");
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(searchParams.get("tab") === "orders" ? "orders" : "shop");
   const [loading, setLoading] = useState(true);
   const [shop, setShop] = useState({ seller: null, items: [] });
   const [market, setMarket] = useState([]);
