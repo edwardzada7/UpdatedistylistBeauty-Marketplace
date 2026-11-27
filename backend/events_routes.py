@@ -38,15 +38,23 @@ PENDING_HOLD_MINUTES = 30
 DEFAULT_SETTINGS = {
     "service_fee_percentage": 0.0,   # % of the ticket subtotal charged as a service fee
     "service_fee_flat": 0.0,         # flat amount per paid ticket
-    "commission_percentage": 0.0,    # platform cut on provider/user organised events (future)
+    "commission_percentage": 7.0,    # platform cut on provider organised events
+    "provider_trust_after_approved": 3.0,  # provider events skip review after this many approved events
 }
+PROMO_REFERENCE_PREFIX = "istylist_evpromo_"
+DEFAULT_PROMO_TIERS = [
+    {"days": 3, "price": 2000},
+    {"days": 7, "price": 5000},
+    {"days": 14, "price": 10000},
+]
+PAYOUT_HOLD_HOURS = 24
 
 _FULFIL = {"fn": None}
 
 
 def fulfil_event_reference(reference: str) -> bool:
     """Used by the Paystack webhook: confirm + issue tickets for an event order reference."""
-    fn = _FULFIL.get("fn")
+    fn = _FULFIL.get("promo") if str(reference).startswith(PROMO_REFERENCE_PREFIX) else _FULFIL.get("fn")
     if not fn:
         return False
     try:
@@ -137,6 +145,7 @@ class SettingsIn(BaseModel):
     service_fee_percentage: Optional[float] = Field(None, ge=0, le=100)
     service_fee_flat: Optional[float] = Field(None, ge=0)
     commission_percentage: Optional[float] = Field(None, ge=0, le=100)
+    provider_trust_after_approved: Optional[float] = Field(None, ge=0, le=100)
 
 
 class CheckoutIn(BaseModel):
@@ -231,6 +240,9 @@ def register_events_routes(api_router: APIRouter, supabase: Any) -> None:
             "starts_at": e.get("starts_at"), "ends_at": e.get("ends_at"), "status": e.get("status"),
             "is_featured": bool(e.get("is_featured")), "fee_mode": e.get("fee_mode") or "add_on",
             "organizer_type": e.get("organizer_type") or "admin",
+            "organizer_auth_id": e.get("organizer_auth_id") if (e.get("organizer_type") or "admin") != "admin" else None,
+            "is_promoted": bool(_parse(e.get("promoted_until")) and _parse(e.get("promoted_until")) > _now()),
+            "promoted_until": e.get("promoted_until"),
             "organizer_name": organizer_name(e), "is_official": (e.get("organizer_type") or "admin") == "admin",
             "ticket_types": tv,
             "min_price": min(priced) if priced else 0,
@@ -405,7 +417,7 @@ def register_events_routes(api_router: APIRouter, supabase: Any) -> None:
             events = [e for e in events if (_parse(e.get("ends_at")) or _parse(e.get("starts_at")) or cutoff) >= cutoff]
         tmap = types_for([e["id"] for e in events])
         out = [event_view(e, tmap.get(e["id"], [])) for e in events]
-        out.sort(key=lambda e: (not e["is_featured"], e["starts_at"] or ""))
+        out.sort(key=lambda e: (not e["is_promoted"], not e["is_featured"], e["starts_at"] or ""))
         auth_id = optional_auth(authorization)
         if auth_id and out:
             mine = supabase.table("event_tickets").select("event_id").eq("owner_auth_id", auth_id).execute().data or []
@@ -821,3 +833,12 @@ def register_events_routes(api_router: APIRouter, supabase: Any) -> None:
             fresh = first(supabase.table("event_tickets").select("used_at").eq("id", ticket["id"])) or {}
             return {"result": "used", "message": "Already used", "used_at": fresh.get("used_at"), **info}
         return {"result": "valid", "message": "Valid ticket. Admit.", **info, **event_counts(ticket["event_id"])}
+
+    from provider_events_routes import register_provider_events
+    register_provider_events(api_router, supabase, {
+        "first": first, "types_for": types_for, "event_view": event_view, "save_ticket_types": save_ticket_types,
+        "admin_event_row": admin_event_row, "admin_cancel_event": admin_cancel_event, "admin_attendees": admin_attendees,
+        "admin_list_scanners": admin_list_scanners, "admin_create_scanner": admin_create_scanner,
+        "admin_delete_scanner": admin_delete_scanner, "load_settings": load_settings, "announce": announce,
+        "fulfil_registry": _FULFIL,
+    })
