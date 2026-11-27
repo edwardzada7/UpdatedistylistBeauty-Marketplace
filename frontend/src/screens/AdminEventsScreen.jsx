@@ -31,13 +31,14 @@ const toIso = (local) => (local ? new Date(local).toISOString() : null);
 const blankType = () => ({ id: null, name: "General", description: "", price: "0", capacity: "", max_per_order: "10", sales_end: "", is_active: true });
 const blankForm = () => ({
   title: "", description: "", banner_url: "", venue: "", address: "", starts_at: "", ends_at: "",
-  status: "published", is_featured: false, fee_mode: "add_on", announce_in_feed: true, ticket_types: [blankType()],
+  status: "published", is_featured: false, fee_mode: "add_on", announce_in_feed: true, ticket_types: [blankType()], is_free: false,
 });
 
 const fromEvent = (e) => ({
   title: e.title || "", description: e.description || "", banner_url: e.banner_url || "", venue: e.venue || "", address: e.address || "",
   starts_at: toLocalInput(e.starts_at), ends_at: toLocalInput(e.ends_at), status: e.status === "canceled" ? "draft" : e.status,
   is_featured: !!e.is_featured, fee_mode: e.fee_mode || "add_on", announce_in_feed: false,
+  is_free: !!e.is_free,
   ticket_types: e.ticket_types.map((t) => ({
     id: t.id, name: t.name, description: t.description || "", price: String(t.price), capacity: t.capacity ?? "",
     max_per_order: String(t.max_per_order), sales_end: toLocalInput(t.sales_end), is_active: t.is_active, sold: t.sold,
@@ -76,6 +77,7 @@ function EventForm({ adminKey, initial, editingId, onClose, onSaved }) {
       venue: form.venue.trim() || null, address: form.address.trim() || null,
       starts_at: toIso(form.starts_at), ends_at: toIso(form.ends_at), status: form.status,
       is_featured: form.is_featured, fee_mode: form.fee_mode, announce_in_feed: form.announce_in_feed,
+      is_free: !!form.is_free,
       ticket_types: form.ticket_types.map((t) => ({
         id: t.id, name: t.name.trim() || "Ticket", description: t.description.trim() || null, price: Number(t.price) || 0,
         capacity: t.capacity === "" ? null : Number(t.capacity), max_per_order: Number(t.max_per_order) || 10,
@@ -127,6 +129,11 @@ function EventForm({ adminKey, initial, editingId, onClose, onSaved }) {
           </div>
 
           <div className="space-y-3">
+            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer" data-testid="free-event-toggle">
+              <input type="checkbox" className="h-4 w-4" checked={!!form.is_free}
+                onChange={(e) => setForm((f) => ({ ...f, is_free: e.target.checked, ticket_types: e.target.checked ? f.ticket_types.map((t) => ({ ...t, price: "0" })) : f.ticket_types }))} />
+              This is a free event (no ticket payment)
+            </label>
             <div className="flex items-center justify-between"><Label>Ticket types</Label>
               <Button type="button" size="sm" variant="outline" onClick={() => setForm((f) => ({ ...f, ticket_types: [...f.ticket_types, { ...blankType(), name: "" }] }))}><Plus className="h-4 w-4 mr-1" />Add type</Button></div>
             <p className="text-xs text-gray-500">Price 0 makes it a free "I'm attending" ticket. Leave capacity empty for unlimited.</p>
@@ -134,7 +141,7 @@ function EventForm({ adminKey, initial, editingId, onClose, onSaved }) {
               <div key={t.id || `new-${i}`} className="border rounded-xl p-3 space-y-2">
                 <div className="grid grid-cols-2 gap-2">
                   <div className="col-span-2"><Label className="text-xs">Name</Label><Input value={t.name} onChange={(e) => setType(i, { name: e.target.value })} placeholder="General, VIP..." /></div>
-                  <div><Label className="text-xs">Price (₦)</Label><Input type="number" min="0" value={t.price} onChange={(e) => setType(i, { price: e.target.value })} /></div>
+                  {form.is_free ? <div><Label className="text-xs">Price</Label><p className="h-10 flex items-center text-sm font-semibold text-green-700">Free</p></div> : <div><Label className="text-xs">Price (₦)</Label><Input type="number" min="0" value={t.price} onChange={(e) => setType(i, { price: e.target.value })} /></div>}
                   <div><Label className="text-xs">Capacity{t.sold ? ` (sold ${t.sold})` : ""}</Label><Input type="number" min="1" value={t.capacity} onChange={(e) => setType(i, { capacity: e.target.value })} placeholder="Unlimited" /></div>
                   <div><Label className="text-xs">Max per order</Label><Input type="number" min="1" max="50" value={t.max_per_order} onChange={(e) => setType(i, { max_per_order: e.target.value })} /></div>
                   <div><Label className="text-xs">Sales close (optional)</Label><DateTimeField optional value={t.sales_end} onChange={(v) => setType(i, { sales_end: v })} /></div>
@@ -363,7 +370,7 @@ export default function AdminEventsScreen() {
           <div key={e.id} className="bg-white rounded-xl border p-4 space-y-3" data-testid={`admin-event-${e.id}`}>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0"><p className="font-semibold break-words">{e.title}</p><p className="text-sm text-purple-700">{formatEventDate(e.starts_at)}</p>{e.venue && <p className="text-xs text-gray-500 break-words">{e.venue}</p>}</div>
-              <div className="flex gap-1 flex-wrap">{e.organizer_type === "provider" && <Badge className="bg-purple-100 text-purple-800">By {e.organizer_name}</Badge>}{e.is_promoted && <Badge className="bg-purple-100 text-purple-800">Promoted</Badge>}<Badge className={e.status === "published" ? "bg-green-100 text-green-800" : e.status === "canceled" || e.status === "rejected" ? "bg-red-100 text-red-700" : e.status === "pending_review" ? "bg-amber-100 text-amber-800" : "bg-gray-200 text-gray-700"}>{e.status === "pending_review" ? "needs review" : e.status}</Badge></div>
+              <div className="flex gap-1 flex-wrap">{e.organizer_type === "provider" && <Badge className="bg-purple-100 text-purple-800">By {e.organizer_name}</Badge>}{e.is_promoted && <Badge className="bg-purple-100 text-purple-800">Promoted</Badge>}<Badge className={e.is_free ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"}>{e.is_free ? "Free" : "Paid"}</Badge><Badge className={e.status === "published" ? "bg-green-100 text-green-800" : e.status === "canceled" || e.status === "rejected" ? "bg-red-100 text-red-700" : e.status === "pending_review" ? "bg-amber-100 text-amber-800" : "bg-gray-200 text-gray-700"}>{e.status === "pending_review" ? "needs review" : e.status}</Badge></div>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
               {[["Tickets", e.stats.tickets_issued], ["Checked in", e.stats.checked_in], ["Sales", formatMoney(e.stats.revenue)], ["Your earnings", formatMoney(e.stats.platform_earnings)]].map(([k, v]) => (

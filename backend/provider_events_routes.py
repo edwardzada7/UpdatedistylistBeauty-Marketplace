@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from consultation_routes import _admin_key, _current_auth_id
 from events_routes import (
-    DEFAULT_PROMO_TIERS, PAYOUT_HOLD_HOURS, PROMO_REFERENCE_PREFIX, EventIn, ScannerIn,
+    DEFAULT_PROMO_TIERS, PAYOUT_HOLD_HOURS, PROMO_REFERENCE_PREFIX, EventIn, ScannerIn, normalize_free,
     _iso, _notify, _now, _paystack_headers, _parse,
 )
 
@@ -89,6 +89,7 @@ def register_provider_events(api_router: APIRouter, supabase: Any, ctx: Dict[str
         return DEFAULT_PROMO_TIERS
 
     def validate_payload(payload: EventIn) -> None:
+        normalize_free(payload)
         if not _parse(payload.starts_at):
             raise HTTPException(status_code=422, detail="Invalid start date/time")
         if _parse(payload.starts_at) < _now():
@@ -158,6 +159,7 @@ def register_provider_events(api_router: APIRouter, supabase: Any, ctx: Dict[str
     def update_event(event_id: int, payload: EventIn, authorization: Optional[str] = Header(None)):
         auth_id = provider_id(authorization)
         ev = own_event(event_id, auth_id)
+        normalize_free(payload)
         if ev["status"] == "canceled":
             raise HTTPException(status_code=400, detail="A canceled event can't be edited")
         if event_end(ev) < _now():

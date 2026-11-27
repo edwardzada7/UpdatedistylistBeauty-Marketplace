@@ -148,6 +148,7 @@ export default function EventDetailScreen() {
               {event.is_official && <span className="text-sm text-gray-600 flex items-center gap-1">{event.organizer_name} <VerifiedBadge verified size={15} /></span>}
               {!event.is_official && <span className="text-sm text-gray-600">By {event.organizer_name}</span>}
               {event.is_promoted && <Badge className="bg-purple-100 text-purple-800">Promoted</Badge>}
+              <Badge className={event.is_free ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"}>{event.is_free ? "Free" : "Paid"}</Badge>
               {!event.is_official && <ReportButton targetType="event" targetId={event.id} label="Report event" />}
               {canceled && <Badge className="bg-red-100 text-red-700">Canceled</Badge>}
               {event.my_ticket_count > 0 && <Badge className="bg-green-100 text-green-800">You have {event.my_ticket_count} ticket{event.my_ticket_count > 1 ? "s" : ""}</Badge>}
@@ -239,7 +240,7 @@ export default function EventDetailScreen() {
         <div className="fixed bottom-0 inset-x-0 bg-white border-t p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] z-20">
           <div className="container mx-auto max-w-2xl">
             <Button className="w-full h-12 text-base" disabled={busy || !selected?.on_sale} onClick={buy} data-testid="event-buy-btn">
-              {busy ? "Please wait..." : !selected ? "Sold out" : free ? "I'm attending" : `Buy ${qty > 1 ? `${qty} tickets` : "ticket"}${quote ? ` · ${formatMoney(quote.total)}` : ""}`}
+              {busy ? "Please wait..." : !selected ? (event.ticket_types.some((t) => t.sold_out) ? "Sold out" : "Tickets not available yet") : free ? "I'm attending" : `Buy ${qty > 1 ? `${qty} tickets` : "ticket"}${quote ? ` · ${formatMoney(quote.total)}` : ""}`}
             </Button>
           </div>
         </div>
