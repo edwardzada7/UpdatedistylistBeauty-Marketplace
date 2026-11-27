@@ -229,11 +229,12 @@ function SettingsCard({ adminKey, settings, onSaved }) {
   const [pct, setPct] = useState(String(settings.service_fee_percentage ?? 0));
   const [flat, setFlat] = useState(String(settings.service_fee_flat ?? 0));
   const [commission, setCommission] = useState(String(settings.commission_percentage ?? 0));
+  const [trust, setTrust] = useState(String(settings.provider_trust_after_approved ?? 3));
   const [busy, setBusy] = useState(false);
   const save = async () => {
     setBusy(true);
     try {
-      await adminEventsAPI.saveSettings(adminKey, { service_fee_percentage: Number(pct) || 0, service_fee_flat: Number(flat) || 0, commission_percentage: Number(commission) || 0 });
+      await adminEventsAPI.saveSettings(adminKey, { service_fee_percentage: Number(pct) || 0, service_fee_flat: Number(flat) || 0, commission_percentage: Number(commission) || 0, provider_trust_after_approved: Number(trust) || 0 });
       toast.success("Event fees saved");
       onSaved();
     } catch (e) {
@@ -244,13 +245,62 @@ function SettingsCard({ adminKey, settings, onSaved }) {
   };
   return (
     <div className="bg-white rounded-xl border p-4 space-y-3">
-      <div><p className="font-semibold">Ticket fees</p><p className="text-xs text-gray-500">Service fee applies to paid tickets (add-on or included, set per event). Commission is the platform cut of ticket sales on events run by providers (later); official events are 100% yours.</p></div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div><p className="font-semibold">Ticket fees</p><p className="text-xs text-gray-500">Service fee applies to paid tickets (add-on or included, set per event). Commission is the platform cut of ticket sales on events run by providers; official events are 100% yours. Providers skip review after the number of approved events set here (0 = never review).</p></div>
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <div><Label className="text-xs">Trusted after (approved events)</Label><Input type="number" min="0" value={trust} onChange={(e) => setTrust(e.target.value)} /></div>
         <div><Label className="text-xs">Service fee (%)</Label><Input type="number" min="0" max="100" step="0.1" value={pct} onChange={(e) => setPct(e.target.value)} /></div>
         <div><Label className="text-xs">Flat fee per ticket (₦)</Label><Input type="number" min="0" value={flat} onChange={(e) => setFlat(e.target.value)} /></div>
         <div><Label className="text-xs">Commission on provider events (%)</Label><Input type="number" min="0" max="100" step="0.1" value={commission} onChange={(e) => setCommission(e.target.value)} /></div>
       </div>
       <Button size="sm" onClick={save} disabled={busy}>{busy ? "Saving..." : "Save fees"}</Button>
+    </div>
+  );
+}
+
+function TiersCard({ adminKey }) {
+  const [tiers, setTiers] = useState(null);
+  useEffect(() => { adminEventsAPI.tiers(adminKey).then((t) => setTiers(t.map((x) => ({ days: String(x.days), price: String(x.price) })))).catch(() => setTiers([])); }, [adminKey]);
+  if (!tiers) return null;
+  const save = async () => {
+    try { await adminEventsAPI.saveTiers(adminKey, tiers.map((t) => ({ days: Number(t.days), price: Number(t.price) }))); toast.success("Promotion plans saved"); }
+    catch (e) { toast.error(e?.response?.data?.detail || "Could not save"); }
+  };
+  return (
+    <div className="bg-white rounded-xl border p-4 space-y-3">
+      <div><p className="font-semibold">Event promotion plans</p><p className="text-xs text-gray-500">What providers pay to promote an event (tag + first in the Events section).</p></div>
+      {tiers.map((t, i) => (
+        <div key={i} className="grid grid-cols-5 gap-2 items-end">
+          <div className="col-span-2"><Label className="text-xs">Days</Label><Input type="number" min="1" value={t.days} onChange={(e) => setTiers((a) => a.map((x, k) => (k === i ? { ...x, days: e.target.value } : x)))} /></div>
+          <div className="col-span-2"><Label className="text-xs">Price (₦)</Label><Input type="number" min="0" value={t.price} onChange={(e) => setTiers((a) => a.map((x, k) => (k === i ? { ...x, price: e.target.value } : x)))} /></div>
+          <Button size="sm" variant="ghost" className="text-red-600" onClick={() => setTiers((a) => a.filter((_, k) => k !== i))}><Trash2 className="h-4 w-4" /></Button>
+        </div>
+      ))}
+      <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => setTiers((a) => [...a, { days: "", price: "" }])}>Add plan</Button><Button size="sm" onClick={save}>Save plans</Button></div>
+    </div>
+  );
+}
+
+function PayoutsCard({ adminKey }) {
+  const [rows, setRows] = useState(null);
+  const load = useCallback(() => adminEventsAPI.payouts(adminKey).then(setRows).catch(() => setRows([])), [adminKey]);
+  useEffect(() => { load(); }, [load]);
+  if (!rows || !rows.length) return null;
+  const pay = async (r) => {
+    if (!window.confirm(`Mark ${formatMoney(r.amount)} as paid to ${r.provider_name || "the provider"}? Send the transfer first.`)) return;
+    try { await adminEventsAPI.markPaid(adminKey, r.event_id); toast.success("Marked as paid"); load(); }
+    catch (e) { toast.error(e?.response?.data?.detail || "Could not update"); }
+  };
+  return (
+    <div className="bg-white rounded-xl border p-4 space-y-3" data-testid="event-payouts">
+      <div><p className="font-semibold">Provider event payouts</p><p className="text-xs text-gray-500">Money is held until 24 hours after the event ends. Pay manually, then mark as paid.</p></div>
+      {rows.map((r) => (
+        <div key={r.event_id} className="flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-sm">
+          <div className="min-w-0"><p className="font-medium break-words">{r.title}</p><p className="text-xs text-gray-500">{r.provider_name || "Provider"}{r.provider_email ? ` · ${r.provider_email}` : ""}</p>
+            <p className="text-xs text-gray-500">{r.payout_status === "paid" ? `Paid ${formatEventDate(r.paid_at)}` : r.is_due ? "Due now" : `On hold until ${formatEventDate(r.due_at)}`}</p></div>
+          <div className="flex items-center gap-2"><b>{formatMoney(r.amount)}</b>
+            {r.payout_status !== "paid" && <Button size="sm" disabled={!r.is_due} onClick={() => pay(r)}>Mark paid</Button>}</div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -281,6 +331,17 @@ export default function AdminEventsScreen() {
     catch (err) { toast.error(err?.response?.data?.detail || "Could not cancel"); }
   };
 
+  const approve = async (e) => {
+    try { await adminEventsAPI.approve(adminKey, e.id); toast.success("Approved and live"); load(adminKey); }
+    catch (err) { toast.error(err?.response?.data?.detail || "Could not approve"); }
+  };
+  const reject = async (e) => {
+    const reason = window.prompt("Reason shown to the provider (e.g. unclear venue, suspicious ticket price):");
+    if (!reason || reason.trim().length < 3) return;
+    try { await adminEventsAPI.reject(adminKey, e.id, reason.trim()); toast.success("Rejected"); load(adminKey); }
+    catch (err) { toast.error(err?.response?.data?.detail || "Could not reject"); }
+  };
+
   if (!adminKey) return null;
 
   return (
@@ -293,6 +354,8 @@ export default function AdminEventsScreen() {
         </div>
       </header>
       <main className="container mx-auto px-4 py-5 max-w-3xl space-y-4">
+        {data && <PayoutsCard adminKey={adminKey} />}
+        {data && <TiersCard adminKey={adminKey} />}
         {data && <SettingsCard key={JSON.stringify(data.settings)} adminKey={adminKey} settings={data.settings || {}} onSaved={() => load(adminKey)} />}
         {!data && <p className="text-center text-gray-500 py-10">Loading...</p>}
         {data && !data.events.length && <p className="text-center text-gray-500 py-10">No events yet. Create the first one.</p>}
@@ -300,7 +363,7 @@ export default function AdminEventsScreen() {
           <div key={e.id} className="bg-white rounded-xl border p-4 space-y-3" data-testid={`admin-event-${e.id}`}>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0"><p className="font-semibold break-words">{e.title}</p><p className="text-sm text-purple-700">{formatEventDate(e.starts_at)}</p>{e.venue && <p className="text-xs text-gray-500 break-words">{e.venue}</p>}</div>
-              <Badge className={e.status === "published" ? "bg-green-100 text-green-800" : e.status === "canceled" ? "bg-red-100 text-red-700" : "bg-gray-200 text-gray-700"}>{e.status}</Badge>
+              <div className="flex gap-1 flex-wrap">{e.organizer_type === "provider" && <Badge className="bg-purple-100 text-purple-800">By {e.organizer_name}</Badge>}{e.is_promoted && <Badge className="bg-purple-100 text-purple-800">Promoted</Badge>}<Badge className={e.status === "published" ? "bg-green-100 text-green-800" : e.status === "canceled" || e.status === "rejected" ? "bg-red-100 text-red-700" : e.status === "pending_review" ? "bg-amber-100 text-amber-800" : "bg-gray-200 text-gray-700"}>{e.status === "pending_review" ? "needs review" : e.status}</Badge></div>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
               {[["Tickets", e.stats.tickets_issued], ["Checked in", e.stats.checked_in], ["Sales", formatMoney(e.stats.revenue)], ["Your earnings", formatMoney(e.stats.platform_earnings)]].map(([k, v]) => (
@@ -309,7 +372,9 @@ export default function AdminEventsScreen() {
             </div>
             {e.stats.refund_due > 0 && <p className="text-sm text-amber-700">{e.stats.refund_due} ticket(s) need a refund. Pay them back manually.</p>}
             <div className="flex flex-wrap gap-2">
-              {e.status !== "canceled" && <Button size="sm" variant="outline" onClick={() => setForm({ initial: fromEvent(e), id: e.id })}>Edit</Button>}
+              {e.status === "pending_review" && <Button size="sm" onClick={() => approve(e)}>Approve</Button>}
+              {e.status === "pending_review" && <Button size="sm" variant="outline" className="text-red-600" onClick={() => reject(e)}>Reject</Button>}
+              {e.status !== "canceled" && e.organizer_type !== "provider" && <Button size="sm" variant="outline" onClick={() => setForm({ initial: fromEvent(e), id: e.id })}>Edit</Button>}
               <Button size="sm" variant="outline" onClick={() => setAttendees(e)}><Users className="h-4 w-4 mr-1" />Attendees</Button>
               {e.status !== "canceled" && <Button size="sm" variant="outline" onClick={() => setScanners(e)}><ScanLine className="h-4 w-4 mr-1" />Scanners</Button>}
               {e.status !== "canceled" && <Button size="sm" variant="outline" className="text-red-600" onClick={() => cancelEvent(e)}>Cancel event</Button>}

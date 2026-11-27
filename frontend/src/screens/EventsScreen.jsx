@@ -68,6 +68,7 @@ export default function EventsScreen() {
               </div>
               <div className="p-4 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
+                  {e.is_promoted && <Badge className="bg-purple-100 text-purple-800">Promoted</Badge>}
                   {e.is_featured && <Badge className="bg-amber-100 text-amber-800">Featured</Badge>}
                   <span className="text-xs text-gray-600 flex items-center gap-1">{e.organizer_name} {e.is_official && <VerifiedBadge verified size={14} />}</span>
                   {e.my_ticket_count > 0 && <Badge className="bg-green-100 text-green-800">{e.my_ticket_count} ticket{e.my_ticket_count > 1 ? "s" : ""}</Badge>}

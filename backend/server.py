@@ -1952,7 +1952,7 @@ async def paystack_webhook(request: Request, x_paystack_signature: str = Header(
         # Handle charge.success
         if event == "charge.success":
             reference = data.get("reference")
-            if reference and str(reference).startswith("istylist_evt_"):
+            if reference and (str(reference).startswith("istylist_evt_") or str(reference).startswith("istylist_evpromo_")):
                 # Event tickets: confirm the payment and issue the QR/PIN tickets.
                 from events_routes import fulfil_event_reference
                 fulfil_event_reference(reference)
@@ -10305,7 +10305,7 @@ REPORT_REASONS = {
     "spam", "scam_fraud", "harassment", "impersonation", "hate_speech",
     "inappropriate_content", "copyright_violation", "fake_profile", "other",
 }
-REPORT_TARGET_TYPES = {"provider", "customer", "post", "review", "chat"}
+REPORT_TARGET_TYPES = {"provider", "customer", "post", "review", "chat", "event"}
 REPORT_STATUSES = {"pending", "under_review", "resolved", "dismissed"}
 SUPPORT_CATEGORIES = {
     "account", "booking", "payment", "provider", "technical_issue",

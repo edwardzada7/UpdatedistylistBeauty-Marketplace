@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import VerifiedBadge from "@/components/VerifiedBadge";
+import ReportButton from "@/components/ReportButton";
 import { useAuth } from "@/contexts/AuthContext";
 import { eventsAPI, formatEventDate } from "@/services/eventsApi";
 import { formatMoney } from "@/utils/money";
@@ -145,6 +146,9 @@ export default function EventDetailScreen() {
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               {event.is_official && <span className="text-sm text-gray-600 flex items-center gap-1">{event.organizer_name} <VerifiedBadge verified size={15} /></span>}
+              {!event.is_official && <span className="text-sm text-gray-600">By {event.organizer_name}</span>}
+              {event.is_promoted && <Badge className="bg-purple-100 text-purple-800">Promoted</Badge>}
+              {!event.is_official && <ReportButton targetType="event" targetId={event.id} label="Report event" />}
               {canceled && <Badge className="bg-red-100 text-red-700">Canceled</Badge>}
               {event.my_ticket_count > 0 && <Badge className="bg-green-100 text-green-800">You have {event.my_ticket_count} ticket{event.my_ticket_count > 1 ? "s" : ""}</Badge>}
             </div>
