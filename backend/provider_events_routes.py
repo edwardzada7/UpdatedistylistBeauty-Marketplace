@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from consultation_routes import _admin_key, _current_auth_id
 from events_routes import (
-    DEFAULT_PROMO_TIERS, PAYOUT_HOLD_HOURS, PROMO_REFERENCE_PREFIX, EventIn, ScannerIn, normalize_free,
+    DEFAULT_PROMO_TIERS, PAYOUT_HOLD_HOURS, PROMO_REFERENCE_PREFIX, EventIn, ScannerIn, normalize_free, clean_category,
     _iso, _notify, _now, _paystack_headers, _parse,
 )
 
@@ -128,6 +128,7 @@ def register_provider_events(api_router: APIRouter, supabase: Any, ctx: Dict[str
             "title": payload.title.strip(), "description": payload.description, "banner_url": payload.banner_url,
             "venue": payload.venue, "address": payload.address, "starts_at": payload.starts_at,
             "ends_at": payload.ends_at or None, "fee_mode": payload.fee_mode, "updated_at": _iso(),
+            "category": clean_category(payload.category), "feed_announce": bool(payload.announce_provider_feed),
         }
 
     @api_router.get("/provider/events")
@@ -153,6 +154,7 @@ def register_provider_events(api_router: APIRouter, supabase: Any, ctx: Dict[str
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=503, detail=f"Events need the latest database update (phase42): {exc}")
         save_ticket_types(ev["id"], payload.ticket_types)
+        announce_when_live(ev)
         return provider_row(ev, types_for([ev["id"]]).get(ev["id"], []))
 
     @api_router.put("/provider/events/{event_id}")
@@ -179,6 +181,7 @@ def register_provider_events(api_router: APIRouter, supabase: Any, ctx: Dict[str
         row["status"] = status
         updated = supabase.table("events").update(row).eq("id", event_id).execute().data[0]
         save_ticket_types(event_id, payload.ticket_types)
+        announce_when_live(updated)
         return provider_row(updated, types_for([event_id]).get(event_id, []))
 
     @api_router.post("/provider/events/{event_id}/cancel")
@@ -294,17 +297,33 @@ def register_provider_events(api_router: APIRouter, supabase: Any, ctx: Dict[str
     ctx["fulfil_registry"]["promo"] = fulfil_promo
 
     def _feed_announce(ev: dict, auth_id: str) -> None:
+        """Post the event to the feed under the provider's own name, with a link to the event. Only once per event."""
         try:
+            fresh = first(supabase.table("events").select("*").eq("id", ev["id"])) or ev
+            if fresh.get("feed_post_id"):
+                return
             user = first(supabase.table("users").select("*").eq("auth_id", auth_id)) or {}
-            when = (_parse(ev.get("starts_at")) or _now()).astimezone(timezone(timedelta(hours=1))).strftime("%a %d %b, %I:%M %p")
-            caption = f"EVENT: {ev.get('title')}\n{when}" + (f"\n{ev.get('venue')}" if ev.get("venue") else "") + "\nTickets in the Events section."
-            urls = [ev["banner_url"]] if ev.get("banner_url") else []
-            supabase.table("provider_posts").insert({
+            when = (_parse(fresh.get("starts_at")) or _now()).astimezone(timezone(timedelta(hours=1))).strftime("%a %d %b, %I:%M %p")
+            caption = f"EVENT: {fresh.get('title')}\n{when}" + (f"\n{fresh.get('venue')}" if fresh.get("venue") else "")
+            urls = [fresh["banner_url"]] if fresh.get("banner_url") else []
+            row = {
                 "provider_id": user.get("id"), "provider_auth_id": auth_id, "caption": caption, "image_url": urls[0] if urls else "",
                 "image_urls": urls, "media_type": "photo", "likes_count": 0, "comments_count": 0, "is_active": True,
-            }).execute()
+            }
+            try:
+                post = supabase.table("provider_posts").insert({**row, "event_id": fresh["id"]}).execute().data[0]
+            except Exception:  # noqa: BLE001 - phase43 not run yet
+                post = supabase.table("provider_posts").insert(row).execute().data[0]
+            try:
+                supabase.table("events").update({"feed_post_id": post["id"]}).eq("id", fresh["id"]).execute()
+            except Exception:  # noqa: BLE001
+                pass
         except Exception as exc:  # noqa: BLE001
             logger.warning("provider event feed post failed: %s", exc)
+
+    def announce_when_live(ev: dict) -> None:
+        if ev.get("status") == "published" and ev.get("organizer_auth_id") and ev.get("feed_announce", True):
+            _feed_announce(ev, ev["organizer_auth_id"])
 
     @api_router.get("/provider/events/promote/verify")
     def verify_promo(reference: str, authorization: Optional[str] = Header(None)):
@@ -327,6 +346,7 @@ def register_provider_events(api_router: APIRouter, supabase: Any, ctx: Dict[str
         if not ev or ev["status"] != "pending_review":
             raise HTTPException(status_code=404, detail="No pending event found")
         supabase.table("events").update({"status": "published", "approved_at": _iso(), "rejection_reason": None}).eq("id", event_id).execute()
+        announce_when_live({**ev, "status": "published"})
         if ev.get("organizer_auth_id"):
             _notify(ev["organizer_auth_id"], "event_approved", "Event approved", f"{ev['title']} is now live. Tickets can be bought.", {"event_id": event_id})
         return {"status": "published"}

@@ -148,6 +148,7 @@ export default function EventDetailScreen() {
               {event.is_official && <span className="text-sm text-gray-600 flex items-center gap-1">{event.organizer_name} <VerifiedBadge verified size={15} /></span>}
               {!event.is_official && <span className="text-sm text-gray-600">By {event.organizer_name}</span>}
               {event.is_promoted && <Badge className="bg-purple-100 text-purple-800">Promoted</Badge>}
+              {event.category_label && event.category !== "other" && <Badge className="bg-gray-100 text-gray-700">{event.category_label}</Badge>}
               <Badge className={event.is_free ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"}>{event.is_free ? "Free" : "Paid"}</Badge>
               {!event.is_official && <ReportButton targetType="event" targetId={event.id} label="Report event" />}
               {canceled && <Badge className="bg-red-100 text-red-700">Canceled</Badge>}

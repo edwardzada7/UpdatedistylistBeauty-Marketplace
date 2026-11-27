@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import DateTimeField from "@/components/DateTimeField";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
-import { providerEventsAPI, formatEventDate } from "@/services/eventsApi";
+import { providerEventsAPI, formatEventDate, EVENT_CATEGORIES } from "@/services/eventsApi";
 import { providerShopApi } from "@/services/providerShopApi";
 import { formatMoney } from "@/utils/money";
 
@@ -22,11 +22,11 @@ const toLocalInput = (iso) => {
 };
 const toIso = (local) => (local ? new Date(local).toISOString() : null);
 const blankType = () => ({ id: null, name: "General", description: "", price: "0", capacity: "", max_per_order: "10", sales_end: "", is_active: true });
-const blankForm = () => ({ title: "", description: "", banner_url: "", venue: "", address: "", starts_at: "", ends_at: "", fee_mode: "add_on", ticket_types: [blankType()], is_free: false });
+const blankForm = () => ({ title: "", description: "", banner_url: "", venue: "", address: "", starts_at: "", ends_at: "", fee_mode: "add_on", ticket_types: [blankType()], is_free: false, category: "other" });
 const fromEvent = (e) => ({
   title: e.title || "", description: e.description || "", banner_url: e.banner_url || "", venue: e.venue || "", address: e.address || "",
   starts_at: toLocalInput(e.starts_at), ends_at: toLocalInput(e.ends_at), fee_mode: e.fee_mode || "add_on",
-  is_free: !!e.is_free,
+  is_free: !!e.is_free, category: e.category || "other",
   ticket_types: e.ticket_types.map((t) => ({
     id: t.id, name: t.name, description: t.description || "", price: String(t.price), capacity: t.capacity ?? "",
     max_per_order: String(t.max_per_order), sales_end: toLocalInput(t.sales_end), is_active: t.is_active, sold: t.sold,
@@ -67,7 +67,7 @@ function EventForm({ authId, initial, editing, trusted, onClose, onSaved }) {
       title: form.title.trim(), description: form.description.trim() || null, banner_url: form.banner_url || null,
       venue: form.venue.trim() || null, address: form.address.trim() || null,
       starts_at: toIso(form.starts_at), ends_at: toIso(form.ends_at), status: submit ? "published" : "draft", fee_mode: form.fee_mode,
-      is_free: !!form.is_free,
+      is_free: !!form.is_free, category: form.category || "other",
       ticket_types: form.ticket_types.map((t) => ({
         id: t.id, name: t.name.trim() || "Ticket", description: t.description.trim() || null, price: Number(t.price) || 0,
         capacity: t.capacity === "" ? null : Number(t.capacity), max_per_order: Number(t.max_per_order) || 10,
@@ -116,6 +116,12 @@ function EventForm({ authId, initial, editing, trusted, onClose, onSaved }) {
             <div><Label>Address</Label><Input value={form.address} onChange={(e) => set({ address: e.target.value })} /></div>
           </div>
           <div className="space-y-3">
+            <div>
+              <Label>Category</Label>
+              <select className="w-full h-10 rounded-md border px-2 bg-white text-sm" value={form.category || "other"} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} data-testid="event-category">
+                {EVENT_CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+              </select>
+            </div>
             <label className="flex items-center gap-2 text-sm font-medium cursor-pointer" data-testid="free-event-toggle">
               <input type="checkbox" className="h-4 w-4" checked={!!form.is_free}
                 onChange={(e) => setForm((f) => ({ ...f, is_free: e.target.checked, ticket_types: e.target.checked ? f.ticket_types.map((t) => ({ ...t, price: "0" })) : f.ticket_types }))} />

@@ -126,6 +126,20 @@ class TicketTypeIn(BaseModel):
     is_active: bool = True
 
 
+EVENT_CATEGORIES = [
+    ("masterclass", "Masterclass & Workshop"), ("beauty_show", "Beauty & Hair Show"), ("fashion_show", "Fashion Show"),
+    ("bridal", "Bridal & Wedding"), ("popup_market", "Pop-up & Market"), ("product_launch", "Product Launch"),
+    ("party", "Party & Social"), ("networking", "Networking & Meetup"), ("training", "Training & Certification"),
+    ("photoshoot", "Photoshoot & Creative"), ("cultural", "Cultural & Festival"), ("charity", "Charity & Community"),
+    ("other", "Other"),
+]
+CATEGORY_LABELS = dict(EVENT_CATEGORIES)
+
+
+def clean_category(v) -> str:
+    return v if v in CATEGORY_LABELS else "other"
+
+
 class EventIn(BaseModel):
     title: str = Field(min_length=2, max_length=160)
     description: Optional[str] = Field(None, max_length=5000)
@@ -140,6 +154,8 @@ class EventIn(BaseModel):
     ticket_types: List[TicketTypeIn] = Field(default_factory=list)
     announce_in_feed: bool = False
     is_free: bool = False
+    category: str = "other"
+    announce_provider_feed: bool = True
 
 
 def normalize_free(payload: "EventIn") -> None:
@@ -250,6 +266,7 @@ def register_events_routes(api_router: APIRouter, supabase: Any) -> None:
             "banner_url": e.get("banner_url"), "venue": e.get("venue"), "address": e.get("address"),
             "starts_at": e.get("starts_at"), "ends_at": e.get("ends_at"), "status": e.get("status"),
             "is_featured": bool(e.get("is_featured")), "fee_mode": e.get("fee_mode") or "add_on",
+            "category": clean_category(e.get("category")), "category_label": CATEGORY_LABELS[clean_category(e.get("category"))],
             "organizer_type": e.get("organizer_type") or "admin",
             "organizer_auth_id": e.get("organizer_auth_id") if (e.get("organizer_type") or "admin") != "admin" else None,
             "is_promoted": bool(_parse(e.get("promoted_until")) and _parse(e.get("promoted_until")) > _now()),
@@ -419,6 +436,10 @@ def register_events_routes(api_router: APIRouter, supabase: Any) -> None:
             supabase.table("event_tickets").update({"owner_auth_id": auth_id}).in_("order_id", ids).execute()
         except Exception as exc:  # noqa: BLE001
             logger.warning("claim_guest_tickets failed: %s", exc)
+
+    @api_router.get("/events/categories")
+    def event_categories():
+        return {"categories": [{"key": k, "label": v} for k, v in EVENT_CATEGORIES]}
 
     @api_router.get("/events")
     def list_events(authorization: Optional[str] = Header(None), include_past: bool = False):
@@ -641,11 +662,12 @@ def register_events_routes(api_router: APIRouter, supabase: Any) -> None:
     def announce(event: dict) -> None:
         try:
             when = (_parse(event.get("starts_at")) or _now()).astimezone(timezone(timedelta(hours=1))).strftime("%a %d %b, %I:%M %p")
-            caption = f"EVENT: {event.get('title')}\n{when}" + (f"\n{event.get('venue')}" if event.get("venue") else "") + "\nGet your tickets in the Events section."
+            caption = f"EVENT: {event.get('title')}\n{when}" + (f"\n{event.get('venue')}" if event.get("venue") else "") 
             urls = [event["banner_url"]] if event.get("banner_url") else []
             supabase.table("provider_posts").insert({
                 "provider_id": 0, "provider_auth_id": None, "caption": caption, "image_url": urls[0] if urls else "",
                 "image_urls": urls, "media_type": "photo", "likes_count": 0, "comments_count": 0, "is_active": True, "is_official": True,
+                "event_id": event.get("id"),
             }).execute()
         except Exception as exc:  # noqa: BLE001
             logger.warning("event feed announcement failed: %s", exc)
@@ -681,7 +703,7 @@ def register_events_routes(api_router: APIRouter, supabase: Any) -> None:
             "title": payload.title.strip(), "description": payload.description, "banner_url": payload.banner_url,
             "venue": payload.venue, "address": payload.address, "starts_at": payload.starts_at, "ends_at": payload.ends_at or None,
             "status": payload.status, "is_featured": payload.is_featured, "fee_mode": payload.fee_mode,
-            "organizer_type": "admin", "organizer_auth_id": None,
+            "category": clean_category(payload.category), "organizer_type": "admin", "organizer_auth_id": None,
         }
         try:
             event = supabase.table("events").insert(row).execute().data[0]
@@ -705,7 +727,7 @@ def register_events_routes(api_router: APIRouter, supabase: Any) -> None:
         row = {
             "title": payload.title.strip(), "description": payload.description, "banner_url": payload.banner_url,
             "venue": payload.venue, "address": payload.address, "starts_at": payload.starts_at, "ends_at": payload.ends_at or None,
-            "status": payload.status, "is_featured": payload.is_featured, "fee_mode": payload.fee_mode, "updated_at": _iso(),
+            "status": payload.status, "is_featured": payload.is_featured, "fee_mode": payload.fee_mode, "category": clean_category(payload.category), "updated_at": _iso(),
         }
         updated = supabase.table("events").update(row).eq("id", event_id).execute().data[0]
         save_ticket_types(event_id, payload.ticket_types)
