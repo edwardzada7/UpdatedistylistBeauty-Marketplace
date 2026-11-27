@@ -5,8 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
   ArrowLeft, Bell, BellOff, Check, CheckCheck, RefreshCcw, 
   Calendar, Wallet, CreditCard, Clock, Loader2,
-  ChevronRight, MessageCircle, Star, AlarmClock
-} from "lucide-react";
+  ChevronRight, MessageCircle, Star, AlarmClock, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 import { notificationsAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -82,6 +81,12 @@ const NotificationsScreen = () => {
     const meta = metadata || {};
     const bookingId = meta.booking_id;
 
+    // 0) Shop orders → seller sees orders tab, buyer sees their orders
+    if (type === "shop_order") {
+      navigate(meta.route ? "/provider/shop?tab=orders" : "/shop/orders");
+      return;
+    }
+
     // 1) Chat messages → BookingChatScreen
     if (type === "chat_message" && bookingId) {
       navigate(`/bookings/${bookingId}/chat`);
@@ -151,6 +156,8 @@ const NotificationsScreen = () => {
         return <CreditCard className="h-5 w-5" />;
       case "wallet_topup_success":
         return <Wallet className="h-5 w-5" />;
+      case "shop_order":
+        return <ShoppingBag className="h-5 w-5" />;
       default:
         return <Bell className="h-5 w-5" />;
     }
